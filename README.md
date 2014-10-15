@@ -32,11 +32,11 @@ make
 ## Commands
 
 * account
-    * add <nickhandle> <password or use empty string - "" - to not record it> (<consumer key> expires in|at <expiration date or delay>)
+    * add \<nickhandle> \<password or use empty string - "" - to not record it> (\<consumer key> expires in|at \<expiration date or delay>)
     * list
-    * delete <nickhandle>
-    * default <nickhandle>
-    * switch <nickhandle>
+    * delete \<nickhandle>
+    * default \<nickhandle>
+    * switch \<nickhandle>
 * domain
     * list
 * help
