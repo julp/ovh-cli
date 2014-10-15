@@ -138,7 +138,6 @@ static int run_command(int args_count, const char **args)
 #ifndef WITHOUT_LINENOISE
 void completion(const char *buf, linenoiseCompletions *lc)
 {
-debug("[completion] buf = %s", buf);
     linenoiseAddCompletion(lc, "hello");
 }
 #endif /* !WITHOUT_LINENOISE */
