@@ -108,6 +108,52 @@ static int run_command(int args_count, const char **args)
     }
     for (i = 0; i < ARRAY_SIZE(modules); i++) {
         if (NULL != modules[i]->commands) {
+            for (c = modules[i]->commands; NULL != c->first_word; c++) {
+                if (NULL != c->args) {
+                    int j; // argument index
+                    bool apply; // do arguments apply to the current command
+                    const char **v;
+                    int argc;
+                    const char *argv[12];
+                    bool ignore_args; // ignore first predefined fixed arguments
+
+                    j = 0;
+                    argc = 0;
+                    ignore_args = apply = TRUE;
+// debug("%s", modules[i]->name);
+                    for (v = c->args; apply && NULL != *v && j < args_count; v++) {
+                        if (ARG_MODULE_NAME == *v) {
+// debug("- %s", modules[i]->name);
+                            apply &= 0 == strcmp(modules[i]->name, args[j]);
+                        } else {
+                            if (ARG_ANY_VALUE == *v) {
+// debug("- %s", args[j]);
+                                ignore_args = FALSE;
+                            } else {
+// debug("- %s", *v);
+                                apply &= 0 == strcmp(*v, args[j]);
+                            }
+                            if (!ignore_args) {
+                                argv[argc++] = args[j];
+                            }
+                        }
+                        ++j;
+                    }
+                    // TODO: check extra/remaining arguments
+                    if (apply) {
+                        if (NULL != *v) {
+                            fprintf(stderr, "not enough arguments\n");
+                            return 0;
+                        } else {
+                            argv[argc] = NULL;
+                            return c->handle(argc, argv);
+                        }
+                    } else {
+                        // si ça matche quand même sur ARG_MODULE_NAME, abandonner et afficher l'aide du module ?
+                    }
+                }
+            }
+#if 0
             if (NULL == modules[i]->name) {
                 for (c = modules[i]->commands; NULL != c->first_word; c++) {
                     if (0 == strcmp(c->first_word, args[0])) {
@@ -135,8 +181,10 @@ static int run_command(int args_count, const char **args)
                     }
                 }
             }
+#endif
         }
     }
+    fprintf(stderr, "no command corresponds\n");
 
     return 0;
 }

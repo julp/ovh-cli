@@ -44,7 +44,7 @@ static int domain_list(int UNUSED(argc), const char **UNUSED(argv))
 }
 
 static const command_t domain_commands[] = {
-    { "list", 0, domain_list },
+    { "list", 0, domain_list, (const char * const []) { ARG_MODULE_NAME, "list", NULL } },
     { NULL }
 };
 

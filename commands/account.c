@@ -478,7 +478,9 @@ static int account_delete(int argc, const char **argv)
     int ret;
     const char *account;
 
+debug("argc = %d", argc);
     assert(1 == argc);
+debug("argv[0] = %s", argv[0]);
     account = argv[0];
     if ((ret = hashtable_delete(acd->accounts, account, DTOR_CALL))) {
         account_save();
@@ -508,11 +510,12 @@ static int account_switch(int argc, const char **argv)
 }
 
 static const command_t account_commands[] = {
-    { "list", 0, account_list },
-    { "add", -1, account_add },
-    { "delete", 1, account_delete },
-    { "switch", 1, account_switch },
-    { "default", 1, account_default_set },
+    // stackoverflow.com/questions/3875523/lookup-table-in-c
+    { "list", 0, account_list, (const char * const []) { ARG_MODULE_NAME, "list", NULL } },
+    { "add", -1, account_add, (const char * const []) { ARG_MODULE_NAME, "add", ARG_ANY_VALUE, ARG_ANY_VALUE, NULL } },
+    { "delete", 1, account_delete, (const char * const []) { ARG_MODULE_NAME, "delete", ARG_ANY_VALUE, NULL } },
+    { "switch", 1, account_switch, (const char * const []) { ARG_MODULE_NAME, "switch", ARG_ANY_VALUE, NULL } },
+    { "default", 1, account_default_set, (const char * const []) { ARG_MODULE_NAME, "default", ARG_ANY_VALUE, NULL } },
     { NULL }
 };
 
@@ -520,5 +523,5 @@ DECLARE_MODULE(account) = {
     "account",
     account_ctor,
     account_dtor,
-    account_commands
+    account_commands,
 };

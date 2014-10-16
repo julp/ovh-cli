@@ -87,10 +87,14 @@ typedef int (*ForeachFunc)();
 #define DECLARE_MODULE(foo) \
     module_t foo##_module
 
+#define ARG_MODULE_NAME ((const char *) 1)
+#define ARG_ANY_VALUE   ((const char *) 2)
+
 typedef struct {
     const char *first_word;
     int argc;
     int (*handle)(int argc, const char **argv);
+     const char * const *args;
 } command_t;
 
 typedef struct {

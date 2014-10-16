@@ -23,10 +23,10 @@ static int test(int argc, const char **argv)
 #endif /* DEBUG */
 
 static const command_t base_commands[] = {
-    { "help", 0, help },
-    { "quit", 0, leave },
+    { "help", 0, help, (const char * const []) { "help", NULL } },
+    { "quit", 0, leave, (const char * const []) { "quit", NULL } },
 #ifdef DEBUG
-    { "test", -1, test },
+    { "test", -1, test, (const char * const []) { "test", NULL } },
 #endif /* DEBUG */
     { NULL }
 };
