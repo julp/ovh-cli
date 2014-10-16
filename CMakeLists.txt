@@ -37,6 +37,6 @@ add_executable(ovh main.c
     modules/api.c modules/conv.c
     modules/base.c
     struct/iterator.c struct/hashtable.c
-    commands/account.c commands/domain.c
+    commands/account.c commands/domain.c commands/me.c commands/dedicated.c
 )
 target_link_libraries(ovh ${LIBXML2_LIBRARIES} ${CURL_LIBRARIES} ${OPENSSL_LIBRARIES})

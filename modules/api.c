@@ -1,4 +1,3 @@
-#include <time.h>
 #include <string.h>
 #include <curl/curl.h>
 #include <openssl/evp.h>
@@ -36,7 +35,7 @@ struct request_t {
     struct curl_httppost *formpost, *lastptr;
 };
 
-static const EVP_MD *md;
+static const EVP_MD *md = NULL;
 
 static struct {
     const char *name;
@@ -111,16 +110,19 @@ void request_sign(request_t *req)
     const char *consumer_key = account_key();
 #endif /* TEST */
 
+    if (NULL == consumer_key) {
+        return; // TODO: let caller know we failed
+    }
     EVP_MD_CTX_init(&ctx);
     EVP_DigestInit_ex(&ctx, md, NULL);
     EVP_DigestUpdate(&ctx, APPLICATION_SECRET, STR_LEN(APPLICATION_SECRET));
-    EVP_DigestUpdate(&ctx, "+", 1);
+    EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
     EVP_DigestUpdate(&ctx, consumer_key, strlen(consumer_key));
-    EVP_DigestUpdate(&ctx, "+", 1);
+    EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
     EVP_DigestUpdate(&ctx, methods[req->method].name, methods[req->method].name_len);
-    EVP_DigestUpdate(&ctx, "+", 1);
+    EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
     EVP_DigestUpdate(&ctx, req->url, strlen(req->url));
-    EVP_DigestUpdate(&ctx, "+", 1);
+    EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
     // <data>
     if (NULL != req->formpost) {
         curl_formget(req->formpost, &ctx, hash_httppost_callback);
@@ -128,7 +130,7 @@ void request_sign(request_t *req)
         EVP_DigestUpdate(&ctx, req->pdata, strlen(req->pdata));
     }
     // </data>
-    EVP_DigestUpdate(&ctx, "+", 1);
+    EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
     // <timestamp>
     if (snprintf(buffer, ARRAY_SIZE(buffer), "%u", req->timestamp) >= (int) ARRAY_SIZE(buffer)) {
         // failed
@@ -374,7 +376,11 @@ int request_execute(request_t *req, int output_type, void **output)
     return 1;
 }
 
-const char *request_consumer_key(const char *account, const char *password)
+#define STRINGIFY(x) #x
+#define STRINGIFY_EXPANDED(x) STRINGIFY(x)
+#define DEFAULT_CONSUMER_KEY_EXPIRATION 86400
+
+const char *request_consumer_key(const char *account, const char *password, time_t *expires_at)
 {
     request_t *req;
     char *validationUrl;
@@ -485,7 +491,7 @@ debug("password field name = %s", password_field_name);
         request_add_post_field(req, account_field_name, account);
         request_add_post_field(req, password_field_name, password);
 //         request_add_post_field(req, "duration", "0");
-        request_add_post_field(req, "duration", "3600");
+        request_add_post_field(req, "duration", STRINGIFY_EXPANDED(DEFAULT_CONSUMER_KEY_EXPIRATION));
         request_execute(req, RESPONSE_IGNORE, NULL); // TODO: check returned value
         request_dtor(req);
 
@@ -494,6 +500,7 @@ debug("password field name = %s", password_field_name);
         free(password_field_name);
     }
     free(validationUrl);
+    *expires_at = time(NULL) + DEFAULT_CONSUMER_KEY_EXPIRATION;
 
     return consumerKey;
 }

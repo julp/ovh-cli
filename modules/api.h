@@ -25,6 +25,8 @@ request_t *request_post(const char *, const char *, int);
 void request_sign(request_t *);
 int request_execute(request_t *, int, void **);
 
-const char *request_consumer_key(const char *, const char *);
+# include <time.h>
+
+const char *request_consumer_key(const char *, const char *, time_t *);
 
 #endif /* API_H */

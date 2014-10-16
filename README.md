@@ -39,6 +39,10 @@ make
     * switch \<nickhandle>
 * domain
     * list
+* dedicated
+    * list
+* me
+    * me
 * help
 * quit
 

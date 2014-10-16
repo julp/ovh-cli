@@ -2,7 +2,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <pwd.h>
-#include <time.h>
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -45,6 +44,11 @@ enum {
     DAYS_DONE,
     NOTHING_DONE
 };
+
+#define SECOND (1)
+#define MINUTE (60 * SECOND)
+#define HOUR (60 * MINUTE)
+#define DAY (24 * HOUR)
 
 #define duration_test(string, expected_result, expected_value) \
     do { \
@@ -108,7 +112,7 @@ static bool parse_duration(const char *duration, time_t *value)
                         return FALSE;
                     } else {
                         p += 0 == strncasecmp(p, "days", STR_LEN("days")) ? STR_LEN("days") : STR_LEN("day");
-                        *value += v * 24 * 60 * 60;
+                        *value += v * DAY;
                         part = DAYS_DONE;
                         v = 0;
                     }
@@ -119,7 +123,7 @@ static bool parse_duration(const char *duration, time_t *value)
                         return FALSE;
                     } else {
                         p += 0 == strncasecmp(p, "hours", STR_LEN("hours")) ? STR_LEN("hours") : STR_LEN("hour");
-                        *value += v * 60 * 60;
+                        *value += v * HOUR;
                         part = HOURS_DONE;
                         v = 0;
                     }
@@ -130,7 +134,7 @@ static bool parse_duration(const char *duration, time_t *value)
                         return FALSE;
                     } else {
                         p += 0 == strncasecmp(p, "minutes", STR_LEN("minutes")) ? STR_LEN("minutes") : STR_LEN("minute");
-                        *value += v * 60;
+                        *value += v * MINUTE;
                         part = MINUTES_DONE;
                         v = 0;
                     }
@@ -141,7 +145,7 @@ static bool parse_duration(const char *duration, time_t *value)
                         return FALSE;
                     } else {
                         p += 0 == strncasecmp(p, "seconds", STR_LEN("seconds")) ? STR_LEN("seconds") : STR_LEN("second");
-                        *value += v;
+                        *value += v * SECOND;
                         part = SECONDS_DONE;
                         v = 0;
                     }
@@ -157,17 +161,10 @@ static bool parse_duration(const char *duration, time_t *value)
 const char *account_current(void)
 {
     if (NULL == acd->current) {
-        return "(none)";
+        return "(no current account)";
     } else {
         return acd->current->account;
     }
-}
-
-const char *account_key(void)
-{
-    assert(NULL != acd->current);
-
-    return acd->current->consumer_key;
 }
 
 static int account_save(void)
@@ -231,6 +228,23 @@ static int account_save(void)
     return 1;
 }
 
+const char *account_key(void)
+{
+    assert(NULL != acd->current);
+
+    if (NULL == acd->current) {
+        fprintf(stderr, "There is no current account\n");
+        return NULL;
+    }
+    if (NULL == acd->current->consumer_key || (0 != acd->current->expires_at && acd->current->expires_at < time(NULL))) {
+        if (NULL != (acd->current->consumer_key = request_consumer_key(acd->current->account, acd->current->password, &acd->current->expires_at))) {
+            account_save();
+        }
+    }
+
+    return acd->current->consumer_key;
+}
+
 static int account_load(void)
 {
     xmlDocPtr doc;
@@ -257,7 +271,7 @@ static int account_load(void)
             a->password = strdup((char *) xmlGetProp(n, BAD_CAST "password"));
             if (NULL != xmlHasProp(n, BAD_CAST "consumer_key")) {
                 a->consumer_key = strdup((char *) xmlGetProp(n, BAD_CAST "consumer_key"));
-                a->expires_at = (time_t) atoi((char *) xmlGetProp(n, BAD_CAST "expires_at"));
+                a->expires_at = (time_t) atol((char *) xmlGetProp(n, BAD_CAST "expires_at"));
             }
             hashtable_put(acd->accounts, a->account, a, NULL);
             if (xmlHasProp(n, BAD_CAST "default")) {
@@ -268,11 +282,7 @@ static int account_load(void)
             if (NULL == acd->current) {
                 acd->current = (account_t *) hashtable_first(acd->accounts);
             }
-            if (NULL == acd->current->consumer_key) {
-                acd->current->consumer_key = request_consumer_key(acd->current->account, acd->current->password);
-                acd->current->expires_at = time(NULL) + 24 * 60 * 60; // TODO
-                account_save();
-            }
+            acd->current->consumer_key = account_key();
         }
     }
 
@@ -489,11 +499,7 @@ static int account_switch(int argc, const char **argv)
     account = argv[0];
     if ((ret = hashtable_get(acd->accounts, account, (void **) &ptr))) {
         acd->current = ptr;
-        if (NULL == acd->current->consumer_key) {
-            acd->current->consumer_key = request_consumer_key(acd->current->account, acd->current->password);
-            acd->current->expires_at = time(NULL) + 24 * 60 * 60; // TODO
-            account_save();
-        }
+        acd->current->consumer_key = account_key();
     } else {
         fprintf(stderr, "Any account named '%s' was found\n", account);
     }

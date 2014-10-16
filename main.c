@@ -14,7 +14,10 @@ extern module_t conv_module;
 extern module_t api_module;
 extern module_t base_module;
 extern module_t account_module;
+// ---
 extern module_t domain_module;
+extern module_t dedicated_module;
+extern module_t me_module;
 
 static const module_t */*builtin_*/modules[] = {
     &openssl_module,
@@ -24,7 +27,10 @@ static const module_t */*builtin_*/modules[] = {
     &api_module,
     &base_module,
     &account_module,
-    &domain_module
+    // ---
+    &domain_module,
+    &dedicated_module,
+    &me_module
 };
 
 // TODO: remove backslash before " characters
@@ -171,7 +177,7 @@ int main(int argc, char **argv)
         request_t *req;
 
         req = request_get(API_BASE_URL "/domains/");
-        request_sign(module_data("api"), req);
+        request_sign(req);
         request_execute(req, RESPONSE_XML, (void **) &doc);
 
         return EXIT_FAILURE;
