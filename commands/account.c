@@ -224,6 +224,7 @@ static int account_save(void)
         fprintf(stderr, "Could not save file into '%s'", acd->path);
         return 0;
     }
+    xmlFreeDoc(doc);
 
     return 1;
 }
@@ -247,12 +248,12 @@ const char *account_key(void)
 
 static int account_load(void)
 {
-    xmlDocPtr doc;
     struct stat st;
-    xmlNodePtr root, n;
 
     if ((-1 != (stat(acd->path, &st)))/* && S_ISREG(st.st_mode)*/) {
-        xmlInitParser();
+        xmlDocPtr doc;
+        xmlNodePtr root, n;
+
         xmlKeepBlanksDefault(0);
         if (NULL == (doc = xmlParseFile(acd->path))) {
             //
@@ -267,11 +268,16 @@ static int account_load(void)
                 continue;
             }
             a = mem_new(*a);
-            a->account = strdup((char *) xmlGetProp(n, BAD_CAST "account"));
-            a->password = strdup((char *) xmlGetProp(n, BAD_CAST "password"));
+            a->account = (char *) xmlGetProp(n, BAD_CAST "account");
+            a->password = (char *) xmlGetProp(n, BAD_CAST "password");
+            a->consumer_key = NULL;
             if (NULL != xmlHasProp(n, BAD_CAST "consumer_key")) {
-                a->consumer_key = strdup((char *) xmlGetProp(n, BAD_CAST "consumer_key"));
-                a->expires_at = (time_t) atol((char *) xmlGetProp(n, BAD_CAST "expires_at"));
+                xmlChar *expires_at;
+
+                a->consumer_key = (char *) xmlGetProp(n, BAD_CAST "consumer_key");
+                expires_at = (char *) xmlGetProp(n, BAD_CAST "expires_at");
+                a->expires_at = (time_t) atol(expires_at);
+                xmlFree(expires_at);
             }
             hashtable_put(acd->accounts, a->account, a, NULL);
             if (xmlHasProp(n, BAD_CAST "default")) {
@@ -284,6 +290,7 @@ static int account_load(void)
             }
             acd->current->consumer_key = account_key();
         }
+        xmlFreeDoc(doc);
     }
 
     return 1;
@@ -293,10 +300,18 @@ static void account_account_dtor(void *data)
 {
     account_t *account;
 
+    assert(NULL != data);
+
     account = (account_t *) data;
-    free(account->account);
-    free(account->password);
-    free(account->consumer_key);
+    if (NULL != account->account) {
+        free(account->account);
+    }
+    if (NULL != account->password) {
+        free(account->password);
+    }
+    if (NULL != account->consumer_key) {
+        free(account->consumer_key);
+    }
     free(account);
 }
 
@@ -307,7 +322,7 @@ static bool account_ctor(void)
 
     acd = mem_new(*acd);
     acd->autosel = acd->current = NULL;
-    acd->accounts = hashtable_ascii_cs_new(NULL, NULL, account_account_dtor);
+    acd->accounts = hashtable_ascii_cs_new(NULL, NULL /* no dtor for key as it is also part of the value */, account_account_dtor);
     buffer[0] = '\0';
     if (NULL == (home = getenv("HOME"))) {
 # ifdef _MSC_VER
@@ -353,8 +368,13 @@ static bool account_ctor(void)
 
 static void account_dtor(void)
 {
-    hashtable_destroy(acd->accounts);
-    free(acd);
+    if (NULL != acd) {
+        if (NULL != acd->accounts) {
+            hashtable_destroy(acd->accounts);
+        }
+        free(acd);
+    }
+    acd = NULL;
 }
 
 static int account_list(int UNUSED(argc), const char **UNUSED(argv))
@@ -448,7 +468,7 @@ static int account_add(int argc, const char **argv)
         a->consumer_key = consumer_key;
         a->expires_at = expires_at;
 //         hashtable_quick_put_ex(acd->accounts, HT_PUT_ON_DUP_KEY_PRESERVE, h, (void *) account, a, NULL);
-        hashtable_quick_put_ex(acd->accounts, 0, h, (void *) account, a, NULL);
+        hashtable_quick_put_ex(acd->accounts, 0, h, (void *) account, a, NULL); // TODO: old value (overwrite) is not freed?
         account_save();
     }
 
@@ -513,6 +533,9 @@ static const command_t account_commands[] = {
     // stackoverflow.com/questions/3875523/lookup-table-in-c
     { "list", 0, account_list, (const char * const []) { ARG_MODULE_NAME, "list", NULL } },
     { "add", -1, account_add, (const char * const []) { ARG_MODULE_NAME, "add", ARG_ANY_VALUE, ARG_ANY_VALUE, NULL } },
+    { "add", -1, account_add, (const char * const []) { ARG_MODULE_NAME, "add", ARG_ANY_VALUE, ARG_ANY_VALUE, ARG_ANY_VALUE, NULL } },
+    { "add", -1, account_add, (const char * const []) { ARG_MODULE_NAME, "add", ARG_ANY_VALUE, ARG_ANY_VALUE, ARG_ANY_VALUE, "expires", "in", ARG_ANY_VALUE, NULL } },
+    { "add", -1, account_add, (const char * const []) { ARG_MODULE_NAME, "add", ARG_ANY_VALUE, ARG_ANY_VALUE, ARG_ANY_VALUE, "expires", "at", ARG_ANY_VALUE, NULL } },
     { "delete", 1, account_delete, (const char * const []) { ARG_MODULE_NAME, "delete", ARG_ANY_VALUE, NULL } },
     { "switch", 1, account_switch, (const char * const []) { ARG_MODULE_NAME, "switch", ARG_ANY_VALUE, NULL } },
     { "default", 1, account_default_set, (const char * const []) { ARG_MODULE_NAME, "default", ARG_ANY_VALUE, NULL } },

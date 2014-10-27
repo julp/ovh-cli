@@ -44,14 +44,30 @@ bool convert_ctor(void)
     return TRUE;
 }
 
-static int convert_local_to_utf8(void *data, const char *src, size_t src_len, char **dst, size_t *dst_len)
+static int convert_local_to_utf8(const char *src, size_t src_len, char **dst, size_t *dst_len)
 {
-    //
+    if (0 == strcmp(local, "UTF-8")) {
+        // nothing to do, just copy
+        *dst = src;
+        if (NULL != dst_len) {
+            dst_len = src_len;
+        }
+    } else {
+        //
+    }
 }
 
-static int convert_utf8_to_local(void *data, const char *src, size_t src_len, char **dst, size_t *dst_len)
+static int convert_utf8_to_local(const char *src, size_t src_len, char **dst, size_t *dst_len)
 {
-    //
+    if (0 == strcmp(local, "UTF-8")) {
+        // nothing to do, just copy
+        *dst = src;
+        if (NULL != dst_len) {
+            dst_len = src_len;
+        }
+    } else {
+        //
+    }
 }
 
 DECLARE_MODULE(conv) = {

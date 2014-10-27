@@ -23,7 +23,7 @@ static int dedicated_list(int UNUSED(argc), const char **UNUSED(argv))
     request_add_header(req, "Accept: text/xml");
     request_sign(req);
     request_execute(req, RESPONSE_XML, (void **) &doc);
-
+    request_dtor(req);
     if (NULL == (root = xmlDocGetRootElement(doc))) {
         return 0;
     }

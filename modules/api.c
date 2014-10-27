@@ -89,12 +89,12 @@ void request_add_header(request_t *req, const char *header)
     req->headers = curl_slist_append(req->headers, header);
 }
 
-static size_t hash_httppost_callback(void *arg, const char *buf, size_t len)
+/*static size_t hash_httppost_callback(void *arg, const char *buf, size_t len)
 {
     EVP_DigestUpdate((EVP_MD_CTX *) arg, buf, len);
 
     return len;
-}
+}*/
 
 // "$1$" + SHA1_HEX(AS+"+"+CK+"+"+METHOD+"+"+QUERY+"+"+BODY+"+"+TSTAMP)
 void request_sign(request_t *req)
@@ -124,9 +124,9 @@ void request_sign(request_t *req)
     EVP_DigestUpdate(&ctx, req->url, strlen(req->url));
     EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
     // <data>
-    if (NULL != req->formpost) {
+    /*if (NULL != req->formpost) {
         curl_formget(req->formpost, &ctx, hash_httppost_callback);
-    } else if (NULL != req->pdata) {
+    } else */if (NULL != req->pdata) {
         EVP_DigestUpdate(&ctx, req->pdata, strlen(req->pdata));
     }
     // </data>
@@ -148,7 +148,7 @@ void request_sign(request_t *req)
         p += snprintf(p, end - p, "%02x", hash[i]);
     }
     request_add_header(req, header);
-debug("%s+%s+%s+%s+%s+%s = %s", APPLICATION_SECRET, consumer_key, methods[req->method].name, req->url, "", buffer, header + STR_LEN("X-Ovh-Signature: $1$"));
+debug("%s+%s+%s+%s+%s+%s = %s", APPLICATION_SECRET, consumer_key, methods[req->method].name, req->url, NULL == req->pdata ? "" : req->pdata, buffer, header + STR_LEN("X-Ovh-Signature: $1$"));
     // X-Ovh-Timestamp header
     *header = '\0';
     p = stpcpy(header, "X-Ovh-Timestamp: ");
@@ -262,7 +262,7 @@ static const int8_t unreserved[] = {
     /* F */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
-void xtring_add_post_field(XString *this, const char *name, const char *value)
+void string_add_post_field(String *this, const char *name, const char *value)
 {
     size_t needs;
     const char *p;
@@ -378,7 +378,7 @@ int request_execute(request_t *req, int output_type, void **output)
 
 #define STRINGIFY(x) #x
 #define STRINGIFY_EXPANDED(x) STRINGIFY(x)
-#define DEFAULT_CONSUMER_KEY_EXPIRATION 86400
+#define DEFAULT_CONSUMER_KEY_EXPIRATION 86400 /* 1 day */
 
 const char *request_consumer_key(const char *account, const char *password, time_t *expires_at)
 {
@@ -396,6 +396,10 @@ const char *request_consumer_key(const char *account, const char *password, time
         { \
             \"method\": \"GET\", \
             \"path\": \"/*\" \
+        }, \
+        { \
+            \"method\": \"POST\", \
+            \"path\": \"/domain/zone/*\" \
         } \
     ], \
     \"redirection\":\"https://www.mywebsite.com/\" \

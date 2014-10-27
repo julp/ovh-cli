@@ -18,6 +18,20 @@
 #  define UNUSED
 # endif /* UNUSED */
 
+# if GCC_VERSION >= 2003 || __has_attribute(format)
+#  define FORMAT(archetype, string_index, first_to_check) __attribute__((format(archetype, string_index, first_to_check)))
+#  define PRINTF(string_index, first_to_check) FORMAT(__printf__, string_index, first_to_check)
+# else
+#  define FORMAT(archetype, string_index, first_to_check)
+#  define PRINTF(string_index, first_to_check)
+# endif /* FORMAT,PRINTF */
+
+# if GCC_VERSION >= 3004 || __has_attribute(warn_unused_result)
+#  define WARN_UNUSED_RESULT __attribute__((warn_unused_result))
+# else
+#  define WARN_UNUSED_RESULT
+# endif /* WARN_UNUSED_RESULT */
+
 #ifdef TEST
 # define APPLICATION_KEY "7kbG7Bk7S9Nt7ZSV"
 # define URL "http://localhost:3000"
@@ -38,6 +52,7 @@
 # define mem_new_n(type, n) malloc((sizeof(type) * (n)))
 # define mem_renew(ptr, type, n) realloc((ptr), (sizeof(type) * (n)))
 
+# include <stdio.h>
 # include <stdlib.h>
 # include <stdint.h>
 # include <assert.h>
@@ -89,6 +104,7 @@ typedef int (*ForeachFunc)();
 
 #define ARG_MODULE_NAME ((const char *) 1)
 #define ARG_ANY_VALUE   ((const char *) 2)
+#define ARG_ON_OFF      ((const char *) 3)
 
 typedef struct {
     const char *first_word;
