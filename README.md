@@ -16,7 +16,8 @@
 * openssl
 * libcurl
 * libxml2
-* libiconv (in the future)
+* libedit
+* libiconv
 
 ## Install
 
@@ -38,11 +39,11 @@ make
     * default \<nickhandle>
     * switch \<nickhandle>
 * domain
+    * \<domain name> record add \<record name> type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT> \<target>
     * list
 * dedicated
     * list
 * me
-    * me
 * help
 * quit
 
