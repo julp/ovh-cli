@@ -182,6 +182,7 @@ static request_t *request_ctor(const char *url, http_method_t method)
     req->buffer.allocated = 8192;
     req->buffer.ptr = mem_new_n(*req->buffer.ptr, req->buffer.allocated);
     curl_easy_setopt(req->ch, methods[method].curlconst, 1L);
+//     curl_easy_setopt(req->ch, CURLOPT_USERAGENT, "ovh-cli");
 #ifdef TEST
     {
         char buffer[1024] = URL;

@@ -369,7 +369,7 @@ json_value_t json_array(void) /* WARN_UNUSED_RESULT */
 
     node = mem_new(*node);
     node->type = JSON_TYPE_ARRAY;
-    node->value = dptrarray_new(NULL, (DtorFunc) json_value_destroy, json_null);
+    node->value = dptrarray_new(NULL, (DtorFunc) json_value_destroy, (void *) json_null);
 
     return (json_value_t) node;
 }
@@ -392,7 +392,7 @@ void json_array_set_at(json_value_t array, size_t index, json_value_t value)
     assert(JSON_TYPE_ARRAY == json_get_type(array));
 
     node = (json_node_t *) array;
-    dptrarray_insert((DPtrArray *) node->value, index, value);
+    dptrarray_insert((DPtrArray *) node->value, index, (void *) value);
 }
 
 void json_array_push(json_value_t array, json_value_t value)
@@ -402,5 +402,5 @@ void json_array_push(json_value_t array, json_value_t value)
     assert(JSON_TYPE_ARRAY == json_get_type(array));
 
     node = (json_node_t *) array;
-    dptrarray_push((DPtrArray *) node->value, value);
+    dptrarray_push((DPtrArray *) node->value, (void *) value);
 }

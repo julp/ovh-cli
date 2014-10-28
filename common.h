@@ -45,11 +45,11 @@
 # define OVH_SHELL_CONFIG_FILE ".ovh"
 
 # define ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
-# define STR_LEN(str) (ARRAY_SIZE(str) - 1)
-# define STR_SIZE(str) (ARRAY_SIZE(str))
+# define STR_LEN(str)      (ARRAY_SIZE(str) - 1)
+# define STR_SIZE(str)     (ARRAY_SIZE(str))
 
-# define mem_new(type) malloc((sizeof(type)))
-# define mem_new_n(type, n) malloc((sizeof(type) * (n)))
+# define mem_new(type)           malloc((sizeof(type)))
+# define mem_new_n(type, n)      malloc((sizeof(type) * (n)))
 # define mem_renew(ptr, type, n) realloc((ptr), (sizeof(type) * (n)))
 
 # include <stdio.h>
@@ -57,8 +57,13 @@
 # include <stdint.h>
 # include <assert.h>
 # include <stdarg.h>
-# define debug(fmt, ...) \
+# ifdef DEBUG
+#  define debug(fmt, ...) \
     fprintf(stderr, fmt "\n", ## __VA_ARGS__)
+# else
+#  define debug(fmt, ...) \
+    /* NOP */
+# endif /* DEBUG */
 
 # ifndef MAX
 #  define MAX(a, b) ((a) > (b) ? (a) : (b))

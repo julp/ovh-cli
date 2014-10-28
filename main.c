@@ -435,13 +435,21 @@ debug(">%s<", buffer->ptr);
         int count;
         char *line;
         EditLine *el;
+        History *hist;
 
+        hist = history_init();
+        {
+            HistEvent ev;
+
+            history(hist, &ev, H_SETSIZE, 100);
+        }
         el = el_init(*argv, stdin, stdout, stderr);
         el_set(el, EL_PROMPT, prompt);
+        el_set(el, EL_HIST, history, hist);
         el_set(el, EL_ADDFN, "ed-complete", "Complete argument", complete);
         el_set(el, EL_BIND, "^I", "ed-complete", NULL);
         while (NULL != (line = el_gets(el, &count))/* && -1 != count*/) {
-            // XXX
+            HistEvent ev;
 #else
         char line[2048];
 
@@ -470,13 +478,14 @@ debug(">%s<", buffer->ptr);
 #elif defined(WITH_READLINE)
             free(line);
 #elif defined(WITH_EDITLINE)
-            //
+            history(hist, &ev, H_ENTER, line);
 #else
             printf("%s> ", account_current());
             fflush(stdout);
 #endif /* !WITHOUT_LINENOISE */
         }
 #ifdef WITH_EDITLINE
+        history_end(hist);
         el_end(el);
         puts("");
 #endif
