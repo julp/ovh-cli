@@ -249,7 +249,13 @@ static void dptrarray_iterator_first(const void *collection, void **state)
 
 static void dptrarray_iterator_last(const void *collection, void **state)
 {
-    //
+    DPtrArray *ary;
+
+    assert(NULL != collection);
+    assert(NULL != state);
+
+    ary = (DPtrArray *) collection;
+    *(void ***) state = ary->data + ary->length - 1;
 }
 
 static bool dptrarray_iterator_is_valid(const void *collection, void **state)
@@ -288,7 +294,9 @@ static void dptrarray_iterator_next(const void *UNUSED(collection), void **state
 
 static void dptrarray_iterator_previous(const void *UNUSED(collection), void **state)
 {
-    //
+    assert(NULL != state);
+
+    --*((void ***) state);
 }
 
 void dptrarray_to_iterator(Iterator *it, DPtrArray *this)
