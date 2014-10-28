@@ -26,7 +26,7 @@ extern module_t domain_module;
 extern module_t dedicated_module;
 extern module_t me_module;
 
-static const module_t */*builtin_*/modules[] = {
+const module_t */*builtin_*/modules[] = {
     &openssl_module,
     &curl_module,
     &libxml_module,
@@ -39,6 +39,8 @@ static const module_t */*builtin_*/modules[] = {
     &dedicated_module,
     &me_module
 };
+
+const size_t /*builtin_*/modules_count = ARRAY_SIZE(/*builtin_*/modules);
 
 // TODO: remove backslash before " characters
 static int str_split(const char *string, char ***args)
