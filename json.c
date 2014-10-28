@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdint.h>
 #include <inttypes.h>
 
 #include "common.h"
@@ -273,7 +274,7 @@ void json_document_destroy(json_document_t *doc)
 
 json_value_t json_integer(int64_t value) /* WARN_UNUSED_RESULT */
 {
-    if (HAS_FLAG(value, (1 << 63))) {
+    if (HAS_FLAG(value, (UINT64_C(1) << 63))) {
         return json_number((double) value);
     } else {
         return ((((json_value_t) value) << 1) | JSON_INTEGER_MASK);

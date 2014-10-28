@@ -4,6 +4,10 @@ project(ovh-cli C)
 
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 
+include(CheckIncludeFile)
+check_include_file("stdint.h" HAVE_STDINT_H)
+check_include_file("inttypes.h" HAVE_INTTYPES_H)
+
 find_package(CURL REQUIRED)
 find_package(LibXml2 REQUIRED)
 find_package(OpenSSL REQUIRED)
