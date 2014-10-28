@@ -2,14 +2,19 @@ cmake_minimum_required(VERSION 2.8.8)
 
 project(ovh-cli C)
 
+set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
+
 find_package(CURL REQUIRED)
 find_package(LibXml2 REQUIRED)
 find_package(OpenSSL REQUIRED)
+# set(EDITLINE_DEBUG TRUE)
+find_package(EditLine REQUIRED)
 
 include_directories(
     ${CURL_INCLUDE_DIRS}
     ${LIBXML2_INCLUDE_DIR}
     ${OPENSSL_INCLUDE_DIR}
+    ${EDITLINE_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
@@ -31,8 +36,8 @@ configure_file(
 
 # add_definitions(-DTEST=1)
 add_definitions(-DDEBUG=1)
+add_definitions(-DWITH_EDITLINE=1)
 add_executable(ovh main.c
-    linenoise.c
     modules/openssl.c modules/curl.c modules/libxml.c
     modules/api.c modules/conv.c
     modules/base.c
@@ -40,4 +45,4 @@ add_executable(ovh main.c
     struct/iterator.c struct/hashtable.c struct/dptrarray.c struct/xtring.c # struct/stack.c
     commands/account.c commands/domain.c commands/me.c commands/dedicated.c
 )
-target_link_libraries(ovh ${LIBXML2_LIBRARIES} ${CURL_LIBRARIES} ${OPENSSL_LIBRARIES})
+target_link_libraries(ovh ${LIBXML2_LIBRARIES} ${CURL_LIBRARIES} ${OPENSSL_LIBRARIES} ${EDITLINE_LIBRARIES})

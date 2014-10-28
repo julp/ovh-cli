@@ -1,6 +1,13 @@
 #include <stdio.h>
 #include <string.h>
-#include <linenoise.h>
+#if defined(WITH_LINENOISE)
+# include <linenoise.h>
+#elif defined(WITH_READLINE)
+# include <readline/readline.h>
+# include <readline/history.h>
+# elif defined(WITH_EDITLINE)
+# include <histedit.h>
+#endif
 #include <libxml/parser.h>
 
 #include "common.h"
@@ -189,13 +196,6 @@ static int run_command(int args_count, const char **args)
     return 0;
 }
 
-#ifndef WITHOUT_LINENOISE
-void completion(const char *buf, linenoiseCompletions *lc)
-{
-    linenoiseAddCompletion(lc, "hello");
-}
-#endif /* !WITHOUT_LINENOISE */
-
 void cleanup(void)
 {
     int i;
@@ -206,6 +206,120 @@ void cleanup(void)
         }
     }
 }
+
+#if defined(WITH_LINENOISE)
+void completion(const char *buf, linenoiseCompletions *lc)
+{
+    linenoiseAddCompletion(lc, "hello");
+}
+#elif defined(WITH_READLINE)
+char *command_generator(const char *text, int state)
+{
+    size_t i;
+    const command_t *c;
+
+    for (i = 0; i < ARRAY_SIZE(modules); i++) {
+        if (NULL != modules[i]->commands) {
+            for (c = modules[i]->commands; NULL != c->first_word; c++) {
+//                 if (NULL != c->args) {
+//                     const char **v;
+//
+//                     for (v = c->args; apply && NULL != *v && j < args_count; v++) {
+//                     }
+//                 }
+                if (0 == strncmp(c->first_word, text, len)) {
+                    return c->first_word;
+                }
+            }
+        }
+    }
+
+    return NULL;
+}
+
+char **command_completion(const char *text, int start, int end)
+{
+    char **matches;
+
+    matches = NULL;
+    if (start == 0) {
+        matches = rl_completion_matches(text, command_generator);
+    }
+
+    return matches;
+}
+#elif defined(WITH_EDITLINE)
+static const char *prompt(EditLine *UNUSED(e))
+{
+    char *p;
+    static char prompt[512];
+
+    *prompt = '\0';
+    p = stpcpy(prompt, account_current());
+    p = stpcpy(p, "> ");
+
+    return prompt;
+}
+
+static unsigned char complete(EditLine *el, int ch)
+{
+    /*static */Tokenizer *t = NULL;
+    LineInfo *li;
+    const char **argv;
+    int argc;
+    int cursorc;
+    int cursoro;
+    int arraylen;
+    int res = CC_ERROR;
+
+    li = el_line(el);
+    t = tok_init(NULL);
+    if (-1 == tok_line(t, li, &argc, &argv, &cursorc, &cursoro)) {
+        //
+    }
+    if (0 == cursorc) {
+        size_t i;
+        const command_t *c;
+
+        for (i = 0; i < ARRAY_SIZE(modules); i++) {
+            if (NULL != modules[i]->commands) {
+                for (c = modules[i]->commands; NULL != c->first_word; c++) {
+                    if (NULL != c->args) {
+    //                     const char **v;
+    //
+    //                     for (v = c->args; apply && NULL != *v && j < args_count; v++) {
+    //                     }
+                        const char *v;
+
+                        v = c->args[0];
+                        if (ARG_MODULE_NAME == c->args[0]) {
+                            v = modules[i]->name;
+                        }
+                        if (0 == strncmp(v, argv[cursorc], cursoro)) {
+                            if (-1 == el_insertstr(el, v + cursoro)) {
+                                res = CC_ERROR;
+                            } else {
+                                res = CC_REFRESH;
+                            }
+                            if (NULL != c->args[1]) {
+                                if (-1 == el_insertstr(el, " ")) {
+                                    res = CC_ERROR;
+                                } else {
+                                    res = CC_REFRESH;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    tok_end(t);
+
+    return res;
+}
+#endif
 
 int main(int argc, char **argv)
 {
@@ -231,7 +345,7 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 #endif /* TEST */
-#if 1
+#if 0
     {
 #include "struct/dptrarray.h"
 
@@ -245,7 +359,8 @@ int main(int argc, char **argv)
 
         dptrarray_to_iterator(&it, ary);
         printf("[[[[[]]]]]\n");
-        for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+//         for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        for (iterator_last(&it); iterator_is_valid(&it); iterator_previous(&it)) {
             char *v;
             int idx, *pidx;
 
@@ -295,7 +410,7 @@ debug(">%s<", buffer->ptr);
     }
 #endif
     if (1 == argc) {
-#ifndef WITHOUT_LINENOISE
+#if defined(WITH_LINENOISE)
         char *line, prompt[512], *p;
 
         *prompt = '\0';
@@ -303,6 +418,28 @@ debug(">%s<", buffer->ptr);
         p = stpcpy(p, "> ");
         linenoiseSetCompletionCallback(completion);
         while(NULL != (line = linenoise(prompt))) {
+#elif defined(WITH_READLINE)
+        rl_readline_name = "ovh";
+        rl_attempted_completion_function = command_completion;
+        while (1) {
+            char *line, prompt[512], *p;
+
+            *prompt = '\0';
+            p = stpcpy(prompt, account_current());
+            p = stpcpy(p, "> ");
+
+            line = readline(prompt);
+#elif defined(WITH_EDITLINE)
+        int count;
+        char *line;
+        EditLine *el;
+
+        el = el_init(*argv, stdin, stdout, stderr);
+        el_set(el, EL_PROMPT, prompt);
+        el_set(el, EL_ADDFN, "ed-complete", "Complete argument", complete);
+        el_set(el, EL_BIND, "^I", "ed-complete", NULL);
+        while (NULL != (line = el_gets(el, &count))/* && -1 != count*/) {
+            // XXX
 #else
         char line[2048];
 
@@ -324,15 +461,23 @@ debug(">%s<", buffer->ptr);
             args_len = str_split(line, &args);
             run_command(args_len, (const char **) args);
             free(args[0]);
-#ifndef WITHOUT_LINENOISE
+#if defined(WITH_LINENOISE)
 //             linenoiseHistoryAdd(line);
 //             linenoiseHistorySave("history.txt");
             free(line);
+#elif defined(WITH_READLINE)
+            free(line);
+#elif defined(WITH_EDITLINE)
+            //
 #else
             printf("%s> ", account_current());
             fflush(stdout);
 #endif /* !WITHOUT_LINENOISE */
         }
+#ifdef WITH_EDITLINE
+        el_end(el);
+        puts("");
+#endif
     } else {
         --argc;
         ++argv;
