@@ -382,6 +382,12 @@ int request_execute(request_t *req, int output_type, void **output)
 #define STRINGIFY_EXPANDED(x) STRINGIFY(x)
 #define DEFAULT_CONSUMER_KEY_EXPIRATION 86400 /* 1 day */
 
+#define JSON_RULES 1
+
+#ifdef JSON_RULES
+# include "json.h"
+#endif /* JSON_RULES */
+
 const char *request_consumer_key(const char *account, const char *password, time_t *expires_at)
 {
     request_t *req;
@@ -393,6 +399,7 @@ const char *request_consumer_key(const char *account, const char *password, time
         xmlDocPtr doc;
         xmlNodePtr root;
 
+#ifndef JSON_RULES
         req = request_post(API_BASE_URL "/auth/credential", "{ \
     \"accessRules\": [ \
         { \
@@ -406,6 +413,34 @@ const char *request_consumer_key(const char *account, const char *password, time
     ], \
     \"redirection\":\"https://www.mywebsite.com/\" \
 }", STRING_NOCOPY);
+#else
+        String *buffer;
+        {
+            json_document_t *doc;
+            json_value_t root, rules, method;
+
+            buffer = string_new();
+            doc = json_document_new();
+            root = json_object();
+            rules = json_array();
+            json_document_set_root(doc, root);
+            json_object_set_property(root, "accessRules", rules);
+            //
+            method = json_object();
+            json_object_set_property(method, "method", json_string("GET"));
+            json_object_set_property(method, "path", json_string("/*"));
+            json_array_push(rules, method);
+            //
+            method = json_object();
+            json_object_set_property(method, "method", json_string("POST"));
+            json_object_set_property(method, "path", json_string("/domain/zone/*"));
+            json_array_push(rules, method);
+            //
+            json_document_serialize(doc, buffer);
+            json_document_destroy(doc);
+        }
+        req = request_post(API_BASE_URL "/auth/credential", buffer->ptr, STRING_NOCOPY);
+#endif /* !JSON_RULES */
         request_add_header(req, "Accept: text/xml");
         request_add_header(req, "Content-type: application/json");
         request_add_header(req, "X-Ovh-Application: " APPLICATION_KEY);
@@ -425,6 +460,9 @@ const char *request_consumer_key(const char *account, const char *password, time
         consumerKey = strdup((char *) xmlGetProp(root, BAD_CAST "consumerKey"));
         xmlFreeDoc(doc);
         request_dtor(req);
+#ifdef JSON_RULES
+        string_destroy(buffer);
+#endif /* JSON_RULES */
     }
 
     {
