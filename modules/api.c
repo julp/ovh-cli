@@ -345,6 +345,7 @@ int request_execute(request_t *req, int output_type, void **output)
             htmlParserCtxtPtr ctxt;
 
             ctxt = htmlCreateMemoryParserCtxt(req->buffer.ptr, req->buffer.length);
+            assert(NULL != ctxt);
 //             htmlCtxtUseOptions(ctxt, options);
             htmlParseDocument(ctxt);
             *((xmlDocPtr *) output) = ctxt->myDoc;
@@ -371,7 +372,7 @@ int request_execute(request_t *req, int output_type, void **output)
             break;
         }
         default:
-            assert(0);
+            assert(FALSE);
     }
 
     return 1;
