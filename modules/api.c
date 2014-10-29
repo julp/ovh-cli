@@ -419,23 +419,25 @@ const char *request_consumer_key(const char *account, const char *password, time
             json_document_t *doc;
             json_value_t root, rules, method;
 
+#define JSON_ADD_RULE(parent, method, value) \
+    do { \
+        json_value_t object; \
+ \
+        object = json_object(); \
+        json_object_set_property(object, "method", json_string(method)); \
+        json_object_set_property(object, "path", json_string(value)); \
+        json_array_push(parent, object); \
+    } while (0);
+
             buffer = string_new();
             doc = json_document_new();
             root = json_object();
             rules = json_array();
             json_document_set_root(doc, root);
             json_object_set_property(root, "accessRules", rules);
-            //
-            method = json_object();
-            json_object_set_property(method, "method", json_string("GET"));
-            json_object_set_property(method, "path", json_string("/*"));
-            json_array_push(rules, method);
-            //
-            method = json_object();
-            json_object_set_property(method, "method", json_string("POST"));
-            json_object_set_property(method, "path", json_string("/domain/zone/*"));
-            json_array_push(rules, method);
-            //
+//             json_object_set_property(root, "redirection", json_string("https://www.mywebsite.com/"));
+            JSON_ADD_RULE(rules, "GET", "/*");
+            JSON_ADD_RULE(rules, "POST", "/domain/zone/*");
             json_document_serialize(doc, buffer);
             json_document_destroy(doc);
         }
