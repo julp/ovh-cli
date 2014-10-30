@@ -32,6 +32,7 @@ void *dptrarray_shift(DPtrArray *);
 DPtrArray *dptrarray_sized_new(size_t, DupFunc, DtorFunc, void *) WARN_UNUSED_RESULT;
 void dptrarray_swap(DPtrArray *, size_t, size_t);
 void dptrarray_unshift(DPtrArray *, void *);
+void dptrarray_sort(DPtrArray *, CmpFunc);
 void *dptrarray_to_array(DPtrArray *, int, int);
 
 void dptrarray_to_iterator(Iterator *, DPtrArray *);

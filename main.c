@@ -11,6 +11,7 @@
 #include "common.h"
 #include "modules/api.h"
 #include "commands/account.h"
+#include "struct/dptrarray.h"
 
 extern module_t openssl_module;
 extern module_t curl_module;
@@ -256,6 +257,11 @@ static const char *prompt(EditLine *UNUSED(e))
     return prompt;
 }
 
+static int strcmpp(const void *p1, const void *p2)
+{
+    return strcmp(*(char * const *) p1, *(char * const *) p2);
+}
+
 static unsigned char complete(EditLine *el, int ch)
 {
     /*static */Tokenizer *t = NULL;
@@ -266,9 +272,11 @@ static unsigned char complete(EditLine *el, int ch)
     int cursoro;
     int arraylen;
     int res = CC_ERROR;
+    DPtrArray *possibilities;
 
     li = el_line(el);
     t = tok_init(NULL);
+    possibilities = dptrarray_new(NULL, NULL, NULL);
     if (-1 == tok_line(t, li, &argc, &argv, &cursorc, &cursoro)) {
         //
     }
@@ -278,6 +286,9 @@ static unsigned char complete(EditLine *el, int ch)
 
         for (i = 0; i < ARRAY_SIZE(modules); i++) {
             if (NULL != modules[i]->commands) {
+                const char *prev;
+
+                prev = NULL;
                 for (c = modules[i]->commands; NULL != c->first_word; c++) {
                     if (NULL != c->args) {
     //                     const char **v;
@@ -291,6 +302,7 @@ static unsigned char complete(EditLine *el, int ch)
                             v = modules[i]->name;
                         }
                         if (0 == strncmp(v, argv[cursorc], cursoro)) {
+#if 0
                             if (-1 == el_insertstr(el, v + cursoro)) {
                                 res = CC_ERROR;
                             } else {
@@ -304,6 +316,12 @@ static unsigned char complete(EditLine *el, int ch)
                                 }
                             }
                             break;
+#else
+                            if (NULL == prev || 0 != strcmp(v, prev)) {
+                                dptrarray_push(possibilities, v);
+                            }
+                            prev = v;
+#endif
                         }
                     }
                 }
@@ -311,6 +329,35 @@ static unsigned char complete(EditLine *el, int ch)
         }
     }
     tok_end(t);
+    switch (dptrarray_length(possibilities)) {
+        case 0:
+            res = CC_ERROR;
+            break;
+        case 1:
+            if (-1 == el_insertstr(el, dptrarray_at_unsafe(possibilities, 0, const char) + cursoro)) {
+                res = CC_ERROR;
+            } else {
+                res = CC_REFRESH;
+            }
+            break;
+        default:
+        {
+            Iterator it;
+
+            puts("");
+            dptrarray_sort(possibilities, strcmpp);
+            dptrarray_to_iterator(&it, possibilities);
+            for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+                fputc('\t', stdout);
+                fputs(iterator_current(&it, NULL), stdout);
+                fputc('\n', stdout);
+            }
+            iterator_close(&it);
+            res = CC_REDISPLAY;
+            break;
+        }
+    }
+    dptrarray_destroy(possibilities);
 
     return res;
 }

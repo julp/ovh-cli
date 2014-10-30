@@ -216,6 +216,14 @@ size_t dptrarray_length(DPtrArray *this) /* NONNULL() */
     return this->length;
 }
 
+void dptrarray_sort(DPtrArray *this, CmpFunc cmpfn)
+{
+    assert(NULL != this);
+    assert(NULL != cmpfn);
+
+    qsort(this->data, this->length, sizeof(*this->data), cmpfn);
+}
+
 void *dptrarray_to_array(DPtrArray *this, int copy, int null_terminated) /* NONNULL() */
 {
     void **ary;
