@@ -300,6 +300,8 @@ void request_add_post_field(request_t *req, const char *name, const char *value)
 int request_execute(request_t *req, int output_type, void **output)
 {
     CURLcode res;
+    long http_status;
+    char *content_type;
 
 #if 0
     if (RESPONSE_IGNORE == output_type) {
@@ -316,56 +318,86 @@ int request_execute(request_t *req, int output_type, void **output)
         fprintf(stderr, "Request failed: %s\n", curl_easy_strerror(res));
         return 0;
     }
+    curl_easy_getinfo(req->ch, CURLINFO_CONTENT_TYPE, &content_type);
+    curl_easy_getinfo(req->ch, CURLINFO_RESPONSE_CODE, &http_status);
     {
-        long code;
         char *url;
 
-        curl_easy_getinfo(req->ch, CURLINFO_RESPONSE_CODE, &code);
         curl_easy_getinfo(req->ch, CURLINFO_EFFECTIVE_URL, &url);
         debug("==========");
-        debug("RESPONSE (HTTP status) = %ld", code);
+        debug("RESPONSE (HTTP status) = %ld", http_status);
         debug("RESPONSE (effective URL) = %s", url);
+        debug("RESPONSE (Content-Type) = %s", content_type);
         debug("RESPONSE (Content-Length) = %zu", req->buffer.length);
         debug("RESPONSE (body) = %s", req->buffer.ptr);
         debug("==========");
     }
-    switch (output_type) {
-        case RESPONSE_IGNORE:
-            /* NOP */
-            break;
-        case RESPONSE_HTML:
-        {
-            htmlParserCtxtPtr ctxt;
+#ifdef TODO
+    if (200 != http_status) {
+        // API may throw 403 if forbidden (consumer_key no more valid, object that doesn't belong to us) or 404 on unknown objects?
+        if (NULL != content_type && (0 == strcmp(content_type, "application/xml") || 0 == strcmp(content_type, "text/xml"))) {
+            xmlDocPtr doc;
 
-            ctxt = htmlCreateMemoryParserCtxt(req->buffer.ptr, req->buffer.length);
-            assert(NULL != ctxt);
-//             htmlCtxtUseOptions(ctxt, options);
-            htmlParseDocument(ctxt);
-            *((xmlDocPtr *) output) = ctxt->myDoc;
-            htmlFreeParserCtxt(ctxt);
-            break;
+            if (NULL != (doc = xmlParseMemory(req->buffer.ptr, req->buffer.length))) {
+                xmlNodePtr root;
+
+                if (NULL != (root = xmlDocGetRootElement(doc))) {
+                    xmlChar *reason;
+
+                    reason = xmlNodeGetContent(root);
+                    error_set(error, INFO, (const char *) reason); // TODO: copy needed?
+                    xmlFree(reason);
+                }
+                xmlFreeDoc(doc);
+            }
+            if (NULL != error && NULL == *error) { // an error can be set and any was already set
+                error_set(error, WARNING, "failed to parse following xml: %s", req->buffer.ptr);
+            }
+        } else {
+            error_set(error, WARNING, "HTTP request to '%s' failed with status %ld", req->url, http_status);
         }
-        case RESPONSE_XML:
-        {
-#if 0
-            xmlParserCtxtPtr ctxt;
-
-            if (NULL == (ctxt = xmlCreateMemoryParserCtxt(req->buffer.ptr, req->buffer.length))) {
-                return NULL;
-            }
-            xmlCtxtUseOptions(ctxt, 0);
-            if (xmlParseDocument(ctxt) < 1) { // segfaults ?!?
-                return NULL;
-            }
-            doc = ctxt->myDoc;
-            xmlFreeParserCtxt(ctxt);
-#else
-            *((xmlDocPtr *) output) = xmlParseMemory(req->buffer.ptr, req->buffer.length);
+        return 0; // ?
+    } else
 #endif
-            break;
+    {
+        switch (output_type) {
+            case RESPONSE_IGNORE:
+                /* NOP */
+                break;
+            case RESPONSE_HTML:
+            {
+                htmlParserCtxtPtr ctxt;
+
+                ctxt = htmlCreateMemoryParserCtxt(req->buffer.ptr, req->buffer.length);
+                assert(NULL != ctxt);
+//                 htmlCtxtUseOptions(ctxt, options);
+                htmlParseDocument(ctxt);
+                *((xmlDocPtr *) output) = ctxt->myDoc;
+                htmlFreeParserCtxt(ctxt);
+                break;
+            }
+            case RESPONSE_XML:
+            {
+#if 0
+                xmlParserCtxtPtr ctxt;
+
+                if (NULL == (ctxt = xmlCreateMemoryParserCtxt(req->buffer.ptr, req->buffer.length))) {
+                    return NULL;
+                }
+                xmlCtxtUseOptions(ctxt, 0);
+                if (xmlParseDocument(ctxt) < 1) { // segfaults ?!?
+                    return NULL;
+                }
+                doc = ctxt->myDoc;
+                xmlFreeParserCtxt(ctxt);
+#else
+                *((xmlDocPtr *) output) = xmlParseMemory(req->buffer.ptr, req->buffer.length);
+#endif
+                break;
+            }
+            default:
+                assert(FALSE);
         }
-        default:
-            assert(FALSE);
     }
 
     return 1;

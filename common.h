@@ -111,6 +111,12 @@ typedef int (*ForeachFunc)();
 #define ARG_ANY_VALUE   ((const char *) 2)
 #define ARG_ON_OFF      ((const char *) 3)
 
+/*typedef enum {
+    COMMAND_EXIT_SUCCESS,
+    COMMAND_EXIT_FAILURE,
+    COMMAND_EXIT_USAGE
+} command_status_t;*/
+
 typedef struct {
     const char *first_word;
     int argc;
