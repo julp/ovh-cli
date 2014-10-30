@@ -136,6 +136,26 @@ static record_type_t xmlGetPropAsRecordType(xmlNodePtr node, const char *name)
     return ret;
 }
 
+static int parse_record(HashTable *records, xmlDocPtr doc)
+{
+    record_t *r;
+    xmlNodePtr root;
+
+    if (NULL == (root = xmlDocGetRootElement(doc))) {
+        return 0;
+    }
+    r = mem_new(*r);
+    r->id = xmlGetPropAsInt(root, "id");
+    r->ttl = xmlGetPropAsInt(root, "ttl");
+    r->name = xmlGetPropAsString(root, "subDomain");
+    r->target = xmlGetPropAsString(root, "target");
+    r->type = xmlGetPropAsRecordType(root, "fieldType");
+    hashtable_quick_put_ex(records, 0, r->id, NULL, r, NULL);
+    xmlFreeDoc(doc);
+
+    return TRUE;
+}
+
 /*
 <opt>
   <anon>domain1.ext</anon>
@@ -235,19 +255,7 @@ static int record_list(int argc, const char **argv)
             request_execute(req, RESPONSE_XML, (void **) &doc);
             request_dtor(req);
             // result
-/* TODO */
-/* <DRY> */
-            if (NULL == (root = xmlDocGetRootElement(doc))) {
-                return 0;
-            }
-            r = mem_new(*r);
-            r->id = xmlGetPropAsInt(root, "id");
-            r->ttl = xmlGetPropAsInt(root, "ttl");
-            r->name = xmlGetPropAsString(root, "subDomain");
-            r->target = xmlGetPropAsString(root, "target");
-            r->type = xmlGetPropAsRecordType(root, "fieldType");
-            hashtable_quick_put_ex(records, 0, r->id, NULL, r, NULL);
-/* </DRY> */
+            parse_record(records, doc);
 #if 0
             for (a = root->properties; a != NULL; a = a->next) {
                 // TODO: build a cache name (+ type ?) => id
@@ -256,6 +264,7 @@ static int record_list(int argc, const char **argv)
 #endif
             xmlFree(content);
         }
+        xmlFreeDoc(doc);
     }
     {
         Iterator it;
@@ -349,26 +358,12 @@ static int record_add(int argc, const char **argv)
     }
     // result
     {
-        record_t *r;
-        xmlNodePtr root;
         HashTable *records;
 
         if (!hashtable_get(domains, (void *) argv[0], (void **) &records)) {
             hashtable_put(domains, (void *) argv[0], records = hashtable_new(NULL, value_equal, NULL, NULL, record_destroy), NULL);
         }
-/* TODO */
-/* <DRY> */
-        if (NULL == (root = xmlDocGetRootElement(doc))) {
-            return 0;
-        }
-        r = mem_new(*r);
-        r->id = xmlGetPropAsInt(root, "id");
-        r->ttl = xmlGetPropAsInt(root, "ttl");
-        r->name = xmlGetPropAsString(root, "subDomain");
-        r->target = xmlGetPropAsString(root, "target");
-        r->type = xmlGetPropAsRecordType(root, "fieldType");
-        hashtable_quick_put_ex(records, 0, r->id, NULL, r, NULL);
-/* </DRY> */
+        parse_record(records, doc);
     }
 
     return TRUE;
