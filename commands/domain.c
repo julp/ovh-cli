@@ -59,6 +59,17 @@ typedef struct {
 
 static HashTable *domains = NULL;
 
+static void domain_destroy(void *data)
+{
+    domain_t *d;
+
+    assert(NULL != data);
+
+    d = (domain_t *) data;
+    hashtable_destroy(d->records);
+    free(d);
+}
+
 static void record_destroy(void *data)
 {
     record_t *r;
@@ -75,9 +86,20 @@ static void record_destroy(void *data)
     free(r);
 }
 
+static domain_t *domain_new(void)
+{
+    domain_t *d;
+
+    d = mem_new(*d);
+    d->uptodate = FALSE;
+    d->records = hashtable_new(NULL, value_equal, NULL, NULL, record_destroy);
+
+    return d;
+}
+
 static bool domain_ctor(void)
 {
-    domains = hashtable_ascii_cs_new((DupFunc) strdup, free, NULL);
+    domains = hashtable_ascii_cs_new((DupFunc) strdup, free, domain_destroy);
 
     return TRUE;
 }
@@ -164,6 +186,8 @@ static int parse_record(HashTable *records, xmlDocPtr doc)
 */
 static int domain_list(int argc, const char **argv)
 {
+    // populate
+    // TODO: hashtable_size(domains) < 1 is not sufficient to known if we have the full list of domains in this hashtable
     if (hashtable_size(domains) < 1/* || (1 == argc && 0 == strcmp(argv[0], "nocache"))*/) {
         xmlDocPtr doc;
         request_t *req;
@@ -183,11 +207,12 @@ static int domain_list(int argc, const char **argv)
             xmlChar *content;
 
             content = xmlNodeGetContent(n);
-            hashtable_put(domains, content, hashtable_new(NULL, value_equal, NULL, NULL, record_destroy), NULL);
-            puts((const char *) content);
+            hashtable_put(domains, content, domain_new(), NULL);
             xmlFree(content);
         }
-    } else {
+    }
+    // display
+    {
         Iterator it;
 
         hashtable_to_iterator(&it, domains);
@@ -206,16 +231,20 @@ static int domain_list(int argc, const char **argv)
 // TODO: optionnal arguments fieldType and subDomain in query string
 static int record_list(int argc, const char **argv)
 {
-    HashTable *records;
+    domain_t *d;
 
     assert(3 == argc);
-    if (!hashtable_get(domains, (void *) argv[0], (void **) &records) || hashtable_size(records) < 1) {
+
+    d = NULL;
+    if (!hashtable_get(domains, (void *) argv[0], (void **) &d) || !d->uptodate) {
         xmlDocPtr doc;
         request_t *req;
         xmlNodePtr root, n;
         char *p, url[1024];
 
-        hashtable_put(domains, (void *) argv[0], records = hashtable_new(NULL, value_equal, NULL, NULL, record_destroy), NULL);
+        if (NULL == d) {
+            hashtable_put(domains, (void *) argv[0], d = domain_new(), NULL);
+        }
         // forge url
         *url = '\0';
         p = stpcpy(url, API_BASE_URL "/domain/zone/");
@@ -232,13 +261,8 @@ static int record_list(int argc, const char **argv)
             return 0;
         }
         for (n = root->children; n != NULL; n = n->next) {
-#if 0
-            xmlAttrPtr a;
-#endif
             xmlDocPtr doc;
-            xmlNodePtr root;
             xmlChar *content;
-            record_t *r;
 
             content = xmlNodeGetContent(n);
             puts((const char *) content);
@@ -255,26 +279,22 @@ static int record_list(int argc, const char **argv)
             request_execute(req, RESPONSE_XML, (void **) &doc);
             request_dtor(req);
             // result
-            parse_record(records, doc);
-#if 0
-            for (a = root->properties; a != NULL; a = a->next) {
-                // TODO: build a cache name (+ type ?) => id
-                printf("%s: %s\n", a->name, xmlGetProp(root, a->name)); // TODO: leak on xmlGetProp
-            }
-#endif
+            parse_record(d->records, doc);
             xmlFree(content);
         }
         xmlFreeDoc(doc);
+        d->uptodate = TRUE;
     }
+    // display
     {
         Iterator it;
 
-        hashtable_to_iterator(&it, records);
+        hashtable_to_iterator(&it, d->records);
         for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
             record_t *r;
 
             r = iterator_current(&it, NULL);
-            printf("%s %s (id: %" PRIu32 ")\n", r->name, record_type_map[r->type].short_name, r->id);
+            printf("%s %s%s%s (id: %" PRIu32 ")\n", record_type_map[r->type].short_name, r->name, NULL == r->name || '\0' == *r->name ? "" : ".", argv[0], r->id);
             printf("    ttl: %" PRIu32 "\n", r->ttl);
             printf("    target: %s\n", r->target);
         }
@@ -358,12 +378,13 @@ static int record_add(int argc, const char **argv)
     }
     // result
     {
-        HashTable *records;
+        domain_t *d;
 
-        if (!hashtable_get(domains, (void *) argv[0], (void **) &records)) {
-            hashtable_put(domains, (void *) argv[0], records = hashtable_new(NULL, value_equal, NULL, NULL, record_destroy), NULL);
+        d = NULL;
+        if (!hashtable_get(domains, (void *) argv[0], (void **) &d)) {
+            hashtable_put(domains, (void *) argv[0], d = domain_new(), NULL);
         }
-        parse_record(records, doc);
+        parse_record(d->records, doc);
     }
 
     return TRUE;
