@@ -144,7 +144,7 @@ void request_sign(request_t *req)
         p += snprintf(p, end - p, "%02x", hash[i]);
     }
     request_add_header(req, header);
-debug("%s+%s+%s+%s+%s+%s = %s", APPLICATION_SECRET, consumer_key, methods[req->method].name, req->url, NULL == req->pdata ? "" : req->pdata, buffer, header + STR_LEN("X-Ovh-Signature: $1$"));
+//     debug("%s+%s+%s+%s+%s+%s = %s", APPLICATION_SECRET, consumer_key, methods[req->method].name, req->url, NULL == req->pdata ? "" : req->pdata, buffer, header + STR_LEN("X-Ovh-Signature: $1$"));
     // X-Ovh-Timestamp header
     *header = '\0';
     p = stpcpy(header, "X-Ovh-Timestamp: ");
@@ -316,8 +316,19 @@ int request_execute(request_t *req, int output_type, void **output)
         fprintf(stderr, "Request failed: %s\n", curl_easy_strerror(res));
         return 0;
     }
-    debug("req->buffer.ptr = %s", req->buffer.ptr);
-    debug("req->buffer.length = %zu", req->buffer.length);
+    {
+        long code;
+        char *url;
+
+        curl_easy_getinfo(req->ch, CURLINFO_RESPONSE_CODE, &code);
+        curl_easy_getinfo(req->ch, CURLINFO_EFFECTIVE_URL, &url);
+        debug("==========");
+        debug("RESPONSE (HTTP status) = %ld", code);
+        debug("RESPONSE (effective URL) = %s", url);
+        debug("RESPONSE (Content-Length) = %zu", req->buffer.length);
+        debug("RESPONSE (body) = %s", req->buffer.ptr);
+        debug("==========");
+    }
     switch (output_type) {
         case RESPONSE_IGNORE:
             /* NOP */
