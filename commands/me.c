@@ -29,7 +29,10 @@ static int me(int UNUSED(argc), const char **UNUSED(argv))
         return 0;
     }
     for (a = root->properties; a != NULL; a = a->next) {
-        printf("%s: %s\n", a->name, xmlGetProp(root, a->name));
+        xmlChar *value;
+
+        printf("%s: %s\n", a->name, value = xmlGetProp(root, a->name));
+        xmlFree(value);
     }
 
     return 1;

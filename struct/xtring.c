@@ -555,3 +555,66 @@ void string_append_json_string(String *str, const char *string)
     str->ptr[str->len++] = '"';
     str->ptr[str->len] = '\0';
 }
+
+#if 0
+static const int8_t unreserved[] = {
+    /*      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, A, B, C, D, E, F */
+    /* 0 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 1 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 2 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0,
+    /* 3 */ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+    /* 4 */ 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    /* 5 */ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1,
+    /* 6 */ 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    /* 7 */ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0,
+    /* 8 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 9 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* A */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* B */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* C */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* D */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* E */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* F */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+};
+
+void string_add_post_field(String *this, const char *name, const char *value)
+{
+    size_t needs;
+    const char *p;
+
+    needs = 0;
+    if (this->len > 0) {
+        needs += STR_LEN("&");
+    }
+    for (p = name; '\0' != *p; p++) {
+        needs += 1 + (!unreserved[(unsigned char) *p]) * (STR_LEN("%XX") - 1);
+    }
+    if ('\0' != *value) {
+        needs += STR_LEN("=");
+        for (p = value; '\0' != *p; p++) {
+            needs += 1 + (!unreserved[(unsigned char) *p]) * (STR_LEN("%XX") - 1);
+        }
+    }
+    _maybe_expand_of(this, needs);
+    if (this->len > 0) {
+        this->str[this->len++] = '&';
+    }
+    for (p = name; '\0' != *p; p++) {
+        if (unreserved[(unsigned char) *p]) {
+            this->str[this->len++] = *p;
+        } else {
+            snprintf(this->ptr + this->len, STR_SIZE("%XX"), "%%%02X", *p);
+        }
+    }
+    if ('\0' != *value) {
+        this->str[this->len++] = '=';
+        for (p = value; '\0' != *p; p++) {
+            if (unreserved[(unsigned char) *p]) {
+                this->str[this->len++] = *p;
+            } else {
+                snprintf(this->ptr + this->len, STR_SIZE("%XX"), "%%%02X", *p);
+            }
+        }
+    }
+}
+#endif

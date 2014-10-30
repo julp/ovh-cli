@@ -2,11 +2,11 @@
 #include <curl/curl.h>
 #include <openssl/evp.h>
 #include <libxml/xpath.h>
-#include <libxml/parser.h>
 #include <libxml/HTMLparser.h>
 
 #include "common.h"
 #include "modules/api.h"
+#include "modules/libxml.h"
 #include "commands/account.h"
 
 struct buffer {
@@ -18,7 +18,8 @@ struct buffer {
 typedef enum {
     HTTP_GET,
     HTTP_POST,
-    HTTP_PUT
+    HTTP_PUT,
+    HTTP_DELETE
 } http_method_t;
 
 struct request_t {
@@ -42,9 +43,10 @@ static struct {
     size_t name_len;
     CURLoption curlconst;
 } methods[] = {
-    [HTTP_GET] = { "GET", STR_LEN("GET"), CURLOPT_HTTPGET },
-    [HTTP_PUT] = { "PUT", STR_LEN("PUT"), CURLOPT_PUT },
-    [HTTP_POST] = { "POST", STR_LEN("POST"), CURLOPT_POST }
+    [ HTTP_GET ] = { "GET", STR_LEN("GET"), CURLOPT_HTTPGET },
+    [ HTTP_PUT ] = { "PUT", STR_LEN("PUT"), CURLOPT_PUT },
+    [ HTTP_POST ] = { "POST", STR_LEN("POST"), CURLOPT_POST },
+    [ HTTP_DELETE ] = { "DELETE", STR_LEN("DELETE"), 0 }
 };
 
 bool api_ctor(void)
@@ -133,7 +135,6 @@ void request_sign(request_t *req)
     }
     EVP_DigestUpdate(&ctx, buffer, strlen(buffer));
     // </timestamp>
-//     strcpy(hash, "X-Ovh-Signature: $1$");
     EVP_DigestFinal_ex(&ctx, hash, &hash_len);
     EVP_MD_CTX_cleanup(&ctx);
     request_add_header(req, "X-Ovh-Application: " APPLICATION_KEY);
@@ -173,7 +174,11 @@ static request_t *request_ctor(const char *url, http_method_t method)
     req->buffer.length = 0;
     req->buffer.allocated = 8192;
     req->buffer.ptr = mem_new_n(*req->buffer.ptr, req->buffer.allocated);
-    curl_easy_setopt(req->ch, methods[method].curlconst, 1L);
+    if (0 == methods[method].curlconst) {
+        curl_easy_setopt(req->ch, CURLOPT_CUSTOMREQUEST, methods[method].name);
+    } else {
+        curl_easy_setopt(req->ch, methods[method].curlconst, 1L);
+    }
 //     curl_easy_setopt(req->ch, CURLOPT_USERAGENT, "ovh-cli");
     curl_easy_setopt(req->ch, CURLOPT_URL, url);
     curl_easy_setopt(req->ch, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
@@ -224,68 +229,14 @@ request_t *request_post(const char *url, const char *data, int copy)
     return req;
 }
 
-#if 0
-static const int8_t unreserved[] = {
-    /*      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, A, B, C, D, E, F */
-    /* 0 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* 1 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* 2 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0,
-    /* 3 */ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
-    /* 4 */ 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    /* 5 */ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1,
-    /* 6 */ 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    /* 7 */ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0,
-    /* 8 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* 9 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* A */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* B */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* C */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* D */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* E */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* F */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-};
-
-void string_add_post_field(String *this, const char *name, const char *value)
+request_t *request_delete(const char *url)
 {
-    size_t needs;
-    const char *p;
+    request_t *req;
 
-    needs = 0;
-    if (this->len > 0) {
-        needs += STR_LEN("&");
-    }
-    for (p = name; '\0' != *p; p++) {
-        needs += 1 + (!unreserved[(unsigned char) *p]) * (STR_LEN("%XX") - 1);
-    }
-    if ('\0' != *value) {
-        needs += STR_LEN("=");
-        for (p = value; '\0' != *p; p++) {
-            needs += 1 + (!unreserved[(unsigned char) *p]) * (STR_LEN("%XX") - 1);
-        }
-    }
-    _maybe_expand_of(this, needs);
-    if (this->len > 0) {
-        this->str[this->len++] = '&';
-    }
-    for (p = name; '\0' != *p; p++) {
-        if (unreserved[(unsigned char) *p]) {
-            this->str[this->len++] = *p;
-        } else {
-            snprintf(this->ptr + this->len, STR_SIZE("%XX"), "%%%02X", *p);
-        }
-    }
-    if ('\0' != *value) {
-        this->str[this->len++] = '=';
-        for (p = value; '\0' != *p; p++) {
-            if (unreserved[(unsigned char) *p]) {
-                this->str[this->len++] = *p;
-            } else {
-                snprintf(this->ptr + this->len, STR_SIZE("%XX"), "%%%02X", *p);
-            }
-        }
-    }
+    req = request_ctor(url, HTTP_DELETE);
+
+    return req;
 }
-#endif
 
 void request_add_post_field(request_t *req, const char *name, const char *value)
 {
@@ -473,18 +424,17 @@ const char *request_consumer_key(const char *account, const char *password, time
         request_add_header(req, "X-Ovh-Application: " APPLICATION_KEY);
         request_execute(req, RESPONSE_XML, (void **) &doc); // TODO: check returned value
 #if 0
-        printf("====================\n");
+        puts("====================");
         xmlDocFormatDump(stdout, doc, 1);
-        printf("====================\n");
+        puts("====================");
 #endif
         if (NULL == (root = xmlDocGetRootElement(doc))) {
             xmlFreeDoc(doc);
             request_dtor(req);
             return 0;
         }
-        // TODO: assert(NULL != xmlGetProp(...)));
-        validationUrl = strdup((char *) xmlGetProp(root, BAD_CAST "validationUrl"));
-        consumerKey = strdup((char *) xmlGetProp(root, BAD_CAST "consumerKey"));
+        consumerKey = xmlGetPropAsString(root, "consumerKey");
+        validationUrl = xmlGetPropAsString(root, "validationUrl");
         xmlFreeDoc(doc);
         request_dtor(req);
 #ifdef JSON_RULES
@@ -506,9 +456,9 @@ const char *request_consumer_key(const char *account, const char *password, time
             req = request_get(validationUrl);
             request_execute(req, RESPONSE_HTML, (void **) &doc); // TODO: check returned value
 #if 0
-            printf("====================\n");
+            puts("====================");
             htmlDocDump(stdout, doc);
-            printf("====================\n");
+            puts("====================");
 #endif
             xmlXPathInit();
             if (NULL == (ctxt = xmlXPathNewContext(doc))) {

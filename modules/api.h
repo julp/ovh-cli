@@ -20,6 +20,7 @@ void request_add_header(request_t *, const char *);
 
 void request_dtor(request_t *);
 request_t *request_get(const char *);
+request_t *request_delete(const char *);
 request_t *request_post(const char *, const char *, int);
 
 void request_sign(request_t *);

@@ -1,10 +1,10 @@
 #include <string.h>
 #include <inttypes.h>
-#include <libxml/parser.h>
 
 #include "common.h"
 #include "json.h"
 #include "modules/api.h"
+#include "modules/libxml.h"
 #include "struct/hashtable.h"
 
 typedef struct {
@@ -111,49 +111,22 @@ static void domain_dtor(void)
     }
 }
 
-static char *xmlGetPropAsString(xmlNodePtr node, const char *name)
-{
-    char *ret;
-    xmlChar *value;
-
-    value = xmlGetProp(node, BAD_CAST name);
-    /**
-     * prefer to return a new "standard" copy to:
-     * 1) avoid mixing xmlFree and free
-     * 2) stay independant of libxml2/xmlFree internal implemtation
-     **/
-    ret = strdup((char *) value);
-    xmlFree(value);
-
-    return ret;
-}
-
-static uint32_t xmlGetPropAsInt(xmlNodePtr node, const char *name)
-{
-    xmlChar *value;
-    unsigned long long int ret;
-
-    value = xmlGetProp(node, BAD_CAST name);
-    ret = strtoull(value, NULL, 10);
-    xmlFree(value);
-
-    return (uint32_t) ret;
-}
-
 static record_type_t xmlGetPropAsRecordType(xmlNodePtr node, const char *name)
 {
     size_t i;
     xmlChar *value;
     record_type_t ret;
 
-    value = xmlGetProp(node, BAD_CAST name);
-    for (i = 0; i < ARRAY_SIZE(record_type_map); i++) {
-        if (0 == strcmp((const char *) value, record_type_map[i].short_name)) {
-            ret = i;
-            break;
+    ret = 0;
+    if (NULL != (value = xmlGetProp(node, BAD_CAST name))) {
+        for (i = 0; i < ARRAY_SIZE(record_type_map); i++) {
+            if (0 == strcmp((const char *) value, record_type_map[i].short_name)) {
+                ret = i;
+                break;
+            }
         }
+        xmlFree(value);
     }
-    xmlFree(value);
 
     return ret;
 }

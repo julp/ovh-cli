@@ -5,10 +5,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
-#include <libxml/parser.h>
 
 #include "common.h"
 #include "modules/api.h"
+#include "modules/libxml.h"
 #include "struct/hashtable.h"
 
 #include <limits.h>
@@ -268,14 +268,14 @@ static int account_load(void)
                 continue;
             }
             a = mem_new(*a);
-            a->account = (char *) xmlGetProp(n, BAD_CAST "account");
-            a->password = (char *) xmlGetProp(n, BAD_CAST "password");
+            a->account = xmlGetPropAsString(n, "account");
+            a->password = xmlGetPropAsString(n, "password");
             a->consumer_key = NULL;
             if (NULL != xmlHasProp(n, BAD_CAST "consumer_key")) {
                 xmlChar *expires_at;
 
-                a->consumer_key = (char *) xmlGetProp(n, BAD_CAST "consumer_key");
-                expires_at = (char *) xmlGetProp(n, BAD_CAST "expires_at");
+                a->consumer_key = xmlGetPropAsString(n, "consumer_key");
+                expires_at = xmlGetPropAsString(n, "expires_at");
                 a->expires_at = (time_t) atol(expires_at);
                 xmlFree(expires_at);
             }

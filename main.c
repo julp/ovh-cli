@@ -275,8 +275,8 @@ static unsigned char complete(EditLine *el, int ch)
     DPtrArray *possibilities;
 
     li = el_line(el);
-    t = tok_init(NULL);
-    possibilities = dptrarray_new(NULL, NULL, NULL);
+    t = tok_init(NULL); // TODO: don't create/destroy it each call - just reset it
+    possibilities = dptrarray_new(NULL, NULL, NULL); // TODO: don't create/destroy it each call - just clear it
     if (-1 == tok_line(t, li, &argc, &argv, &cursorc, &cursoro)) {
         //
     }
