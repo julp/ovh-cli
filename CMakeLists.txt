@@ -38,7 +38,6 @@ configure_file(
     @ONLY
 )
 
-# add_definitions(-DTEST=1)
 add_definitions(-DDEBUG=1)
 add_definitions(-DWITH_EDITLINE=1)
 add_executable(ovh main.c

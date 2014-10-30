@@ -498,9 +498,7 @@ static int account_delete(int argc, const char **argv)
     int ret;
     const char *account;
 
-debug("argc = %d", argc);
     assert(1 == argc);
-debug("argv[0] = %s", argv[0]);
     account = argv[0];
     if ((ret = hashtable_delete(acd->accounts, account, DTOR_CALL))) {
         account_save();

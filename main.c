@@ -335,18 +335,6 @@ int main(int argc, char **argv)
         }
     }
     atexit(cleanup);
-#ifdef TEST
-    {
-        xmlDocPtr doc;
-        request_t *req;
-
-        req = request_get(API_BASE_URL "/domains/");
-        request_sign(req);
-        request_execute(req, RESPONSE_XML, (void **) &doc);
-
-        return EXIT_FAILURE;
-    }
-#endif /* TEST */
 #if 0
     {
 #include "struct/dptrarray.h"

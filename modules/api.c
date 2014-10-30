@@ -104,11 +104,7 @@ void request_sign(request_t *req)
     char header[1024], buffer[1024], *p;
     unsigned char hash[EVP_MAX_MD_SIZE];
     const char * const end = header + ARRAY_SIZE(header);
-#ifdef TEST
-    const char consumer_key[] = "MtSwSrPpNjqfVSmJhLbPyr2i45lSwPU1";
-#else
     const char *consumer_key = account_key();
-#endif /* TEST */
 
     if (NULL == consumer_key) {
         return; // TODO: let caller know we failed
@@ -173,27 +169,13 @@ static request_t *request_ctor(const char *url, http_method_t method)
     req->pdata = req->data = NULL;
     req->ch = curl_easy_init();
     req->formpost = req->lastptr = NULL;
-#ifdef TEST
-    req->timestamp = 1366560945;
-#else
     req->timestamp = (unsigned int) time(NULL);
-#endif /* TEST */
     req->buffer.length = 0;
     req->buffer.allocated = 8192;
     req->buffer.ptr = mem_new_n(*req->buffer.ptr, req->buffer.allocated);
     curl_easy_setopt(req->ch, methods[method].curlconst, 1L);
 //     curl_easy_setopt(req->ch, CURLOPT_USERAGENT, "ovh-cli");
-#ifdef TEST
-    {
-        char buffer[1024] = URL;
-
-        strcat(buffer, url + STR_LEN(API_BASE_URL));
-debug("buffer = %s", buffer);
-        curl_easy_setopt(req->ch, CURLOPT_URL, buffer);
-    }
-#else
     curl_easy_setopt(req->ch, CURLOPT_URL, url);
-#endif /* TEST */
     curl_easy_setopt(req->ch, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
     curl_easy_setopt(req->ch, CURLOPT_WRITEDATA, (void *) &req->buffer);
 
