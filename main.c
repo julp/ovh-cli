@@ -1,11 +1,9 @@
 #include <stdio.h>
 #include <string.h>
-#if defined(WITH_LINENOISE)
-# include <linenoise.h>
-#elif defined(WITH_READLINE)
+#if defined(WITH_READLINE)
 # include <readline/readline.h>
 # include <readline/history.h>
-# elif defined(WITH_EDITLINE)
+#elif defined(WITH_EDITLINE)
 # include <histedit.h>
 #endif
 #include <libxml/parser.h>
@@ -209,12 +207,7 @@ void cleanup(void)
     }
 }
 
-#if defined(WITH_LINENOISE)
-void completion(const char *buf, linenoiseCompletions *lc)
-{
-    linenoiseAddCompletion(lc, "hello");
-}
-#elif defined(WITH_READLINE)
+#if defined(WITH_READLINE)
 char *command_generator(const char *text, int state)
 {
     size_t i;
@@ -400,15 +393,7 @@ debug(">%s<", buffer->ptr);
     }
 #endif
     if (1 == argc) {
-#if defined(WITH_LINENOISE)
-        char *line, prompt[512], *p;
-
-        *prompt = '\0';
-        p = stpcpy(prompt, account_current());
-        p = stpcpy(p, "> ");
-        linenoiseSetCompletionCallback(completion);
-        while(NULL != (line = linenoise(prompt))) {
-#elif defined(WITH_READLINE)
+#if defined(WITH_READLINE)
         rl_readline_name = "ovh";
         rl_attempted_completion_function = command_completion;
         while (1) {
@@ -444,7 +429,7 @@ debug(">%s<", buffer->ptr);
         printf("%s> ", account_current());
         fflush(stdout);
         while (NULL != fgets(line, STR_SIZE(line), stdin)) {
-#endif /* !WITHOUT_LINENOISE */
+#endif
             int args_len;
             char **args;
             size_t line_len;
@@ -459,18 +444,14 @@ debug(">%s<", buffer->ptr);
             args_len = str_split(line, &args);
             run_command(args_len, (const char **) args);
             free(args[0]);
-#if defined(WITH_LINENOISE)
-//             linenoiseHistoryAdd(line);
-//             linenoiseHistorySave("history.txt");
-            free(line);
-#elif defined(WITH_READLINE)
+#if defined(WITH_READLINE)
             free(line);
 #elif defined(WITH_EDITLINE)
             history(hist, &ev, H_ENTER, line);
 #else
             printf("%s> ", account_current());
             fflush(stdout);
-#endif /* !WITHOUT_LINENOISE */
+#endif
         }
 #ifdef WITH_EDITLINE
         history_end(hist);
