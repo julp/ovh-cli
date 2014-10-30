@@ -8,6 +8,7 @@
 #include "struct/hashtable.h"
 
 typedef enum {
+    RECORD_TYPE_ANY, /* special value to target any type */
     RECORD_TYPE_A,
     RECORD_TYPE_AAAA,
     RECORD_TYPE_CNAME,
@@ -27,6 +28,7 @@ static struct {
     const char *short_name;
     // ...
 } record_type_map[] = {
+    [ RECORD_TYPE_ANY ] = { "ANY" },
     [ RECORD_TYPE_A ] = { "A" },
     [ RECORD_TYPE_AAAA ] = { "AAAA" },
     [ RECORD_TYPE_CNAME ] = { "CNAME" },
@@ -60,10 +62,10 @@ static void record_destroy(void *data)
 
     r = (record_t *) data;
     if (NULL != r->name) {
-        free(r->name);
+        free((void *) r->name);
     }
     if (NULL != r->target) {
-        free(r->target);
+        free((void *) r->target);
     }
     free(r);
 }
@@ -80,6 +82,23 @@ static void domain_dtor(void)
     if (NULL != domains) {
         hashtable_destroy(domains);
     }
+}
+
+static char *xmlGetPropAsString(xmlNodePtr node, const char *name)
+{
+    char *ret;
+    xmlChar *value;
+
+    value = xmlGetProp(node, BAD_CAST name);
+    /**
+     * prefer to return a new "standard" copy to:
+     * 1) avoid mixing xmlFree and free
+     * 2) stay independant of libxml2/xmlFree internal implemtation
+     **/
+    ret = strdup((char *) value);
+    xmlFree(value);
+
+    return ret;
 }
 
 static uint32_t xmlGetPropAsInt(xmlNodePtr node, const char *name)
@@ -139,7 +158,7 @@ static int domain_list(int argc, const char **argv)
             xmlChar *content;
 
             content = xmlNodeGetContent(n);
-            hashtable_put(domains, content, NULL, hashtable_new(NULL, value_equal, NULL, NULL, record_destroy));
+            hashtable_put(domains, content, hashtable_new(NULL, value_equal, NULL, NULL, record_destroy), NULL);
             puts((const char *) content);
             xmlFree(content);
         }
@@ -165,7 +184,7 @@ static int record_list(int argc, const char **argv)
     HashTable *records;
 
     assert(3 == argc);
-    if (!hashtable_get(domains, (void *) argv[0], (void **) &records)) {
+    if (!hashtable_get(domains, (void *) argv[0], (void **) &records) || hashtable_size(records) < 1) {
         xmlDocPtr doc;
         request_t *req;
         xmlNodePtr root, n;
@@ -188,7 +207,9 @@ static int record_list(int argc, const char **argv)
             return 0;
         }
         for (n = root->children; n != NULL; n = n->next) {
+#if 0
             xmlAttrPtr a;
+#endif
             xmlDocPtr doc;
             xmlNodePtr root;
             xmlChar *content;
@@ -215,17 +236,20 @@ static int record_list(int argc, const char **argv)
             r = mem_new(*r);
             r->id = xmlGetPropAsInt(root, "id");
             r->ttl = xmlGetPropAsInt(root, "ttl");
-            r->name = xmlGetProp(root, BAD_CAST "subDomain");
-            r->target = xmlGetProp(root, BAD_CAST "target");
+            r->name = xmlGetPropAsString(root, BAD_CAST "subDomain");
+            r->target = xmlGetPropAsString(root, BAD_CAST "target");
             r->type = xmlGetPropAsRecordType(root, "fieldType");
             hashtable_quick_put_ex(records, 0, r->id, NULL, r, NULL);
+#if 0
             for (a = root->properties; a != NULL; a = a->next) {
                 // TODO: build a cache name (+ type ?) => id
-                printf("%s: %s\n", a->name, xmlGetProp(root, a->name));
+                printf("%s: %s\n", a->name, xmlGetProp(root, a->name)); // TODO: leak on xmlGetProp
             }
+#endif
             xmlFree(content);
         }
-    } else {
+    }
+    {
         Iterator it;
 
         hashtable_to_iterator(&it, records);
@@ -233,9 +257,9 @@ static int record_list(int argc, const char **argv)
             record_t *r;
 
             r = iterator_current(&it, NULL);
-            printf("%s %s (%" PRIu32 ")\n", r->name, record_type_map[r->type].short_name, r->id);
-            printf("    %" PRIu32 "\n", r->ttl);
-            printf("    %s\n", r->target);
+            printf("%s %s (id: %" PRIu32 ")\n", r->name, record_type_map[r->type].short_name, r->id);
+            printf("    ttl: %" PRIu32 "\n", r->ttl);
+            printf("    target: %s\n", r->target);
         }
         iterator_close(&it);
     }
