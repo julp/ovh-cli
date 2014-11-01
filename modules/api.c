@@ -44,7 +44,7 @@ static struct {
     CURLoption curlconst;
 } methods[] = {
     [ HTTP_GET ] = { "GET", STR_LEN("GET"), CURLOPT_HTTPGET },
-    [ HTTP_PUT ] = { "PUT", STR_LEN("PUT"), CURLOPT_PUT },
+    [ HTTP_PUT ] = { "PUT", STR_LEN("PUT"), 0 },
     [ HTTP_POST ] = { "POST", STR_LEN("POST"), CURLOPT_POST },
     [ HTTP_DELETE ] = { "DELETE", STR_LEN("DELETE"), 0 }
 };
