@@ -369,10 +369,10 @@ static int record_delete(int argc, const char **argv)
 }
 
 static const command_t domain_commands[] = {
-    { "list", 0, domain_list, (const char * const []) { ARG_MODULE_NAME, "list", NULL } },
-    { "record list", 0, record_list, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "list", NULL } },
-    { "record add", 0, record_add, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "add", ARG_ANY_VALUE, "type", ARG_ANY_VALUE, ARG_ANY_VALUE, NULL } },
-    { "record delete", 0, record_delete, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "delete", ARG_ANY_VALUE, /*"type", ARG_ANY_VALUE,*/ NULL } },
+    { "list", 2, domain_list, (const char * const []) { ARG_MODULE_NAME, "list", NULL } },
+    { "record list", 4, record_list, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "list", NULL } },
+    { "record add", 8, record_add, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "add", ARG_ANY_VALUE, "type", ARG_ANY_VALUE, ARG_ANY_VALUE, NULL } },
+    { "record delete", 5, record_delete, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "delete", ARG_ANY_VALUE, /*"type", ARG_ANY_VALUE,*/ NULL } },
     { NULL }
 };
 

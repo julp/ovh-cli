@@ -1,14 +1,13 @@
 #include <stdio.h>
 #include <string.h>
+#include <libxml/parser.h>
+#include "common.h"
 #if defined(WITH_READLINE)
 # include <readline/readline.h>
 # include <readline/history.h>
 #elif defined(WITH_EDITLINE)
 # include <histedit.h>
 #endif
-#include <libxml/parser.h>
-
-#include "common.h"
 #include "modules/api.h"
 #include "commands/account.h"
 #include "struct/dptrarray.h"
@@ -21,6 +20,9 @@ extern module_t api_module;
 extern module_t base_module;
 extern module_t account_module;
 // ---
+#ifdef WITH_NLS
+extern module_t nls_module;
+#endif /* WITH_NLS */
 extern module_t domain_module;
 extern module_t dedicated_module;
 extern module_t me_module;
@@ -34,6 +36,9 @@ const module_t */*builtin_*/modules[] = {
     &base_module,
     &account_module,
     // ---
+#ifdef WITH_NLS
+    &nls_module,
+#endif /* WITH_NLS */
     &domain_module,
     &dedicated_module,
     &me_module
@@ -280,7 +285,11 @@ static unsigned char complete(EditLine *el, int ch)
     if (-1 == tok_line(t, li, &argc, &argv, &cursorc, &cursoro)) {
         //
     }
+#if 0
     if (0 == cursorc) {
+#else
+    {
+#endif
         size_t i;
         const command_t *c;
 
@@ -290,16 +299,30 @@ static unsigned char complete(EditLine *el, int ch)
 
                 prev = NULL;
                 for (c = modules[i]->commands; NULL != c->first_word; c++) {
-                    if (NULL != c->args) {
-    //                     const char **v;
-    //
-    //                     for (v = c->args; apply && NULL != *v && j < args_count; v++) {
-    //                     }
+                    if (cursorc < c->argc) {
+                        int j; /* signed here !!! */
+                        bool apply;
                         const char *v;
 
-                        v = c->args[0];
-                        if (ARG_MODULE_NAME == c->args[0]) {
+                        apply = TRUE;
+                        if (ARG_ANY_VALUE == c->args[cursorc]) { // free argument, no completion available
+                            continue;
+                        }
+                        for (j = 0; apply && j < cursorc - 1; j++) {
+                            if (ARG_MODULE_NAME == c->args[j]) {
+                                apply &= 0 == strcmp(modules[i]->name, argv[j]);
+                            } else if (ARG_ANY_VALUE == c->args[j]) {
+                                // NOP
+                            } else {
+                                apply &= 0 == strcmp(c->args[j], argv[j]);
+                            }
+                        }
+                        if (!apply) { // the beginning of the command doesn't match, skip current command
+                            continue;
+                        } else if (ARG_MODULE_NAME == c->args[cursorc]) {
                             v = modules[i]->name;
+                        } else {
+                            v = c->args[cursorc];
                         }
                         if (0 == strncmp(v, argv[cursorc], cursoro)) {
 #if 0
@@ -457,6 +480,7 @@ debug(">%s<", buffer->ptr);
         EditLine *el;
         History *hist;
 
+        puts(_("needs help? Type help!"));
         hist = history_init();
         {
             HistEvent ev;

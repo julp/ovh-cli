@@ -13,6 +13,7 @@ find_package(LibXml2 REQUIRED)
 find_package(OpenSSL REQUIRED)
 # set(EDITLINE_DEBUG TRUE)
 find_package(EditLine REQUIRED)
+find_package(Gettext QUIET)
 
 include_directories(
     ${CURL_INCLUDE_DIRS}
@@ -21,6 +22,8 @@ include_directories(
     ${EDITLINE_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+set(MISC_SOURCES )
 
 if(NOT APPLICATION_KEY)
     message(FATAL_ERROR "Expected cmake paramater -DAPPLICATION_KEY= to set your 'application key'")
@@ -32,14 +35,24 @@ if(NOT API_BASE_URL)
     set(API_BASE_URL "https://eu.api.ovh.com/1.0")
 endif(NOT API_BASE_URL)
 
+if(GETTEXT_FOUND)
+    set(WITH_NLS true)
+    set(LOCALEDIR "${CMAKE_CURRENT_SOURCE_DIR}/share/locale/")
+    add_subdirectory(i18n)
+    list(APPEND MISC_SOURCES "modules/nls.c")
+endif(GETTEXT_FOUND)
+
+# <DEV>
+set(WITH_EDITLINE true)
+option(DEBUG "Enable/disable debugging" OFF)
+# </DEV>
+
 configure_file(
     "config.h.in"
     "config.h"
     @ONLY
 )
 
-add_definitions(-DDEBUG=1)
-add_definitions(-DWITH_EDITLINE=1)
 add_executable(ovh main.c
     modules/openssl.c modules/curl.c modules/libxml.c
     modules/api.c modules/conv.c
@@ -47,5 +60,6 @@ add_executable(ovh main.c
     json.c
     struct/iterator.c struct/hashtable.c struct/dptrarray.c struct/xtring.c # struct/stack.c
     commands/account.c commands/domain.c commands/me.c commands/dedicated.c
+    ${MISC_SOURCES}
 )
 target_link_libraries(ovh ${LIBXML2_LIBRARIES} ${CURL_LIBRARIES} ${OPENSSL_LIBRARIES} ${EDITLINE_LIBRARIES})

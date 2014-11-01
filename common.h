@@ -32,15 +32,7 @@
 #  define WARN_UNUSED_RESULT
 # endif /* WARN_UNUSED_RESULT */
 
-#ifdef TEST
-# define APPLICATION_KEY "7kbG7Bk7S9Nt7ZSV"
-# define URL "http://localhost:3000"
-# define APPLICATION_SECRET "EXEgWIz07P0HYwtQDs7cNIqCiQaWSuHF"
-# define API_BASE_URL "https://eu.api.ovh.com/1.0"
-#else
 # include "config.h"
-#endif
-
 # define DIRECTORY_SEPARATOR '/'
 # define OVH_SHELL_CONFIG_FILE ".ovh"
 
@@ -97,6 +89,16 @@ typedef enum {
 } bool;
 #  endif
 # endif /* C99 boolean */
+
+# ifdef WITH_NLS
+#  include <libintl.h>
+#  define gettext_noop(string) string
+#  define _(string) gettext(string)
+#  define N_(string) gettext_noop(string)
+# else
+#  define _(string) string
+#  define N_(string) string
+# endif /* WITH_NLS */
 
 typedef int (*CmpFunc)(const void *, const void *);
 typedef bool (*EqualFunc)(const void *, const void *);

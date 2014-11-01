@@ -529,14 +529,14 @@ static int account_switch(int argc, const char **argv)
 
 static const command_t account_commands[] = {
     // stackoverflow.com/questions/3875523/lookup-table-in-c
-    { "list", 0, account_list, (const char * const []) { ARG_MODULE_NAME, "list", NULL } },
-    { "add", -1, account_add, (const char * const []) { ARG_MODULE_NAME, "add", ARG_ANY_VALUE, ARG_ANY_VALUE, NULL } },
-    { "add", -1, account_add, (const char * const []) { ARG_MODULE_NAME, "add", ARG_ANY_VALUE, ARG_ANY_VALUE, ARG_ANY_VALUE, NULL } },
-    { "add", -1, account_add, (const char * const []) { ARG_MODULE_NAME, "add", ARG_ANY_VALUE, ARG_ANY_VALUE, ARG_ANY_VALUE, "expires", "in", ARG_ANY_VALUE, NULL } },
-    { "add", -1, account_add, (const char * const []) { ARG_MODULE_NAME, "add", ARG_ANY_VALUE, ARG_ANY_VALUE, ARG_ANY_VALUE, "expires", "at", ARG_ANY_VALUE, NULL } },
-    { "delete", 1, account_delete, (const char * const []) { ARG_MODULE_NAME, "delete", ARG_ANY_VALUE, NULL } },
-    { "switch", 1, account_switch, (const char * const []) { ARG_MODULE_NAME, "switch", ARG_ANY_VALUE, NULL } },
-    { "default", 1, account_default_set, (const char * const []) { ARG_MODULE_NAME, "default", ARG_ANY_VALUE, NULL } },
+    { "list", 2, account_list, (const char * const []) { ARG_MODULE_NAME, "list", NULL } },
+    { "add", 4, account_add, (const char * const []) { ARG_MODULE_NAME, "add", ARG_ANY_VALUE, ARG_ANY_VALUE, NULL } },
+    { "add", 5, account_add, (const char * const []) { ARG_MODULE_NAME, "add", ARG_ANY_VALUE, ARG_ANY_VALUE, ARG_ANY_VALUE, NULL } },
+    { "add", 8, account_add, (const char * const []) { ARG_MODULE_NAME, "add", ARG_ANY_VALUE, ARG_ANY_VALUE, ARG_ANY_VALUE, "expires", "in", ARG_ANY_VALUE, NULL } },
+    { "add", 8, account_add, (const char * const []) { ARG_MODULE_NAME, "add", ARG_ANY_VALUE, ARG_ANY_VALUE, ARG_ANY_VALUE, "expires", "at", ARG_ANY_VALUE, NULL } },
+    { "delete", 3, account_delete, (const char * const []) { ARG_MODULE_NAME, "delete", ARG_ANY_VALUE, NULL } },
+    { "switch", 3, account_switch, (const char * const []) { ARG_MODULE_NAME, "switch", ARG_ANY_VALUE, NULL } },
+    { "default", 3, account_default_set, (const char * const []) { ARG_MODULE_NAME, "default", ARG_ANY_VALUE, NULL } },
     { NULL }
 };
 

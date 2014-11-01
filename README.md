@@ -17,7 +17,8 @@
 * libcurl
 * libxml2
 * libedit
-* libiconv
+* libiconv (not used yet)
+* gettext (optional)
 
 ## Install
 
@@ -39,8 +40,9 @@ make
     * default \<nickhandle>
     * switch \<nickhandle>
 * domain
-    * \<domain name> record add \<record name> type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT> \<target>
     * list
+    * \<domain name> record add \<record name> type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT> \<target>
+    * \<domain name> record delete \<record name> [type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT>]
 * dedicated
     * list
 * me

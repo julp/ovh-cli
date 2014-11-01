@@ -2,8 +2,8 @@
 
 #define CONFIG_H
 
-#define APPLICATION_KEY "p78lHft5yNVCK3MX"
-#define APPLICATION_SECRET "J4bln7ApBZ2pDvFDK53AjMenSa1l3kKZ"
+#define APPLICATION_KEY "B1YOeaRoCVRjuKej"
+#define APPLICATION_SECRET "mQqOPRehA5q5lsCWp3NtxA5fOZ2ebt3P"
 #define API_BASE_URL "https://eu.api.ovh.com/1.0"
 #define WITH_NLS
 #define DEBUG
