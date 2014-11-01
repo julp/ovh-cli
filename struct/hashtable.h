@@ -26,6 +26,7 @@ void hashtable_clear(HashTable *);
 bool hashtable_contains(HashTable *, const void *);
 bool hashtable_quick_contains(HashTable *, hash_t, const void *);
 bool hashtable_delete(HashTable *, const void *, bool);
+bool hashtable_quick_delete(HashTable *, hash_t, const void *, bool);
 void hashtable_destroy(HashTable *);
 void hashtable_foreach(HashTable *, ForeachFunc);
 void hashtable_foreach_reverse(HashTable *, ForeachFunc);

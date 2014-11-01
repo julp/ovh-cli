@@ -213,18 +213,11 @@ static int record_list(int argc, const char **argv)
         xmlDocPtr doc;
         request_t *req;
         xmlNodePtr root, n;
-        char *p, url[1024];
 
         if (NULL == d) {
             hashtable_put(domains, (void *) argv[0], d = domain_new(), NULL);
         }
-        // forge url
-        *url = '\0';
-        p = stpcpy(url, API_BASE_URL "/domain/zone/");
-        p = stpcpy(p, argv[0]);
-        p = stpcpy(p, "/record");
-        // request
-        req = request_get(url);
+        req = request_get(API_BASE_URL "/domain/zone/%s/record", argv[0]);
         request_add_header(req, "Accept: text/xml");
         request_sign(req);
         request_execute(req, RESPONSE_XML, (void **) &doc);
@@ -239,14 +232,7 @@ static int record_list(int argc, const char **argv)
 
             content = xmlNodeGetContent(n);
             puts((const char *) content);
-            // forge url
-            *url = '\0';
-            p = stpcpy(url, API_BASE_URL "/domain/zone/");
-            p = stpcpy(p, argv[0]);
-            p = stpcpy(p, "/record/");
-            p = stpcpy(p, (const char *) content);
-            // request
-            req = request_get(url);
+            req = request_get(API_BASE_URL "/domain/zone/%s/record/%s", argv[0], (const char *) content);
             request_add_header(req, "Accept: text/xml");
             request_sign(req);
             request_execute(req, RESPONSE_XML, (void **) &doc);
@@ -267,9 +253,16 @@ static int record_list(int argc, const char **argv)
             record_t *r;
 
             r = iterator_current(&it, NULL);
-            printf("%s %s%s%s (id: %" PRIu32 ")\n", record_type_map[r->type].short_name, r->name, NULL == r->name || '\0' == *r->name ? "" : ".", argv[0], r->id);
-            printf("    ttl: %" PRIu32 "\n", r->ttl);
-            printf("    target: %s\n", r->target);
+            printf(
+                "%s %s%s%s => %s (ttl: %" PRIu32 ", id: %" PRIu32 ")\n",
+                record_type_map[r->type].short_name,
+                r->name,
+                NULL == r->name || '\0' == *r->name ? "" : ".",
+                argv[0],
+                r->target,
+                r->ttl,
+                r->id
+            );
         }
         iterator_close(&it);
     }
@@ -332,15 +325,8 @@ static int record_add(int argc, const char **argv)
         // request
         {
             request_t *req;
-            char *p, url[1024];
 
-            // forge url
-            *url = '\0';
-            p = stpcpy(url, API_BASE_URL "/domain/zone/");
-            p = stpcpy(p, argv[0]);
-            p = stpcpy(p, "/record");
-            // request
-            req = request_post(url, buffer->ptr, STRING_NOCOPY);
+            req = request_post(buffer->ptr, STRING_NOCOPY, API_BASE_URL "/domain/zone/%s/record", argv[0]);
             request_add_header(req, "Accept: text/xml");
             request_add_header(req, "Content-type: application/json");
             request_sign(req);
@@ -365,7 +351,74 @@ static int record_add(int argc, const char **argv)
 
 static int record_delete(int argc, const char **argv)
 {
-    //
+    domain_t *d;
+    record_t *match;
+    const char *record;
+
+    record = argv[3];
+    if (!hashtable_get(domains, (void *) argv[0], (void **) &d) || !d->uptodate) {
+        // TODO: populate hashtable for argv[0] (we need ID <=> name mapping)
+        if (!hashtable_get(domains, (void *) argv[0], (void **) &d)) {
+            fprintf(stderr, "Domain '%s' doesn't have any record named '%s'\n", argv[0], argv[3]);
+            return 0;
+        }
+    }
+    {
+        Iterator it;
+        size_t matches;
+
+        matches = 0;
+        hashtable_to_iterator(&it, d->records);
+        for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+            record_t *r;
+
+            r = iterator_current(&it, NULL);
+            if (0 == strcmp(r->name, record)) { // TODO: strcmp_l? type?
+                ++matches;
+                match = r;
+            }
+        }
+        iterator_close(&it);
+        switch (matches) {
+            case 1:
+            {
+                char c;
+
+                do {
+                    printf("Confirm deletion of '%s.%s' (y/N)> ", match->name, argv[0]);
+                    fflush(stdout);
+                    c = getchar();
+                } while ('y' != /*tolower*/(c) && 'n' != /*tolower*/(c));
+                if ('n' == /*tolower*/(c)) {
+                    return 1;
+                }
+                break;
+            }
+            case 0:
+                fprintf(stderr, "Abort, no record match '%s'\n", argv[3]);
+                return 0;
+            default:
+                fprintf(stderr, "Abort, more than one record match '%s'\n", argv[3]);
+                return 0;
+        }
+    }
+    {
+        request_t *req;
+
+        // request
+#if 0
+        req = request_delete(API_BASE_URL "/domain/zone/%s/%" PRIu32, argv[0], match->id);
+        request_add_header(req, "Accept: text/xml");
+        request_sign(req);
+        request_execute(req, RESPONSE_IGNORE, NULL);
+        request_dtor(req);
+#else
+        printf("deletion of '%s.%s' done\n", match->name, argv[0]);
+#endif
+        // result
+        // ... if successful (TODO)
+        hashtable_quick_delete(d->records, match->id, NULL, TRUE);
+    }
 }
 
 static const command_t domain_commands[] = {

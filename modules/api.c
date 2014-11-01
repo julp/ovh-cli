@@ -4,7 +4,6 @@
 #include <libxml/xpath.h>
 #include <libxml/HTMLparser.h>
 
-#include "common.h"
 #include "modules/api.h"
 #include "modules/libxml.h"
 #include "commands/account.h"
@@ -24,13 +23,13 @@ typedef enum {
 
 struct request_t {
     CURL *ch;
-    const char *url;
+    char *url;
     // <CURLOPT_POSTFIELDS>
     const char *data;
     const char *pdata; // if pdata != data, pdata is a copy (= needs to be freed)
     // </CURLOPT_POSTFIELDS>
     http_method_t method;
-    struct buffer buffer;
+    struct buffer buffer; // TODO: struct buffer => String
     unsigned int timestamp;
     struct curl_slist *headers;
     struct curl_httppost *formpost, *lastptr;
@@ -158,15 +157,19 @@ void request_sign(request_t *req)
     request_add_header(req, header);
 }
 
-static request_t *request_ctor(const char *url, http_method_t method)
+static request_t *request_ctor(http_method_t method, const char *url, va_list args)
 {
     CURLcode res;
     request_t *req;
+    va_list cpyargs;
 
     req = mem_new(*req);
     req->headers = NULL;
     req->method = method;
-    req->url = strdup(url);
+    va_copy(cpyargs, args);
+    req->url = mem_new_n(*req->url, vsnprintf(NULL, 0, url, cpyargs) + 1);
+    va_end(cpyargs);
+    vsprintf(req->url, url, args);
     req->pdata = req->data = NULL;
     req->ch = curl_easy_init();
     req->formpost = req->lastptr = NULL;
@@ -180,7 +183,7 @@ static request_t *request_ctor(const char *url, http_method_t method)
         curl_easy_setopt(req->ch, methods[method].curlconst, 1L);
     }
 //     curl_easy_setopt(req->ch, CURLOPT_USERAGENT, "ovh-cli");
-    curl_easy_setopt(req->ch, CURLOPT_URL, url);
+    curl_easy_setopt(req->ch, CURLOPT_URL, req->url);
     curl_easy_setopt(req->ch, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
     curl_easy_setopt(req->ch, CURLOPT_WRITEDATA, (void *) &req->buffer);
 
@@ -203,20 +206,27 @@ void request_dtor(request_t *req)
     free(req->buffer.ptr);
 }
 
-request_t *request_get(const char *url)
+// request_t *request_get(const char *url)
+request_t *request_get(const char *url, ...) /* PRINTF(1, 2) */
 {
+    va_list args;
     request_t *req;
 
-    req = request_ctor(url, HTTP_GET);
+    va_start(args, url);
+    req = request_ctor(HTTP_GET, url, args);
+    va_end(args);
 
     return req;
 }
 
-request_t *request_post(const char *url, const char *data, int copy)
+request_t *request_post(const char *data, int copy, const char *url, ...) /* PRINTF(3, 4) */
 {
+    va_list args;
     request_t *req;
 
-    req = request_ctor(url, HTTP_POST);
+    va_start(args, url);
+    req = request_ctor(HTTP_POST, url, args);
+    va_end(args);
     if (NULL != data && '\0' != *data) {
         req->pdata = req->data = data;
         if (copy) {
@@ -229,11 +239,14 @@ request_t *request_post(const char *url, const char *data, int copy)
     return req;
 }
 
-request_t *request_delete(const char *url)
+request_t *request_delete(const char *url, ...) /* PRINTF(1, 2) */
 {
+    va_list args;
     request_t *req;
 
-    req = request_ctor(url, HTTP_DELETE);
+    va_start(args, url);
+    req = request_ctor(HTTP_DELETE, url, args);
+    va_end(args);
 
     return req;
 }
@@ -417,7 +430,7 @@ const char *request_consumer_key(const char *account, const char *password, time
             json_document_serialize(doc, buffer);
             json_document_destroy(doc);
         }
-        req = request_post(API_BASE_URL "/auth/credential", buffer->ptr, STRING_NOCOPY);
+        req = request_post(buffer->ptr, STRING_NOCOPY, API_BASE_URL "/auth/credential");
 #endif /* !JSON_RULES */
         request_add_header(req, "Accept: text/xml");
         request_add_header(req, "Content-type: application/json");
@@ -453,7 +466,7 @@ const char *request_consumer_key(const char *account, const char *password, time
             xmlXPathObjectPtr res;
             xmlXPathContextPtr ctxt;
 
-            req = request_get(validationUrl);
+            req = request_get("%s", validationUrl);
             request_execute(req, RESPONSE_HTML, (void **) &doc); // TODO: check returned value
 #if 0
             puts("====================");
@@ -507,7 +520,7 @@ debug("password field name = %s", password_field_name);
         }
 
         // POST validationUrl
-        req = request_post(validationUrl, NULL, STRING_NOCOPY);
+        req = request_post(NULL, STRING_NOCOPY, "%s", validationUrl);
         request_add_post_field(req, "credentialToken", token);
         request_add_post_field(req, account_field_name, account);
         request_add_post_field(req, password_field_name, password);

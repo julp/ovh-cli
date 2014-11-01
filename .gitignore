@@ -1,0 +1,12 @@
+old
+ovh
+*.mo
+*.gmo
+share
+build.sh
+config.h
+Makefile
+CMakeFiles
+CMakeCache.txt
+cmake_install.cmake
+install_manifest.txt

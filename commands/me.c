@@ -39,7 +39,7 @@ static int me(int UNUSED(argc), const char **UNUSED(argv))
 }
 
 static const command_t me_commands[] = {
-    { "me", 0, me, (const char * const []) { "me", NULL } },
+    { "me", 1, me, (const char * const []) { "me", NULL } },
     { NULL }
 };
 

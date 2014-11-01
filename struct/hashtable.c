@@ -384,6 +384,11 @@ static bool hashtable_delete_real(HashTable *this, hash_t h, const void *key, bo
     return FALSE;
 }
 
+bool hashtable_quick_delete(HashTable *this, hash_t h, const void *key, bool call_dtor)
+{
+    return hashtable_delete_real(this, h, key, call_dtor);
+}
+
 bool hashtable_delete(HashTable *this, const void *key, bool call_dtor)
 {
     return hashtable_delete_real(this, this->hf(key), key, call_dtor);
