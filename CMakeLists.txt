@@ -37,7 +37,7 @@ endif(NOT API_BASE_URL)
 
 if(GETTEXT_FOUND)
     set(WITH_NLS true)
-    set(LOCALEDIR "${CMAKE_CURRENT_SOURCE_DIR}/share/locale/")
+    set(LOCALEDIR "${CMAKE_INSTALL_PREFIX}/share/locale/")
     add_subdirectory(i18n)
     list(APPEND MISC_SOURCES "modules/nls.c")
 endif(GETTEXT_FOUND)
