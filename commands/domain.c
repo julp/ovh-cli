@@ -57,6 +57,7 @@ typedef struct {
     const char *target;
 } record_t;
 
+// TODO: domains/records cache is not account specific
 static HashTable *domains = NULL;
 
 static void domain_destroy(void *data)
@@ -201,23 +202,18 @@ static int domain_list(int argc, const char **argv)
     return TRUE;
 }
 
-// TODO: optionnal arguments fieldType and subDomain in query string
-static int record_list(int argc, const char **argv)
+static int get_domain_records(const char *domain, domain_t **d)
 {
-    domain_t *d;
-
-    assert(3 == argc);
-
-    d = NULL;
-    if (!hashtable_get(domains, (void *) argv[0], (void **) &d) || !d->uptodate) {
+    *d = NULL;
+    if (!hashtable_get(domains, (void *) domain, (void **) d) || !(*d)->uptodate) {
         xmlDocPtr doc;
         request_t *req;
         xmlNodePtr root, n;
 
-        if (NULL == d) {
-            hashtable_put(domains, (void *) argv[0], d = domain_new(), NULL);
+        if (NULL == *d) {
+            hashtable_put(domains, (void *) domain, *d = domain_new(), NULL);
         }
-        req = request_get(API_BASE_URL "/domain/zone/%s/record", argv[0]);
+        req = request_get(API_BASE_URL "/domain/zone/%s/record", domain);
         request_add_header(req, "Accept: text/xml");
         request_sign(req);
         request_execute(req, RESPONSE_XML, (void **) &doc);
@@ -232,40 +228,49 @@ static int record_list(int argc, const char **argv)
 
             content = xmlNodeGetContent(n);
             puts((const char *) content);
-            req = request_get(API_BASE_URL "/domain/zone/%s/record/%s", argv[0], (const char *) content);
+            req = request_get(API_BASE_URL "/domain/zone/%s/record/%s", domain, (const char *) content);
             request_add_header(req, "Accept: text/xml");
             request_sign(req);
             request_execute(req, RESPONSE_XML, (void **) &doc);
             request_dtor(req);
             // result
-            parse_record(d->records, doc);
+            parse_record((*d)->records, doc);
             xmlFree(content);
         }
         xmlFreeDoc(doc);
-        d->uptodate = TRUE;
+        (*d)->uptodate = TRUE;
     }
+
+    return 1;
+}
+
+// TODO: optionnal arguments fieldType and subDomain in query string
+static int record_list(int argc, const char **argv)
+{
+    domain_t *d;
+    Iterator it;
+
+    assert(3 == argc);
+
+    get_domain_records(argv[0], &d);
     // display
-    {
-        Iterator it;
+    hashtable_to_iterator(&it, d->records);
+    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        record_t *r;
 
-        hashtable_to_iterator(&it, d->records);
-        for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-            record_t *r;
-
-            r = iterator_current(&it, NULL);
-            printf(
-                "%s %s%s%s => %s (ttl: %" PRIu32 ", id: %" PRIu32 ")\n",
-                record_type_map[r->type].short_name,
-                r->name,
-                NULL == r->name || '\0' == *r->name ? "" : ".",
-                argv[0],
-                r->target,
-                r->ttl,
-                r->id
-            );
-        }
-        iterator_close(&it);
+        r = iterator_current(&it, NULL);
+        printf(
+            "%s %s%s%s => %s (ttl: %" PRIu32 ", id: %" PRIu32 ")\n",
+            record_type_map[r->type].short_name,
+            r->name,
+            NULL == r->name || '\0' == *r->name ? "" : ".",
+            argv[0],
+            r->target,
+            r->ttl,
+            r->id
+        );
     }
+    iterator_close(&it);
 
     return 1;
 }
@@ -356,13 +361,14 @@ static int record_delete(int argc, const char **argv)
     const char *record;
 
     record = argv[3];
-    if (!hashtable_get(domains, (void *) argv[0], (void **) &d) || !d->uptodate) {
-        // TODO: populate hashtable for argv[0] (we need ID <=> name mapping)
-        if (!hashtable_get(domains, (void *) argv[0], (void **) &d)) {
-            fprintf(stderr, "Domain '%s' doesn't have any record named '%s'\n", argv[0], argv[3]);
-            return 0;
-        }
+    get_domain_records(argv[0], &d);
+#if 0
+    // what was the goal? If true, it is more the domain which does not exist!
+    if (!hashtable_get(domains, (void *) argv[0], (void **) &d)) {
+        fprintf(stderr, "Domain '%s' doesn't have any record named '%s'\n", argv[0], argv[3]);
+        return 0;
     }
+#endif
     {
         Iterator it;
         size_t matches;
@@ -422,10 +428,10 @@ static int record_delete(int argc, const char **argv)
 }
 
 static const command_t domain_commands[] = {
-    { "list", 2, domain_list, (const char * const []) { ARG_MODULE_NAME, "list", NULL } },
-    { "record list", 4, record_list, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "list", NULL } },
-    { "record add", 8, record_add, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "add", ARG_ANY_VALUE, "type", ARG_ANY_VALUE, ARG_ANY_VALUE, NULL } },
-    { "record delete", 5, record_delete, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "delete", ARG_ANY_VALUE, /*"type", ARG_ANY_VALUE,*/ NULL } },
+    { domain_list, 2, (const char * const []) { ARG_MODULE_NAME, "list", NULL } },
+    { record_list, 4, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "list", NULL } },
+    { record_add, 8, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "add", ARG_ANY_VALUE, "type", ARG_ANY_VALUE, ARG_ANY_VALUE, NULL } },
+    { record_delete, 5, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "delete", ARG_ANY_VALUE, /*"type", ARG_ANY_VALUE,*/ NULL } },
     { NULL }
 };
 

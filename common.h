@@ -120,10 +120,9 @@ typedef int (*ForeachFunc)();
 } command_status_t;*/
 
 typedef struct {
-    const char *first_word;
-    int argc;
     int (*handle)(int argc, const char **argv);
-     const char * const *args;
+    int argc;
+    const char * const *args;
 } command_t;
 
 typedef struct {

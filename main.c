@@ -121,7 +121,7 @@ static int run_command(int args_count, const char **args)
     }
     for (i = 0; i < ARRAY_SIZE(modules); i++) {
         if (NULL != modules[i]->commands) {
-            for (c = modules[i]->commands; NULL != c->first_word; c++) {
+            for (c = modules[i]->commands; NULL != c->handle; c++) {
                 if (NULL != c->args) {
                     int j; // argument index
                     bool apply; // do arguments apply to the current command
@@ -166,35 +166,6 @@ static int run_command(int args_count, const char **args)
                     }
                 }
             }
-#if 0
-            if (NULL == modules[i]->name) {
-                for (c = modules[i]->commands; NULL != c->first_word; c++) {
-                    if (0 == strcmp(c->first_word, args[0])) {
-                        if (c->argc < 0 || (args_count - 1) == c->argc) {
-                            return c->handle(args_count - 1, args + 1);
-                        } else {
-                            // TODO: display module help ?
-                            fprintf(stderr, "wrong arguments count: %s expects %d arguments\n", c->first_word, c->argc);
-                            return 0;
-                        }
-                    }
-                }
-            } else {
-                if (0 == strcmp(modules[i]->name, args[0])) {
-                    for (c = modules[i]->commands; NULL != c->first_word; c++) {
-                        if (0 == strcmp(c->first_word, args[1])) {
-                            if (c->argc < 0 || (args_count - 2) == c->argc) {
-                                return c->handle(args_count - 2, args + 2);
-                            } else {
-                                // TODO: display module help ?
-                                fprintf(stderr, "wrong arguments count: %s %s expects %d arguments\n", modules[i]->name, c->first_word, c->argc);
-                                return 0;
-                            }
-                        }
-                    }
-                }
-            }
-#endif
         }
     }
     fprintf(stderr, "no command corresponds\n");
@@ -221,15 +192,15 @@ char *command_generator(const char *text, int state)
 
     for (i = 0; i < ARRAY_SIZE(modules); i++) {
         if (NULL != modules[i]->commands) {
-            for (c = modules[i]->commands; NULL != c->first_word; c++) {
+            for (c = modules[i]->commands; NULL != c->handle; c++) {
 //                 if (NULL != c->args) {
 //                     const char **v;
 //
 //                     for (v = c->args; apply && NULL != *v && j < args_count; v++) {
 //                     }
 //                 }
-                if (0 == strncmp(c->first_word, text, len)) {
-                    return c->first_word;
+                if (0 == strncmp(c->args[0], text, len)) {
+                    return c->args[0];
                 }
             }
         }
@@ -298,7 +269,7 @@ static unsigned char complete(EditLine *el, int ch)
                 const char *prev;
 
                 prev = NULL;
-                for (c = modules[i]->commands; NULL != c->first_word; c++) {
+                for (c = modules[i]->commands; NULL != c->handle; c++) {
                     if (cursorc < c->argc) {
                         int j; /* signed here !!! */
                         bool apply;
@@ -308,7 +279,7 @@ static unsigned char complete(EditLine *el, int ch)
                         if (ARG_ANY_VALUE == c->args[cursorc]) { // free argument, no completion available
                             continue;
                         }
-                        for (j = 0; apply && j < cursorc - 1; j++) {
+                        for (j = 0; apply && j < cursorc; j++) {
                             if (ARG_MODULE_NAME == c->args[j]) {
                                 apply &= 0 == strcmp(modules[i]->name, argv[j]);
                             } else if (ARG_ANY_VALUE == c->args[j]) {

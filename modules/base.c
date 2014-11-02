@@ -17,7 +17,7 @@ static int help(int UNUSED(argc), const char **UNUSED(argv))
     puts("Available commands:");
     for (i = 0; i < modules_count; i++) {
         if (NULL != modules[i]->commands) {
-            for (c = modules[i]->commands; NULL != c->first_word; c++) {
+            for (c = modules[i]->commands; NULL != c->handle; c++) {
                 if (NULL != c->args) {
                     const char *a, **v;
 
@@ -55,10 +55,10 @@ static int test(int argc, const char **argv)
 #endif /* DEBUG */
 
 static const command_t base_commands[] = {
-    { "help", 0, help, (const char * const []) { "help", NULL } },
-    { "quit", 0, leave, (const char * const []) { "quit", NULL } },
+    { help, 0, (const char * const []) { "help", NULL } },
+    { leave, 0, (const char * const []) { "quit", NULL } },
 #ifdef DEBUG
-    { "test", -1, test, (const char * const []) { "test", ARG_ANY_VALUE, NULL } },
+    { test, -1, (const char * const []) { "test", ARG_ANY_VALUE, NULL } },
 #endif /* DEBUG */
     { NULL }
 };

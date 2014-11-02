@@ -39,7 +39,7 @@ static int dedicated_list(int UNUSED(argc), const char **UNUSED(argv))
 }
 
 static const command_t dedicated_commands[] = {
-    { "list", 2, dedicated_list, (const char * const []) { ARG_MODULE_NAME, "list", NULL } },
+    { dedicated_list, 2, (const char * const []) { ARG_MODULE_NAME, "list", NULL } },
     { NULL }
 };
 
