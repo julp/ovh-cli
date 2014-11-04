@@ -17,6 +17,7 @@
  * the same value (pointer) multiple times (= segfault or invalid free)
  * - "deep" objects (arrays and objects) are not checked against recursion. It would be easy to use an array or
  * object as value to itself (= infinite loop)
+ * - strings have to be UTF-8 encoded
  **/
 
 static int json_array_write(json_document_t *, json_value_t, String *);
