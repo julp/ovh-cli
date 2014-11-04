@@ -40,7 +40,7 @@ error_t *error_vnew(UGREP_FILE_LINE_FUNC_DC int type, const char *format, va_lis
     memcpy(error->message + total_length, buffer, part_length);
     total_length += part_length;
 #ifdef DEBUG
-    part_length = snprintf(buffer, ERROR_MAX_LEN, GRAY(" in %s()"), __ugrep_func);
+    part_length = snprintf(buffer, ERROR_MAX_LEN, GRAY(" in %s()\n"), __ugrep_func);
     assert(-1 != part_length);
     error->message = mem_renew(error->message, *error->message, total_length + part_length/* + EOL_LEN*/ + 1);
     memcpy(error->message + total_length, buffer, part_length);
@@ -48,7 +48,9 @@ error_t *error_vnew(UGREP_FILE_LINE_FUNC_DC int type, const char *format, va_lis
 #endif
     /*memcpy(error->message + total_length, EOL, EOL_LEN);
     total_length += EOL_LEN;*/
+#ifndef DEBUG
     error->message[total_length++] = '\n';
+#endif
     error->message[total_length] = '\0';
 
     return error;
