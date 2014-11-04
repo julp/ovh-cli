@@ -19,7 +19,8 @@ static int help(int UNUSED(argc), const char **UNUSED(argv), error_t **UNUSED(er
         if (NULL != modules[i]->commands) {
             for (c = modules[i]->commands; NULL != c->handle; c++) {
                 if (NULL != c->args) {
-                    const char *a, **v;
+                    const char *a;
+                    const char * const *v;
 
                     printf("  - ");
                     for (v = c->args; NULL != *v; v++) {
