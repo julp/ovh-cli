@@ -6,7 +6,7 @@
 #define APPLICATION_SECRET "mQqOPRehA5q5lsCWp3NtxA5fOZ2ebt3P"
 #define API_BASE_URL "https://eu.api.ovh.com/1.0"
 #define WITH_NLS
-#define DEBUG
+/* #undef DEBUG */
 #define WITH_EDITLINE
 #define LOCALEDIR "/home/julp/ovh-cli/share/locale/"
 
