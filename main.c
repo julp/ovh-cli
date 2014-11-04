@@ -324,11 +324,7 @@ static unsigned char complete(EditLine *el, int ch)
     if (-1 == tok_line(t, li, &argc, &argv, &cursorc, &cursoro)) {
         //
     }
-#if 0
-    if (0 == cursorc) {
-#else
     {
-#endif
         size_t i;
         const command_t *c;
 
@@ -365,6 +361,7 @@ static unsigned char complete(EditLine *el, int ch)
                         }
                         if (0 == strncmp(v, argv[cursorc], cursoro)) {
 #if 0
+                            // TODO: replace a space after completed arg if more argument follow like before (imply to not simply dptrarray_push a string)
                             if (-1 == el_insertstr(el, v + cursoro)) {
                                 res = CC_ERROR;
                             } else {
