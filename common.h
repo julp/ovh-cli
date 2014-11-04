@@ -49,13 +49,13 @@
 # include <stdint.h>
 # include <assert.h>
 # include <stdarg.h>
-# ifdef DEBUG
-#  define debug(fmt, ...) \
-    fprintf(stderr, fmt "\n", ## __VA_ARGS__)
-# else
-#  define debug(fmt, ...) \
-    /* NOP */
-# endif /* DEBUG */
+// # ifdef DEBUG
+// #  define debug(fmt, ...) \
+//     fprintf(stderr, fmt "\n", ## __VA_ARGS__)
+// # else
+// #  define debug(fmt, ...) \
+//     /* NOP */
+// # endif /* DEBUG */
 
 # ifndef MAX
 #  define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -106,21 +106,35 @@ typedef void (*DtorFunc)(void *);
 typedef void *(*DupFunc)(const void *);
 typedef int (*ForeachFunc)();
 
-#define DECLARE_MODULE(foo) \
+# define DECLARE_MODULE(foo) \
     module_t foo##_module
 
-#define ARG_MODULE_NAME ((const char *) 1)
-#define ARG_ANY_VALUE   ((const char *) 2)
-#define ARG_ON_OFF      ((const char *) 3)
+# define ARG_MODULE_NAME ((const char *) 1)
+# define ARG_ANY_VALUE   ((const char *) 2)
+# define ARG_ON_OFF      ((const char *) 3)
 
-/*typedef enum {
-    COMMAND_EXIT_SUCCESS,
-    COMMAND_EXIT_FAILURE,
-    COMMAND_EXIT_USAGE
-} command_status_t;*/
+typedef enum {
+    COMMAND_SUCCESS,
+    COMMAND_FAILURE,
+    COMMAND_USAGE
+} command_status_t;
+
+# ifdef DEBUG
+#  define RED(str)    "\33[1;31m" str "\33[0m"
+#  define GREEN(str)  "\33[1;32m" str "\33[0m"
+#  define YELLOW(str) "\33[1;33m" str "\33[0m"
+#  define GRAY(str)   "\33[1;30m" str "\33[0m"
+# else
+#  define RED(str)    str
+#  define GREEN(str)  str
+#  define YELLOW(str) str
+#  define GRAY(str)   str
+# endif /* DEBUG */
+
+# include "error.h"
 
 typedef struct {
-    int (*handle)(int argc, const char **argv);
+    int (*handle)(int, const char **, error_t **);
     int argc;
     const char * const *args;
 } command_t;

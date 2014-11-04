@@ -26,10 +26,10 @@ request_t *request_delete(const char *, ...) PRINTF(1, 2);
 request_t *request_post(const char *, int, const char *, ...) PRINTF(3, 4);
 
 void request_sign(request_t *);
-int request_execute(request_t *, int, void **);
+bool request_execute(request_t *, int, void **, error_t **);
 
 # include <time.h>
 
-const char *request_consumer_key(const char *, const char *, time_t *);
+const char *request_consumer_key(const char *, const char *, time_t *, error_t **);
 
 #endif /* API_H */

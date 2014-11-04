@@ -158,7 +158,7 @@ static int parse_record(HashTable *records, xmlDocPtr doc)
   <anon>domain2.ext</anon>
 </opt>
 */
-static int domain_list(int argc, const char **argv)
+static int domain_list(int argc, const char **argv, error_t **error)
 {
     // populate
     // TODO: hashtable_size(domains) < 1 is not sufficient to known if we have the full list of domains in this hashtable
@@ -170,7 +170,7 @@ static int domain_list(int argc, const char **argv)
         req = request_get(API_BASE_URL "/domain");
         request_add_header(req, "Accept: text/xml");
         request_sign(req);
-        request_execute(req, RESPONSE_XML, (void **) &doc);
+        request_execute(req, RESPONSE_XML, (void **) &doc, error);
         request_dtor(req);
 
         if (NULL == (root = xmlDocGetRootElement(doc))) {
@@ -202,8 +202,10 @@ static int domain_list(int argc, const char **argv)
     return TRUE;
 }
 
-static int get_domain_records(const char *domain, domain_t **d)
+static int get_domain_records(const char *domain, domain_t **d, error_t **error)
 {
+    bool request_success;
+
     *d = NULL;
     if (!hashtable_get(domains, (void *) domain, (void **) d) || !(*d)->uptodate) {
         xmlDocPtr doc;
@@ -216,43 +218,45 @@ static int get_domain_records(const char *domain, domain_t **d)
         req = request_get(API_BASE_URL "/domain/zone/%s/record", domain);
         request_add_header(req, "Accept: text/xml");
         request_sign(req);
-        request_execute(req, RESPONSE_XML, (void **) &doc);
+        request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
         request_dtor(req);
         // result
-        if (NULL == (root = xmlDocGetRootElement(doc))) {
-            return 0;
-        }
-        for (n = root->children; n != NULL; n = n->next) {
-            xmlDocPtr doc;
-            xmlChar *content;
+        if (request_success) {
+            if (NULL == (root = xmlDocGetRootElement(doc))) {
+                return 0;
+            }
+            for (n = root->children; request_success && n != NULL; n = n->next) {
+                xmlDocPtr doc;
+                xmlChar *content;
 
-            content = xmlNodeGetContent(n);
-            puts((const char *) content);
-            req = request_get(API_BASE_URL "/domain/zone/%s/record/%s", domain, (const char *) content);
-            request_add_header(req, "Accept: text/xml");
-            request_sign(req);
-            request_execute(req, RESPONSE_XML, (void **) &doc);
-            request_dtor(req);
-            // result
-            parse_record((*d)->records, doc);
-            xmlFree(content);
+                content = xmlNodeGetContent(n);
+                puts((const char *) content);
+                req = request_get(API_BASE_URL "/domain/zone/%s/record/%s", domain, (const char *) content);
+                request_add_header(req, "Accept: text/xml");
+                request_sign(req);
+                request_success &= request_execute(req, RESPONSE_XML, (void **) &doc, error);
+                request_dtor(req);
+                // result
+                parse_record((*d)->records, doc);
+                xmlFree(content);
+            }
+            xmlFreeDoc(doc);
+            (*d)->uptodate = TRUE;
         }
-        xmlFreeDoc(doc);
-        (*d)->uptodate = TRUE;
     }
 
-    return 1;
+    return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
 // TODO: optionnal arguments fieldType and subDomain in query string
-static int record_list(int argc, const char **argv)
+static int record_list(int argc, const char **argv, error_t **error)
 {
     domain_t *d;
     Iterator it;
 
     assert(3 == argc);
 
-    get_domain_records(argv[0], &d);
+    get_domain_records(argv[0], &d, error);
     // display
     hashtable_to_iterator(&it, d->records);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
@@ -295,7 +299,7 @@ static bool str_include(const char *search, ...)
 
 // ./ovh domain domain.ext record add toto type CNAME www
 // NOTE: it seems OVH permits to create multiple times a DNS record with same name and type
-static int record_add(int argc, const char **argv)
+static int record_add(int argc, const char **argv, error_t **error)
 {
     xmlDocPtr doc;
     const char *target, *type, *subdomain;
@@ -335,7 +339,7 @@ static int record_add(int argc, const char **argv)
             request_add_header(req, "Accept: text/xml");
             request_add_header(req, "Content-type: application/json");
             request_sign(req);
-            request_execute(req, RESPONSE_XML, (void **) &doc);
+            request_execute(req, RESPONSE_XML, (void **) &doc, error);
             request_dtor(req);
             string_destroy(buffer);
         }
@@ -354,14 +358,14 @@ static int record_add(int argc, const char **argv)
     return TRUE;
 }
 
-static int record_delete(int argc, const char **argv)
+static int record_delete(int argc, const char **argv, error_t **error)
 {
     domain_t *d;
     record_t *match;
     const char *record;
 
     record = argv[3];
-    get_domain_records(argv[0], &d);
+    get_domain_records(argv[0], &d, error);
 #if 0
     // what was the goal? If true, it is more the domain which does not exist!
     if (!hashtable_get(domains, (void *) argv[0], (void **) &d)) {
@@ -416,15 +420,53 @@ static int record_delete(int argc, const char **argv)
         req = request_delete(API_BASE_URL "/domain/zone/%s/%" PRIu32, argv[0], match->id);
         request_add_header(req, "Accept: text/xml");
         request_sign(req);
-        request_execute(req, RESPONSE_IGNORE, NULL);
+        request_execute(req, RESPONSE_IGNORE, NULL, error);
         request_dtor(req);
 #else
         printf("deletion of '%s.%s' done\n", match->name, argv[0]);
 #endif
         // result
-        // ... if successful (TODO)
+        // ... if successful (TODO: HTTP status = 200?)
         hashtable_quick_delete(d->records, match->id, NULL, TRUE);
     }
+
+    return TRUE;
+}
+
+// arguments: [ttl <int>] [name <string>] [target <string>]
+// (in any order)
+// if we change record's name (subDomain), we need to update records cache
+static int record_update(int argc, const char **argv, error_t **error)
+{
+#if 0
+    uint32_t ttl;
+    String *buffer;
+    request_t *req;
+    const char *subdomain, *target;
+
+    // data
+    {
+        json_value_t root;
+        json_document_t *doc;
+
+        buffer = string_new();
+        doc = json_document_new();
+        root = json_object();
+        json_object_set_property(root, "target", json_string(target));
+        json_object_set_property(root, "fieldType", json_string(type));
+//             if ('\0' != *subdomain)
+            json_object_set_property(root, "subDomain", json_string(subdomain));
+        json_object_set_property(root, "ttl", json_integer(ttl));
+        json_document_set_root(doc, root);
+        json_document_serialize(doc, buffer);
+        json_document_destroy(doc);
+    }
+    req = request_put(API_BASE_URL "/domain/zone/%s/%" PRIu32, argv[0], <id>);
+    request_sign(req);
+    request_execute(req, RESPONSE_IGNORE, NULL, error);
+    request_dtor(req);
+#endif
+    return TRUE;
 }
 
 static const command_t domain_commands[] = {
@@ -432,6 +474,7 @@ static const command_t domain_commands[] = {
     { record_list, 4, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "list", NULL } },
     { record_add, 8, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "add", ARG_ANY_VALUE, "type", ARG_ANY_VALUE, ARG_ANY_VALUE, NULL } },
     { record_delete, 5, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "delete", ARG_ANY_VALUE, /*"type", ARG_ANY_VALUE,*/ NULL } },
+    //{ record_update, 5, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "update", ARG_ANY_VALUE, NULL } },
     { NULL }
 };
 

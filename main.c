@@ -46,6 +46,66 @@ const module_t */*builtin_*/modules[] = {
 
 const size_t /*builtin_*/modules_count = ARRAY_SIZE(/*builtin_*/modules);
 
+void print_error(error_t *error)
+{
+    if (NULL != error/* && error->type >= verbosity*/) {
+        int type;
+
+        type = error->type;
+        switch (type) {
+            case INFO:
+                fprintf(stderr, "[ " GREEN("INFO") " ] ");
+                break;
+            case NOTICE:
+                fprintf(stderr, "[ " YELLOW("NOTE") " ] ");
+                break;
+            case WARN:
+                fprintf(stderr, "[ " YELLOW("WARN") " ] ");
+                break;
+            case FATAL:
+                fprintf(stderr, "[ " RED("ERR ") " ] ");
+                break;
+            default:
+                type = FATAL;
+                fprintf(stderr, "[ " RED("BUG ") " ] Unknown error type for:\n");
+                break;
+        }
+        fputs(error->message, stderr);
+        error_destroy(error);
+        if (FATAL == type) {
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
+void report(int type, const char *format, ...)
+{
+//     if (type >= verbosity) {
+        va_list args;
+
+        switch (type) {
+            case INFO:
+                fprintf(stderr, "[ " GREEN("INFO") " ] ");
+                break;
+            case NOTICE:
+                fprintf(stderr, "[ " YELLOW("NOTE") " ] ");
+                break;
+            case WARN:
+                fprintf(stderr, "[ " YELLOW("WARN") " ] ");
+                break;
+            case FATAL:
+                fprintf(stderr, "[ " RED("ERR ") " ] ");
+                break;
+        }
+        va_start(args, format);
+        vfprintf(stderr, format, args);
+        va_end(args);
+        if (FATAL == type) {
+            exit(EXIT_FAILURE);
+        }
+//     }
+}
+
 // TODO: remove backslash before " characters
 static int str_split(const char *string, char ***args)
 {
@@ -53,6 +113,7 @@ static int str_split(const char *string, char ***args)
     int count, i;
     const char *p;
     bool in_quotes;
+    size_t dup_len;
 
     p = string;
     i = count = 0;
@@ -62,6 +123,13 @@ static int str_split(const char *string, char ***args)
     in_quotes = '"' == *string;
     if (NULL == (dup = strdup(string + in_quotes))) {
         return -1;
+    }
+    dup_len = strlen(dup);
+    if ('\n' == dup[dup_len - 1]) {
+        dup[--dup_len] = '\0';
+        if (dup_len > 0 && '\r' == dup[dup_len - 1]) {
+            dup[--dup_len] = '\0';
+        }
     }
     for (p = dup; '\0' != *p; p++) {
         if (in_quotes) {
@@ -111,7 +179,7 @@ static int str_split(const char *string, char ***args)
     return i;
 }
 
-static int run_command(int args_count, const char **args)
+static int run_command(int args_count, const char **args, error_t **error)
 {
     size_t i;
     const command_t *c;
@@ -125,7 +193,7 @@ static int run_command(int args_count, const char **args)
                 if (NULL != c->args) {
                     int j; // argument index
                     bool apply; // do arguments apply to the current command
-                    const char **v;
+                    const char * const *v;
                     int argc;
                     const char *argv[12];
                     bool ignore_args; // ignore first predefined fixed arguments
@@ -159,7 +227,7 @@ static int run_command(int args_count, const char **args)
                             return 0;
                         } else {
                             argv[argc] = NULL;
-                            return c->handle(argc, argv);
+                            return c->handle(argc, argv, error);
                         }
                     } else {
                         // si ça matche quand même sur ARG_MODULE_NAME, abandonner et afficher l'aide du module ?
@@ -241,7 +309,7 @@ static int strcmpp(const void *p1, const void *p2)
 static unsigned char complete(EditLine *el, int ch)
 {
     /*static */Tokenizer *t = NULL;
-    LineInfo *li;
+    const LineInfo *li;
     const char **argv;
     int argc;
     int cursorc;
@@ -270,7 +338,7 @@ static unsigned char complete(EditLine *el, int ch)
 
                 prev = NULL;
                 for (c = modules[i]->commands; NULL != c->handle; c++) {
-                    if (cursorc < c->argc) {
+                    if (cursorc <= c->argc) {
                         int j; /* signed here !!! */
                         bool apply;
                         const char *v;
@@ -312,7 +380,7 @@ static unsigned char complete(EditLine *el, int ch)
                             break;
 #else
                             if (NULL == prev || 0 != strcmp(v, prev)) {
-                                dptrarray_push(possibilities, v);
+                                dptrarray_push(possibilities, (void *) v);
                             }
                             prev = v;
 #endif
@@ -361,7 +429,9 @@ int main(int argc, char **argv)
 {
     int ret;
     size_t i;
+    error_t *error;
 
+    error = NULL;
     ret = EXIT_SUCCESS;
     for (i = 0; i < ARRAY_SIZE(modules); i++) {
         if (NULL != modules[i]->ctor) {
@@ -447,9 +517,9 @@ debug(">%s<", buffer->ptr);
             line = readline(prompt);
 #elif defined(WITH_EDITLINE)
         int count;
-        char *line;
         EditLine *el;
         History *hist;
+        const char *line;
 
         puts(_("needs help? Type help!"));
         hist = history_init();
@@ -457,6 +527,7 @@ debug(">%s<", buffer->ptr);
             HistEvent ev;
 
             history(hist, &ev, H_SETSIZE, 100);
+            history(hist, &ev, H_SETUNIQUE, 1);
         }
         el = el_init(*argv, stdin, stdout, stderr);
         el_set(el, EL_PROMPT, prompt);
@@ -474,17 +545,11 @@ debug(">%s<", buffer->ptr);
 #endif
             int args_len;
             char **args;
-            size_t line_len;
 
-            line_len = strlen(line);
-            if ('\n' == line[line_len - 1]) {
-                line[--line_len] = '\0';
-                if (line_len > 0 && '\r' == line[line_len - 1]) {
-                    line[--line_len] = '\0';
-                }
-            }
+            error = NULL; // reinitialize it
             args_len = str_split(line, &args);
-            run_command(args_len, (const char **) args);
+            run_command(args_len, (const char **) args, &error);
+            print_error(error);
             free(args[0]);
 #if defined(WITH_READLINE)
             free(line);
@@ -503,7 +568,8 @@ debug(">%s<", buffer->ptr);
     } else {
         --argc;
         ++argv;
-        ret = run_command(argc, (const char **) argv) ? EXIT_SUCCESS : EXIT_FAILURE;
+        ret = run_command(argc, (const char **) argv, &error) ? EXIT_SUCCESS : EXIT_FAILURE;
+        print_error(error);
     }
 
     return ret;

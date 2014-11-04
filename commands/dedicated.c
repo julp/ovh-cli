@@ -13,7 +13,7 @@ static void dedicated_dtor(void)
     // NOP (for now)
 }
 
-static int dedicated_list(int UNUSED(argc), const char **UNUSED(argv))
+static int dedicated_list(int UNUSED(argc), const char **UNUSED(argv), error_t **error)
 {
     xmlDocPtr doc;
     request_t *req;
@@ -22,7 +22,7 @@ static int dedicated_list(int UNUSED(argc), const char **UNUSED(argv))
     req = request_get(API_BASE_URL "/dedicated/server");
     request_add_header(req, "Accept: text/xml");
     request_sign(req);
-    request_execute(req, RESPONSE_XML, (void **) &doc);
+    request_execute(req, RESPONSE_XML, (void **) &doc, error);
     request_dtor(req);
     if (NULL == (root = xmlDocGetRootElement(doc))) {
         return 0;

@@ -13,7 +13,7 @@ static void me_dtor(void)
     // NOP (for now)
 }
 
-static int me(int UNUSED(argc), const char **UNUSED(argv))
+static int me(int UNUSED(argc), const char **UNUSED(argv), error_t **error)
 {
     xmlAttrPtr a;
     xmlDocPtr doc;
@@ -23,7 +23,7 @@ static int me(int UNUSED(argc), const char **UNUSED(argv))
     req = request_get(API_BASE_URL "/me");
     request_add_header(req, "Accept: text/xml");
     request_sign(req);
-    request_execute(req, RESPONSE_XML, (void **) &doc);
+    request_execute(req, RESPONSE_XML, (void **) &doc, error);
     request_dtor(req);
     if (NULL == (root = xmlDocGetRootElement(doc))) {
         return 0;

@@ -261,7 +261,7 @@ void request_add_post_field(request_t *req, const char *name, const char *value)
     curl_formadd(&req->formpost, &req->lastptr, CURLFORM_COPYNAME, name, CURLFORM_COPYCONTENTS, value, CURLFORM_END);
 }
 
-int request_execute(request_t *req, int output_type, void **output)
+bool request_execute(request_t *req, int output_type, void **output, error_t **error)
 {
     CURLcode res;
     long http_status;
@@ -296,7 +296,7 @@ int request_execute(request_t *req, int output_type, void **output)
         debug("RESPONSE (body) = %s", req->buffer.ptr);
         debug("==========");
     }
-#ifdef TODO
+// #ifdef TODO
     if (200 != http_status) {
         // API may throw 403 if forbidden (consumer_key no more valid, object that doesn't belong to us) or 404 on unknown objects?
         if (NULL != content_type && (0 == strcmp(content_type, "application/xml") || 0 == strcmp(content_type, "text/xml"))) {
@@ -305,24 +305,24 @@ int request_execute(request_t *req, int output_type, void **output)
             if (NULL != (doc = xmlParseMemory(req->buffer.ptr, req->buffer.length))) {
                 xmlNodePtr root;
 
-                if (NULL != (root = xmlDocGetRootElement(doc))) {
+                if (NULL != (root = xmlDocGetRootElement(doc)) && xmlHasProp(root, BAD_CAST "message")) {
                     xmlChar *reason;
 
-                    reason = xmlNodeGetContent(root);
-                    error_set(error, INFO, (const char *) reason); // TODO: copy needed?
+                    reason = xmlGetProp(root, BAD_CAST "message");
+                    error_set(error, NOTICE, (const char *) reason);
                     xmlFree(reason);
                 }
                 xmlFreeDoc(doc);
             }
             if (NULL != error && NULL == *error) { // an error can be set and any was already set
-                error_set(error, WARNING, "failed to parse following xml: %s", req->buffer.ptr);
+                error_set(error, WARN, "failed to parse following xml: %s", req->buffer.ptr);
             }
         } else {
-            error_set(error, WARNING, "HTTP request to '%s' failed with status %ld", req->url, http_status);
+            error_set(error, WARN, "HTTP request to '%s' failed with status %ld", req->url, http_status);
         }
-        return 0; // ?
+        return FALSE;
     } else
-#endif
+// #endif
     {
         switch (output_type) {
             case RESPONSE_IGNORE:
@@ -364,7 +364,7 @@ int request_execute(request_t *req, int output_type, void **output)
         }
     }
 
-    return 1;
+    return TRUE;
 }
 
 #define STRINGIFY(x) #x
@@ -377,7 +377,7 @@ int request_execute(request_t *req, int output_type, void **output)
 # include "json.h"
 #endif /* JSON_RULES */
 
-const char *request_consumer_key(const char *account, const char *password, time_t *expires_at)
+const char *request_consumer_key(const char *account, const char *password, time_t *expires_at, error_t **error)
 {
     request_t *req;
     char *validationUrl;
@@ -435,7 +435,7 @@ const char *request_consumer_key(const char *account, const char *password, time
         request_add_header(req, "Accept: text/xml");
         request_add_header(req, "Content-type: application/json");
         request_add_header(req, "X-Ovh-Application: " APPLICATION_KEY);
-        request_execute(req, RESPONSE_XML, (void **) &doc); // TODO: check returned value
+        request_execute(req, RESPONSE_XML, (void **) &doc, error); // TODO: check returned value
 #if 0
         puts("====================");
         xmlDocFormatDump(stdout, doc, 1);
@@ -467,7 +467,7 @@ const char *request_consumer_key(const char *account, const char *password, time
             xmlXPathContextPtr ctxt;
 
             req = request_get("%s", validationUrl);
-            request_execute(req, RESPONSE_HTML, (void **) &doc); // TODO: check returned value
+            request_execute(req, RESPONSE_HTML, (void **) &doc, error); // TODO: check returned value
 #if 0
             puts("====================");
             htmlDocDump(stdout, doc);
@@ -526,7 +526,7 @@ debug("password field name = %s", password_field_name);
         request_add_post_field(req, password_field_name, password);
 //         request_add_post_field(req, "duration", "0");
         request_add_post_field(req, "duration", STRINGIFY_EXPANDED(DEFAULT_CONSUMER_KEY_EXPIRATION));
-        request_execute(req, RESPONSE_IGNORE, NULL); // TODO: check returned value
+        request_execute(req, RESPONSE_IGNORE, NULL, error); // TODO: check returned value
         request_dtor(req);
 
         free(token);

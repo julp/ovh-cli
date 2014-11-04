@@ -229,7 +229,7 @@ static int account_save(void)
     return 1;
 }
 
-const char *account_key(void)
+const char *account_key(error_t **error)
 {
     assert(NULL != acd->current);
 
@@ -238,7 +238,7 @@ const char *account_key(void)
         return NULL;
     }
     if (NULL == acd->current->consumer_key || (0 != acd->current->expires_at && acd->current->expires_at < time(NULL))) {
-        if (NULL != (acd->current->consumer_key = request_consumer_key(acd->current->account, acd->current->password, &acd->current->expires_at))) {
+        if (NULL != (acd->current->consumer_key = request_consumer_key(acd->current->account, acd->current->password, &acd->current->expires_at, error))) {
             account_save();
         }
     }
@@ -246,7 +246,7 @@ const char *account_key(void)
     return acd->current->consumer_key;
 }
 
-static int account_load(void)
+static int account_load(error_t **error)
 {
     struct stat st;
 
@@ -288,7 +288,7 @@ static int account_load(void)
             if (NULL == acd->current) {
                 acd->current = (account_t *) hashtable_first(acd->accounts);
             }
-            acd->current->consumer_key = account_key();
+            acd->current->consumer_key = account_key(error);
         }
         xmlFreeDoc(doc);
     }
@@ -354,7 +354,7 @@ static bool account_ctor(void)
             return FALSE;
         }
     }
-    account_load();
+    account_load(NULL);
 #if 1
     duration_test("3 day 1 days", FALSE, 0);
     duration_test("3 seconds 1 hour", FALSE, 0);
@@ -377,7 +377,7 @@ static void account_dtor(void)
     acd = NULL;
 }
 
-static int account_list(int UNUSED(argc), const char **UNUSED(argv))
+static int account_list(int UNUSED(argc), const char **UNUSED(argv), error_t **UNUSED(error))
 {
     Iterator it;
 
@@ -412,7 +412,7 @@ static int account_list(int UNUSED(argc), const char **UNUSED(argv))
  * - in order to not record password, use an empty string (with "")
  * - default expiration of consumer key is 0 (unlimited)
  **/
-static int account_add(int argc, const char **argv)
+static int account_add(int argc, const char **argv, error_t **error)
 {
     hash_t h;
     time_t expires_at;
@@ -475,7 +475,7 @@ static int account_add(int argc, const char **argv)
     return 1;
 }
 
-static int account_default_set(int argc, const char **argv)
+static int account_default_set(int argc, const char **argv, error_t **error)
 {
     int ret;
     void *ptr;
@@ -493,7 +493,7 @@ static int account_default_set(int argc, const char **argv)
     return ret;
 }
 
-static int account_delete(int argc, const char **argv)
+static int account_delete(int argc, const char **argv, error_t **error)
 {
     int ret;
     const char *account;
@@ -509,7 +509,7 @@ static int account_delete(int argc, const char **argv)
     return ret;
 }
 
-static int account_switch(int argc, const char **argv)
+static int account_switch(int argc, const char **argv, error_t **error)
 {
     int ret;
     account_t *ptr;
@@ -519,7 +519,7 @@ static int account_switch(int argc, const char **argv)
     account = argv[0];
     if ((ret = hashtable_get(acd->accounts, account, (void **) &ptr))) {
         acd->current = ptr;
-        acd->current->consumer_key = account_key();
+        acd->current->consumer_key = account_key(error);
     } else {
         fprintf(stderr, "Any account named '%s' was found\n", account);
     }
