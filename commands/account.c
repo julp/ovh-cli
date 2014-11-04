@@ -25,7 +25,8 @@ typedef struct {
     char *account;
     char *password;
     time_t expires_at;
-    char *consumer_key;
+    const char *consumer_key;
+    HashTable *data;
 } account_t;
 
 typedef struct {
@@ -167,14 +168,41 @@ const char *account_current(void)
     }
 }
 
-static int account_save(void)
+void account_current_set_data(const char *name, void *data)
+{
+    assert(NULL != acd->current);
+
+    hashtable_put(acd->current->data, (void *) name, data, NULL);
+}
+
+bool account_current_get_data(const char *name, void **data)
+{
+    assert(NULL != acd->current);
+
+    return hashtable_get(acd->current->data, name, data);
+}
+
+static bool account_save(error_t **error)
 {
     Iterator it;
     xmlDocPtr doc;
     xmlNodePtr root;
 
+#define SET_PROP(node, name, value) \
+    do { \
+        if (NULL == xmlSetProp(node, BAD_CAST name, BAD_CAST value)) { \
+            xmlFreeNode(node); \
+            xmlFreeDoc(doc); \
+            error_set(error, WARN, "Unable to set attribute '%s' to value '%s'", name, value); \
+            return FALSE; \
+        } \
+    } while (0);
+
     doc = xmlNewDoc(BAD_CAST "1.0");
-    root = xmlNewNode(NULL, BAD_CAST "ovh");
+    if (NULL == (root = xmlNewNode(NULL, BAD_CAST "ovh"))) {
+        error_set(error, WARN, "Unable to create XML node 'ovh'");
+        return FALSE;
+    }
     xmlDocSetRootElement(doc, root);
     hashtable_to_iterator(&it, acd->accounts);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
@@ -183,50 +211,43 @@ static int account_save(void)
 
         account = (account_t *) iterator_current(&it, NULL);
         if (NULL == (node = xmlNewNode(NULL, BAD_CAST "account"))) {
-            return 0;
+            xmlFreeDoc(doc);
+            error_set(error, WARN, "Unable to create XML node 'account'");
+            return FALSE;
         }
-        if (NULL == xmlSetProp(node, BAD_CAST "account", BAD_CAST account->account)) {
-            xmlFreeNode(node);
-            return 0;
-        }
-        if (NULL == xmlSetProp(node, BAD_CAST "password", BAD_CAST account->password)) {
-            xmlFreeNode(node);
-            return 0;
-        }
+        SET_PROP(node, "account", account->account);
+        SET_PROP(node, "password", account->password);
         if (account == acd->autosel) {
-            if (NULL == xmlSetProp(node, BAD_CAST "default", BAD_CAST "1")) {
-                xmlFreeNode(node);
-                return 0;
-            }
+            SET_PROP(node, "default", "1");
         }
         if (NULL != account->consumer_key) {
             char buffer[512];
 
-            if (NULL == xmlSetProp(node, BAD_CAST "consumer_key", BAD_CAST account->consumer_key)) {
-                xmlFreeNode(node);
-                return 0;
-            }
+            SET_PROP(node, "consumer_key", account->consumer_key);
             if (snprintf(buffer, ARRAY_SIZE(buffer), "%lld", (long long) account->expires_at) >= ARRAY_SIZE(buffer)) {
-                return 0;
+                error_set(error, WARN, "buffer overflow");
+                return FALSE;
             }
-            if (NULL == xmlSetProp(node, BAD_CAST "expires_at", BAD_CAST buffer)) {
-                xmlFreeNode(node);
-                return 0;
-            }
+            SET_PROP(node, "expires_at", buffer);
         }
         if (NULL == xmlAddChild(root, node)) {
             xmlFreeNode(node);
-            return 0;
+            xmlFreeDoc(doc);
+            error_set(error, WARN, "Unable to add 'account' to document root");
+            return FALSE;
         }
     }
     iterator_close(&it);
     if (-1 == xmlSaveFormatFile(acd->path, doc, 1)) {
-        fprintf(stderr, "Could not save file into '%s'", acd->path);
-        return 0;
+        xmlFreeDoc(doc);
+        error_set(error, WARN, "Could not save file into '%s'", acd->path);
+        return FALSE;
     }
     xmlFreeDoc(doc);
 
-    return 1;
+#undef SET_PROP
+
+    return TRUE;
 }
 
 const char *account_key(error_t **error)
@@ -239,7 +260,7 @@ const char *account_key(error_t **error)
     }
     if (NULL == acd->current->consumer_key || (0 != acd->current->expires_at && acd->current->expires_at < time(NULL))) {
         if (NULL != (acd->current->consumer_key = request_consumer_key(acd->current->account, acd->current->password, &acd->current->expires_at, error))) {
-            account_save();
+            account_save(error);
         }
     }
 
@@ -256,10 +277,14 @@ static int account_load(error_t **error)
 
         xmlKeepBlanksDefault(0);
         if (NULL == (doc = xmlParseFile(acd->path))) {
-            //
+            // TODO
+            error_set(error, WARN, "");
+            return COMMAND_FAILURE;
         }
         if (NULL == (root = xmlDocGetRootElement(doc))) {
-            //
+            // TODO
+            error_set(error, WARN, "");
+            return COMMAND_FAILURE;
         }
         for (n = root->children; n != NULL; n = n->next) {
             account_t *a;
@@ -271,6 +296,7 @@ static int account_load(error_t **error)
             a->account = xmlGetPropAsString(n, "account");
             a->password = xmlGetPropAsString(n, "password");
             a->consumer_key = NULL;
+            a->data = hashtable_ascii_cs_new(NULL, NULL, NULL); // no dup/dtor for keys as they are "static" strings ; no dtor for values, we don't know what we store, let the module cleaning its stuffs
             if (NULL != xmlHasProp(n, BAD_CAST "consumer_key")) {
                 xmlChar *expires_at;
 
@@ -293,7 +319,7 @@ static int account_load(error_t **error)
         xmlFreeDoc(doc);
     }
 
-    return 1;
+    return COMMAND_SUCCESS;
 }
 
 static void account_account_dtor(void *data)
@@ -310,7 +336,10 @@ static void account_account_dtor(void *data)
         free(account->password);
     }
     if (NULL != account->consumer_key) {
-        free(account->consumer_key);
+        free((void *) account->consumer_key);
+    }
+    if (NULL != account->data) {
+        hashtable_destroy(account->data);
     }
     free(account);
 }
@@ -423,11 +452,11 @@ static int account_add(int argc, const char **argv, error_t **error)
     switch (argc) {
         case 6:
             if (0 != strcmp(argv[3], "expires")) {
-                return 0;
+                return COMMAND_USAGE;
             }
             if (0 == strcmp(argv[4], "in")) {
                 if (!parse_duration(argv[5], &expires_at)) {
-                    return 0;
+                    return COMMAND_USAGE;
                 }
             } else if (0 == strcmp(argv[4], "at")) {
                 char *endptr;
@@ -435,11 +464,11 @@ static int account_add(int argc, const char **argv, error_t **error)
 
                 endptr = strptime(argv[5], "%c", &ltm);
                 if (NULL == endptr || '\0' != *endptr) {
-                    return 0;
+                    return COMMAND_USAGE;
                 }
                 expires_at = mktime(&ltm);
             } else {
-                return 0;
+                return COMMAND_USAGE;
             }
             /* no break */
         case 3:
@@ -450,12 +479,13 @@ static int account_add(int argc, const char **argv, error_t **error)
             account = argv[0];
             break;
         default:
-            return 0;
+            return COMMAND_USAGE;
     }
     h = hashtable_hash(acd->accounts, account);
+    // TODO: how to handle account overwrites? Don't allow it, add an update command? Keep password (if any for both) and non-expired CK (if any for both)?
 #if 0
     if (hashtable_quick_contains(acd->accounts, h, account)) {
-        fprintf(stderr, "An account named '%s' already exists\n", account);
+        fprintf(stderr, "An account named '%s' already exists", account);
     } else {
 #else
     {
@@ -467,12 +497,14 @@ static int account_add(int argc, const char **argv, error_t **error)
         a->password = strdup(password);
         a->consumer_key = consumer_key;
         a->expires_at = expires_at;
+        a->data = hashtable_ascii_cs_new(NULL, NULL, NULL);
 //         hashtable_quick_put_ex(acd->accounts, HT_PUT_ON_DUP_KEY_PRESERVE, h, (void *) account, a, NULL);
-        hashtable_quick_put_ex(acd->accounts, 0, h, (void *) account, a, NULL); // TODO: old value (overwrite) is not freed?
-        account_save();
+        hashtable_quick_put_ex(acd->accounts, 0, h, (void *) account, a, NULL); // TODO: old value (overwrite) is not freed!
+        // TODO: if this is the first account, set it as current?
+        account_save(error);
     }
 
-    return 1;
+    return COMMAND_SUCCESS;
 }
 
 static int account_default_set(int argc, const char **argv, error_t **error)
@@ -485,12 +517,12 @@ static int account_default_set(int argc, const char **argv, error_t **error)
     account = argv[0];
     if ((ret = hashtable_get(acd->accounts, account, &ptr))) {
         acd->autosel = ptr;
-        account_save();
+        account_save(error);
     } else {
-        fprintf(stderr, "Any account named '%s' was found\n", account);
+        error_set(error, NOTICE, "Any account named '%s' was found", account);
     }
 
-    return ret;
+    return ret ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
 static int account_delete(int argc, const char **argv, error_t **error)
@@ -501,12 +533,12 @@ static int account_delete(int argc, const char **argv, error_t **error)
     assert(1 == argc);
     account = argv[0];
     if ((ret = hashtable_delete(acd->accounts, account, DTOR_CALL))) {
-        account_save();
+        account_save(error);
     } else {
-        fprintf(stderr, "Any account named '%s' was found\n", account);
+        error_set(error, NOTICE, "Any account named '%s' was found", account);
     }
 
-    return ret;
+    return ret ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
 static int account_switch(int argc, const char **argv, error_t **error)
@@ -521,10 +553,10 @@ static int account_switch(int argc, const char **argv, error_t **error)
         acd->current = ptr;
         acd->current->consumer_key = account_key(error);
     } else {
-        fprintf(stderr, "Any account named '%s' was found\n", account);
+        error_set(error, NOTICE, "Any account named '%s' was found", account);
     }
 
-    return ret;
+    return ret ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
 static const command_t account_commands[] = {
