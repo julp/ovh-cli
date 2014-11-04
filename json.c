@@ -10,6 +10,15 @@
 // http://rubini.us/doc/en/memory-system/object-layout/
 // https://github.com/ruby/ruby/blob/trunk/include/ruby/ruby.h
 
+/**
+ * NOTE/limitations:
+ * - any JSON value (except null, true and false) should not be used more than once. You have to recreate a new
+ * json_value_t with json_<type> function even if the C value is known to be the same else you will try to free
+ * the same value (pointer) multiple times (= segfault or invalid free)
+ * - "deep" objects (arrays and objects) are not checked against recursion. It would be easy to use an array or
+ * object as value to itself (= infinite loop)
+ **/
+
 static int json_array_write(json_document_t *, json_value_t, String *);
 static int json_object_write(json_document_t *, json_value_t, String *);
 static inline json_type_t json_get_type(json_value_t);
