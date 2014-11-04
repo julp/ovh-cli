@@ -206,7 +206,6 @@ void request_dtor(request_t *req)
     free(req->buffer.ptr);
 }
 
-// request_t *request_get(const char *url)
 request_t *request_get(const char *url, ...) /* PRINTF(1, 2) */
 {
     va_list args;
@@ -296,7 +295,6 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
         debug("RESPONSE (body) = %s", req->buffer.ptr);
         debug("==========");
     }
-// #ifdef TODO
     if (200 != http_status) {
         // API may throw 403 if forbidden (consumer_key no more valid, object that doesn't belong to us) or 404 on unknown objects?
         if (NULL != content_type && (0 == strcmp(content_type, "application/xml") || 0 == strcmp(content_type, "text/xml"))) {
@@ -321,9 +319,7 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
             error_set(error, WARN, "HTTP request to '%s' failed with status %ld", req->url, http_status);
         }
         return FALSE;
-    } else
-// #endif
-    {
+    } else {
         switch (output_type) {
             case RESPONSE_IGNORE:
                 /* NOP */
@@ -478,7 +474,6 @@ const char *request_consumer_key(const char *account, const char *password, time
                 xmlFreeDoc(doc);
                 request_dtor(req);
                 free(validationUrl);
-                debug("xmlXPathNewContext");
                 return 0;
             }
             if (NULL == (res = xmlXPathEvalExpression(BAD_CAST "string(//form//input[@name=\"credentialToken\"]/@value)", ctxt))) {
@@ -486,7 +481,6 @@ const char *request_consumer_key(const char *account, const char *password, time
                 xmlFreeDoc(doc);
                 request_dtor(req);
                 free(validationUrl);
-                debug("xmlXPathEvalExpression");
                 return 0;
             }
             token = strdup((char *) xmlXPathCastToString(res));
@@ -496,7 +490,6 @@ const char *request_consumer_key(const char *account, const char *password, time
                 xmlFreeDoc(doc);
                 request_dtor(req);
                 free(validationUrl);
-                debug("xmlXPathEvalExpression");
                 return 0;
             }
             password_field_name = strdup((char *) xmlXPathCastToString(res));
@@ -506,7 +499,6 @@ const char *request_consumer_key(const char *account, const char *password, time
                 xmlFreeDoc(doc);
                 request_dtor(req);
                 free(validationUrl);
-                debug("xmlXPathEvalExpression");
                 return 0;
             }
             account_field_name = strdup((char *) xmlXPathCastToString(res));

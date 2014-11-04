@@ -160,6 +160,8 @@ static int parse_record(HashTable *records, xmlDocPtr doc)
 */
 static int domain_list(int argc, const char **argv, error_t **error)
 {
+    bool request_success;
+
     // populate
     // TODO: hashtable_size(domains) < 1 is not sufficient to known if we have the full list of domains in this hashtable
     if (hashtable_size(domains) < 1/* || (1 == argc && 0 == strcmp(argv[0], "nocache"))*/) {
@@ -170,19 +172,24 @@ static int domain_list(int argc, const char **argv, error_t **error)
         req = request_get(API_BASE_URL "/domain");
         request_add_header(req, "Accept: text/xml");
         request_sign(req);
-        request_execute(req, RESPONSE_XML, (void **) &doc, error);
+        request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
         request_dtor(req);
 
-        if (NULL == (root = xmlDocGetRootElement(doc))) {
-            return FALSE;
-        }
-        hashtable_clear(domains);
-        for (n = root->children; n != NULL; n = n->next) {
-            xmlChar *content;
+        if (request_success) {
+            if (NULL == (root = xmlDocGetRootElement(doc))) {
+                error_set(error, WARN, "Failed to parse XML document");
+                return COMMAND_FAILURE;
+            }
+            hashtable_clear(domains);
+            for (n = root->children; n != NULL; n = n->next) {
+                xmlChar *content;
 
-            content = xmlNodeGetContent(n);
-            hashtable_put(domains, content, domain_new(), NULL);
-            xmlFree(content);
+                content = xmlNodeGetContent(n);
+                hashtable_put(domains, content, domain_new(), NULL);
+                xmlFree(content);
+            }
+        } else {
+            return COMMAND_FAILURE;
         }
     }
     // display
@@ -199,7 +206,7 @@ static int domain_list(int argc, const char **argv, error_t **error)
         iterator_close(&it);
     }
 
-    return TRUE;
+    return COMMAND_SUCCESS;
 }
 
 static int get_domain_records(const char *domain, domain_t **d, error_t **error)
@@ -234,7 +241,7 @@ static int get_domain_records(const char *domain, domain_t **d, error_t **error)
                 req = request_get(API_BASE_URL "/domain/zone/%s/record/%s", domain, (const char *) content);
                 request_add_header(req, "Accept: text/xml");
                 request_sign(req);
-                request_success &= request_execute(req, RESPONSE_XML, (void **) &doc, error);
+                request_success &= request_execute(req, RESPONSE_XML, (void **) &doc, error); // request_success is assumed to be TRUE before the first iteration
                 request_dtor(req);
                 // result
                 parse_record((*d)->records, doc);
@@ -253,30 +260,32 @@ static int record_list(int argc, const char **argv, error_t **error)
 {
     domain_t *d;
     Iterator it;
+    command_status_t ret;
 
     assert(3 == argc);
 
-    get_domain_records(argv[0], &d, error);
-    // display
-    hashtable_to_iterator(&it, d->records);
-    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        record_t *r;
+    if (COMMAND_SUCCESS == (ret = get_domain_records(argv[0], &d, error))) {
+        // display
+        hashtable_to_iterator(&it, d->records);
+        for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+            record_t *r;
 
-        r = iterator_current(&it, NULL);
-        printf(
-            "%s %s%s%s => %s (ttl: %" PRIu32 ", id: %" PRIu32 ")\n",
-            record_type_map[r->type].short_name,
-            r->name,
-            NULL == r->name || '\0' == *r->name ? "" : ".",
-            argv[0],
-            r->target,
-            r->ttl,
-            r->id
-        );
+            r = iterator_current(&it, NULL);
+            printf(
+                "%s %s%s%s => %s (ttl: %" PRIu32 ", id: %" PRIu32 ")\n",
+                record_type_map[r->type].short_name,
+                r->name,
+                NULL == r->name || '\0' == *r->name ? "" : ".",
+                argv[0],
+                r->target,
+                r->ttl,
+                r->id
+            );
+        }
+        iterator_close(&it);
     }
-    iterator_close(&it);
 
-    return 1;
+    return ret;
 }
 
 static bool str_include(const char *search, ...)
@@ -302,6 +311,7 @@ static bool str_include(const char *search, ...)
 static int record_add(int argc, const char **argv, error_t **error)
 {
     xmlDocPtr doc;
+    bool request_success;
     const char *target, *type, *subdomain;
 
     assert(7 == argc);
@@ -309,8 +319,8 @@ static int record_add(int argc, const char **argv, error_t **error)
     type = argv[5];
     target = argv[6];
     if (!str_include(type, "A", "AAAA", "CNAME", "DKIM", "LOC", "MX", "NAPTR", "NS", "PTR", "SPF", "SRV", "SSHFP", "TXT", NULL)) {
-        fprintf(stderr, "unknown DNS record type '%s'\n", type);
-        return 0;
+        error_set(error, WARN, "unknown DNS record type '%s'\n", type);
+        return COMMAND_FAILURE;
     }
     {
         String *buffer;
@@ -339,13 +349,13 @@ static int record_add(int argc, const char **argv, error_t **error)
             request_add_header(req, "Accept: text/xml");
             request_add_header(req, "Content-type: application/json");
             request_sign(req);
-            request_execute(req, RESPONSE_XML, (void **) &doc, error);
+            request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
             request_dtor(req);
             string_destroy(buffer);
         }
     }
     // result
-    {
+    if (request_success) {
         domain_t *d;
 
         d = NULL;
@@ -355,7 +365,7 @@ static int record_add(int argc, const char **argv, error_t **error)
         parse_record(d->records, doc);
     }
 
-    return TRUE;
+    return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
 static int record_delete(int argc, const char **argv, error_t **error)
@@ -363,74 +373,72 @@ static int record_delete(int argc, const char **argv, error_t **error)
     domain_t *d;
     record_t *match;
     const char *record;
+    bool request_success;
 
     record = argv[3];
-    get_domain_records(argv[0], &d, error);
+    if (request_success = (COMMAND_SUCCESS == get_domain_records(argv[0], &d, error))) {
 #if 0
-    // what was the goal? If true, it is more the domain which does not exist!
-    if (!hashtable_get(domains, (void *) argv[0], (void **) &d)) {
-        fprintf(stderr, "Domain '%s' doesn't have any record named '%s'\n", argv[0], argv[3]);
-        return 0;
-    }
-#endif
-    {
-        Iterator it;
-        size_t matches;
-
-        matches = 0;
-        hashtable_to_iterator(&it, d->records);
-        for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-            record_t *r;
-
-            r = iterator_current(&it, NULL);
-            if (0 == strcmp(r->name, record)) { // TODO: strcmp_l? type?
-                ++matches;
-                match = r;
-            }
+        // what was the goal? If true, it is more the domain which does not exist!
+        if (!hashtable_get(domains, (void *) argv[0], (void **) &d)) {
+            error_set(error, WARN, "Domain '%s' doesn't have any record named '%s'\n", argv[0], argv[3]);
+            return COMMAND_FAILURE;
         }
-        iterator_close(&it);
-        switch (matches) {
-            case 1:
-            {
-                char c;
+#endif
+        {
+            Iterator it;
+            size_t matches;
 
-                do {
+            matches = 0;
+            hashtable_to_iterator(&it, d->records);
+            for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+                record_t *r;
+
+                r = iterator_current(&it, NULL);
+                if (0 == strcmp(r->name, record)) { // TODO: strcmp_l? type?
+                    ++matches;
+                    match = r;
+                }
+            }
+            iterator_close(&it);
+            switch (matches) {
+                case 1:
+                {
                     printf("Confirm deletion of '%s.%s' (y/N)> ", match->name, argv[0]);
                     fflush(stdout);
-                    c = getchar();
-                } while ('y' != /*tolower*/(c) && 'n' != /*tolower*/(c));
-                if ('n' == /*tolower*/(c)) {
-                    return 1;
+                    if ('y' != /*tolower*/(getchar())) {
+                        return COMMAND_SUCCESS; // yeah, success because *we* canceled it
+                    }
+                    break;
                 }
-                break;
+                case 0:
+                    error_set(error, WARN, "Abort, no record match '%s'\n", argv[3]);
+                    return COMMAND_FAILURE;
+                default:
+                    error_set(error, WARN, "Abort, more than one record match '%s'\n", argv[3]);
+                    return COMMAND_FAILURE;
             }
-            case 0:
-                fprintf(stderr, "Abort, no record match '%s'\n", argv[3]);
-                return 0;
-            default:
-                fprintf(stderr, "Abort, more than one record match '%s'\n", argv[3]);
-                return 0;
+        }
+        {
+            request_t *req;
+
+            // request
+#if 0
+            req = request_delete(API_BASE_URL "/domain/zone/%s/%" PRIu32, argv[0], match->id);
+            request_add_header(req, "Accept: text/xml");
+            request_sign(req);
+            request_success = request_execute(req, RESPONSE_IGNORE, NULL, error);
+            request_dtor(req);
+#else
+            printf("deletion of '%s.%s' done\n", match->name, argv[0]);
+#endif
+            // result
+            if (request_success) {
+                hashtable_quick_delete(d->records, match->id, NULL, TRUE);
+            }
         }
     }
-    {
-        request_t *req;
 
-        // request
-#if 0
-        req = request_delete(API_BASE_URL "/domain/zone/%s/%" PRIu32, argv[0], match->id);
-        request_add_header(req, "Accept: text/xml");
-        request_sign(req);
-        request_execute(req, RESPONSE_IGNORE, NULL, error);
-        request_dtor(req);
-#else
-        printf("deletion of '%s.%s' done\n", match->name, argv[0]);
-#endif
-        // result
-        // ... if successful (TODO: HTTP status = 200?)
-        hashtable_quick_delete(d->records, match->id, NULL, TRUE);
-    }
-
-    return TRUE;
+    return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
 // arguments: [ttl <int>] [name <string>] [target <string>]
