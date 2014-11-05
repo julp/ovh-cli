@@ -46,6 +46,7 @@ static const command_t dedicated_commands[] = {
 DECLARE_MODULE(dedicated) = {
     "dedicated",
     dedicated_ctor,
+    NULL,
     dedicated_dtor,
     dedicated_commands
 };

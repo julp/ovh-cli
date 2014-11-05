@@ -16,5 +16,6 @@ DECLARE_MODULE(nls) = {
     "nls",
     nls_ctor,
     NULL,
+    NULL,
     NULL
 };

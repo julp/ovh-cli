@@ -46,6 +46,7 @@ static const command_t me_commands[] = {
 DECLARE_MODULE(me) = {
     "me",
     me_ctor,
+    NULL,
     me_dtor,
     me_commands
 };

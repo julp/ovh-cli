@@ -535,5 +535,6 @@ DECLARE_MODULE(api) = {
     "api",
     api_ctor,
     NULL,
+    NULL,
     NULL
 };

@@ -17,6 +17,7 @@ static void openssl_dtor(void)
 DECLARE_MODULE(openssl) = {
     "openssl",
     openssl_ctor,
+    NULL,
     openssl_dtor,
     NULL
 };

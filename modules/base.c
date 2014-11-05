@@ -65,6 +65,7 @@ static const command_t base_commands[] = {
 };
 
 DECLARE_MODULE(base) = {
+    "base",
     NULL,
     NULL,
     NULL,

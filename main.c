@@ -431,75 +431,16 @@ int main(int argc, char **argv)
     error = NULL;
     ret = EXIT_SUCCESS;
     for (i = 0; i < ARRAY_SIZE(modules); i++) {
-        if (NULL != modules[i]->ctor) {
-            modules[i]->ctor();
+        if (NULL != modules[i]->early_init) {
+            modules[i]->early_init();
+        }
+    }
+    for (i = 0; i < ARRAY_SIZE(modules); i++) {
+        if (NULL != modules[i]->late_init) {
+            modules[i]->late_init();
         }
     }
     atexit(cleanup);
-#if 0
-    {
-#include "struct/dptrarray.h"
-
-        Iterator it;
-        DPtrArray *ary;
-
-        ary = dptrarray_new(NULL, NULL, NULL);
-        dptrarray_push(ary, "abc");
-        dptrarray_push(ary, "def");
-        dptrarray_push(ary, "ghi");
-
-        dptrarray_to_iterator(&it, ary);
-        printf("[[[[[]]]]]\n");
-//         for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        for (iterator_last(&it); iterator_is_valid(&it); iterator_previous(&it)) {
-            char *v;
-            int idx, *pidx;
-
-            pidx = &idx;
-            v = iterator_current(&it, &idx);
-            printf("%d %s\n", idx, v);
-//             break;
-        }
-        iterator_close(&it);
-        dptrarray_destroy(ary);
-        printf("[[[[[]]]]]\n");
-    }
-    {
-#include <math.h>
-#include "json.h"
-
-        String *buffer;
-        json_document_t *doc;
-        json_value_t h1, h2, h3, a1, a2, a3;
-
-        h1 = json_object();
-        h2 = json_object();
-        h3 = json_object();
-        a1 = json_array();
-        a2 = json_array();
-        a3 = json_array();
-        json_object_set_property(h1, "ab\nc", h2);
-        json_object_set_property(h2, "de\"f", h3);
-        json_object_set_property(h2, "foo", json_string("bar"));
-        json_object_set_property(h3, "gh/i", json_integer(123));
-        json_object_set_property(h3, "jkl", json_number(M_PI));
-        json_object_set_property(h3, "xxx", a1);
-        json_array_push(a1, a2);
-        json_array_push(a2, a3);
-        json_array_push(a1, json_integer(123));
-        json_array_push(a2, json_integer(456));
-        json_array_push(a3, json_integer(789));
-        buffer = string_new();
-        doc = json_document_new();
-//         json_document_set_root(doc, json_null);
-//         json_document_set_root(doc, json_true);
-        json_document_set_root(doc, h1);
-        json_document_serialize(doc, buffer);
-        json_document_destroy(doc);
-debug(">%s<", buffer->ptr);
-        string_destroy(buffer);
-    }
-#endif
     if (1 == argc) {
 #if defined(WITH_READLINE)
         rl_readline_name = "ovh";

@@ -141,7 +141,8 @@ typedef struct {
 
 typedef struct {
     const char *name;
-    bool (*ctor)(void);
+    bool (*early_init)(void);
+    bool (*late_init)(void);
     void (*dtor)(void);
     const command_t *commands;
 } module_t;

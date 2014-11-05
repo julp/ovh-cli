@@ -26,7 +26,8 @@ typedef struct {
     char *password;
     time_t expires_at;
     const char *consumer_key;
-    HashTable *data;
+    HashTable *modules_data;
+    // TODO: application_key + application_secret?
 } account_t;
 
 typedef struct {
@@ -34,7 +35,13 @@ typedef struct {
     HashTable *accounts;
     account_t *autosel;
     account_t *current;
+    HashTable *modules_callbacks;
 } account_command_data_t;
+
+typedef struct {
+    DtorFunc dtor;
+    void (*on_set_account)(void **);
+} module_callbacks_t;
 
 static account_command_data_t *acd;
 
@@ -159,6 +166,30 @@ static bool parse_duration(const char *duration, time_t *value)
     }
 }
 
+static void account_notify_change(void)
+{
+    bool exists;
+    Iterator it;
+
+    hashtable_to_iterator(&it, acd->modules_callbacks);
+    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        void *key, *data;
+        module_callbacks_t *mc;
+
+        mc = iterator_current(&it, &key);
+        assert(NULL != mc);
+        if (NULL != mc->on_set_account) {
+            data = NULL;
+            exists = hashtable_get(acd->current->modules_data, key, &data);
+            mc->on_set_account(&data);
+            if (!exists) {
+                hashtable_put(acd->current->modules_data, key, data, NULL);
+            }
+        }
+    }
+    iterator_close(&it);
+}
+
 const char *account_current(void)
 {
     if (NULL == acd->current) {
@@ -172,14 +203,35 @@ void account_current_set_data(const char *name, void *data)
 {
     assert(NULL != acd->current);
 
-    hashtable_put(acd->current->data, (void *) name, data, NULL);
+    hashtable_put(acd->current->modules_data, (void *) name, data, NULL);
 }
 
 bool account_current_get_data(const char *name, void **data)
 {
     assert(NULL != acd->current);
 
-    return hashtable_get(acd->current->data, name, data);
+    return hashtable_get(acd->current->modules_data, name, data);
+}
+
+void account_register_module_callbacks(const char *name, DtorFunc dtor, void (*on_set_account)(void **))
+{
+    module_callbacks_t *mc;
+
+    assert(NULL != acd);
+    assert(NULL != name);
+
+    if (NULL != dtor && NULL != on_set_account) { // nothing to do? Skip it!
+        bool exists;
+
+        if (!(exists = hashtable_get(acd->modules_callbacks, name, (void **) &mc))) {
+            mc = mem_new(*mc);
+        }
+        mc->dtor = dtor;
+        mc->on_set_account = on_set_account;
+        if (!exists) {
+            hashtable_put(acd->modules_callbacks, (void *) name, mc, NULL);
+        }
+    }
 }
 
 static bool account_save(error_t **error)
@@ -255,7 +307,7 @@ const char *account_key(error_t **error)
     assert(NULL != acd->current);
 
     if (NULL == acd->current) {
-        fprintf(stderr, "There is no current account\n");
+        error_set(error, WARN, "There is no current account");
         return NULL;
     }
     if (NULL == acd->current->consumer_key || (0 != acd->current->expires_at && acd->current->expires_at < time(NULL))) {
@@ -296,7 +348,7 @@ static int account_load(error_t **error)
             a->account = xmlGetPropAsString(n, "account");
             a->password = xmlGetPropAsString(n, "password");
             a->consumer_key = NULL;
-            a->data = hashtable_ascii_cs_new(NULL, NULL, NULL); // no dup/dtor for keys as they are "static" strings ; no dtor for values, we don't know what we store, let the module cleaning its stuffs
+            a->modules_data = hashtable_ascii_cs_new(NULL, NULL, NULL); // no dup/dtor for keys as they are "static" strings ; no dtor for values, we need to do it ourselves
             if (NULL != xmlHasProp(n, BAD_CAST "consumer_key")) {
                 xmlChar *expires_at;
 
@@ -308,13 +360,15 @@ static int account_load(error_t **error)
             hashtable_put(acd->accounts, a->account, a, NULL);
             if (xmlHasProp(n, BAD_CAST "default")) {
                 acd->current = acd->autosel = a;
+                account_notify_change();
             }
         }
         if (hashtable_size(acd->accounts) > 0) {
             if (NULL == acd->current) {
                 acd->current = (account_t *) hashtable_first(acd->accounts);
+                account_notify_change();
             }
-            acd->current->consumer_key = account_key(error);
+            acd->current->consumer_key = account_key(error); // TODO: error checking?
         }
         xmlFreeDoc(doc);
     }
@@ -338,13 +392,28 @@ static void account_account_dtor(void *data)
     if (NULL != account->consumer_key) {
         free((void *) account->consumer_key);
     }
-    if (NULL != account->data) {
-        hashtable_destroy(account->data);
+    if (NULL != account->modules_data) {
+        if (NULL != acd->modules_callbacks) {
+            Iterator it;
+
+            hashtable_to_iterator(&it, account->modules_data);
+            for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+                void *key, *value;
+                module_callbacks_t *mc;
+
+                value = iterator_current(&it, &key);
+                if (hashtable_get(acd->modules_callbacks, key, (void **) &mc)) {
+                    mc->dtor(value);
+                }
+            }
+            iterator_close(&it);
+        }
+        hashtable_destroy(account->modules_data);
     }
     free(account);
 }
 
-static bool account_ctor(void)
+static bool account_early_init(void)
 {
     char *home;
     char buffer[MAXPATHLEN];
@@ -352,6 +421,7 @@ static bool account_ctor(void)
     acd = mem_new(*acd);
     acd->autosel = acd->current = NULL;
     acd->accounts = hashtable_ascii_cs_new(NULL, NULL /* no dtor for key as it is also part of the value */, account_account_dtor);
+    acd->modules_callbacks = hashtable_ascii_cs_new(NULL, NULL /* no dtor for key as it is also part of the value */, free);
     buffer[0] = '\0';
     if (NULL == (home = getenv("HOME"))) {
 # ifdef _MSC_VER
@@ -383,14 +453,20 @@ static bool account_ctor(void)
             return FALSE;
         }
     }
-    account_load(NULL);
-#if 1
+#if 0
     duration_test("3 day 1 days", FALSE, 0);
     duration_test("3 seconds 1 hour", FALSE, 0);
     duration_test("12 11 hours", FALSE, 0);
     duration_test("3 days 1", FALSE, 0);
     duration_test("3 days 1 second", TRUE, 3 * 24 * 60 * 60 + 1);
 #endif
+
+    return TRUE;
+}
+
+static bool account_late_init(void)
+{
+    account_load(NULL);
 
     return TRUE;
 }
@@ -497,7 +573,7 @@ static int account_add(int argc, const char **argv, error_t **error)
         a->password = strdup(password);
         a->consumer_key = consumer_key;
         a->expires_at = expires_at;
-        a->data = hashtable_ascii_cs_new(NULL, NULL, NULL);
+        a->modules_data = hashtable_ascii_cs_new(NULL, NULL, NULL);
 //         hashtable_quick_put_ex(acd->accounts, HT_PUT_ON_DUP_KEY_PRESERVE, h, (void *) account, a, NULL);
         hashtable_quick_put_ex(acd->accounts, 0, h, (void *) account, a, NULL); // TODO: old value (overwrite) is not freed!
         // TODO: if this is the first account, set it as current?
@@ -550,8 +626,13 @@ static int account_switch(int argc, const char **argv, error_t **error)
     assert(1 == argc);
     account = argv[0];
     if ((ret = hashtable_get(acd->accounts, account, (void **) &ptr))) {
+        const char *consumer_key;
+
         acd->current = ptr;
-        acd->current->consumer_key = account_key(error);
+        if (NULL != (consumer_key = account_key(error))) {
+            acd->current->consumer_key = consumer_key;
+        }
+        account_notify_change();
     } else {
         error_set(error, NOTICE, "Any account named '%s' was found", account);
     }
@@ -574,7 +655,8 @@ static const command_t account_commands[] = {
 
 DECLARE_MODULE(account) = {
     "account",
-    account_ctor,
+    account_early_init,
+    account_late_init,
     account_dtor,
     account_commands,
 };

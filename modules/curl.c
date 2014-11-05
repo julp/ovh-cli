@@ -14,6 +14,7 @@ static void curl_dtor(void)
 DECLARE_MODULE(curl) = {
     "curl",
     curl_ctor,
+    NULL,
     curl_dtor,
     NULL
 };

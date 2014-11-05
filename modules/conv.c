@@ -195,5 +195,6 @@ DECLARE_MODULE(conv) = {
     "conv",
     convert_ctor,
     NULL,
+    NULL,
     NULL
 };

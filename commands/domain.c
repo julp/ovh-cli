@@ -57,8 +57,13 @@ typedef struct {
     const char *target;
 } record_t;
 
+#define MODULE_NAME "domain"
+#define ACCOUNT_SPECIFIC 1
+
+#ifndef ACCOUNT_SPECIFIC
 // TODO: domains/records cache is not account specific
 static HashTable *domains = NULL;
+#endif
 
 static void domain_destroy(void *data)
 {
@@ -98,18 +103,37 @@ static domain_t *domain_new(void)
     return d;
 }
 
+static void domain_on_set_account(void **data)
+{
+    if (NULL == *data) {
+        *data = hashtable_ascii_cs_new((DupFunc) strdup, free, domain_destroy);
+    }
+}
+
 static bool domain_ctor(void)
 {
+#ifdef ACCOUNT_SPECIFIC
+    account_register_module_callbacks(MODULE_NAME, (DtorFunc) hashtable_destroy, domain_on_set_account);
+#else
     domains = hashtable_ascii_cs_new((DupFunc) strdup, free, domain_destroy);
+#endif
 
     return TRUE;
 }
 
 static void domain_dtor(void)
 {
+#if 0
+#ifdef ACCOUNT_SPECIFIC
+    HashTable *domains;
+
+    if (account_current_get_data(MODULE_NAME, /*(void **) */&domains)) {
+#else
     if (NULL != domains) {
+#endif
         hashtable_destroy(domains);
     }
+#endif
 }
 
 static record_type_t xmlGetPropAsRecordType(xmlNodePtr node, const char *name)
@@ -160,10 +184,18 @@ static int parse_record(HashTable *records, xmlDocPtr doc)
 */
 static int domain_list(int argc, const char **argv, error_t **error)
 {
+#ifdef ACCOUNT_SPECIFIC
+    HashTable *domains;
+#endif
     bool request_success;
 
     // populate
     // TODO: hashtable_size(domains) < 1 is not sufficient to known if we have the full list of domains in this hashtable
+#ifdef ACCOUNT_SPECIFIC
+    domains = NULL;
+    account_current_get_data(MODULE_NAME, /*(void **) */&domains);
+    assert(NULL != domains);
+#endif
     if (hashtable_size(domains) < 1/* || (1 == argc && 0 == strcmp(argv[0], "nocache"))*/) {
         xmlDocPtr doc;
         request_t *req;
@@ -211,9 +243,17 @@ static int domain_list(int argc, const char **argv, error_t **error)
 
 static int get_domain_records(const char *domain, domain_t **d, error_t **error)
 {
+#ifdef ACCOUNT_SPECIFIC
+    HashTable *domains;
+#endif
     bool request_success;
 
     *d = NULL;
+#ifdef ACCOUNT_SPECIFIC
+    domains = NULL;
+    account_current_get_data(MODULE_NAME, /*(void **) */&domains);
+    assert(NULL != domains);
+#endif
     if (!hashtable_get(domains, (void *) domain, (void **) d) || !(*d)->uptodate) {
         xmlDocPtr doc;
         request_t *req;
@@ -357,8 +397,16 @@ static int record_add(int argc, const char **argv, error_t **error)
     // result
     if (request_success) {
         domain_t *d;
+#ifdef ACCOUNT_SPECIFIC
+        HashTable *domains;
+#endif
 
         d = NULL;
+#ifdef ACCOUNT_SPECIFIC
+        domains = NULL;
+        account_current_get_data(MODULE_NAME, /*(void **) */&domains);
+        assert(NULL != domains);
+#endif
         if (!hashtable_get(domains, (void *) argv[0], (void **) &d)) {
             hashtable_put(domains, (void *) argv[0], d = domain_new(), NULL);
         }
@@ -487,8 +535,9 @@ static const command_t domain_commands[] = {
 };
 
 DECLARE_MODULE(domain) = {
-    "domain",
+    MODULE_NAME,
     domain_ctor,
+    NULL,
     domain_dtor,
     domain_commands
 };

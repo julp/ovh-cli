@@ -18,6 +18,7 @@ static void libxml_dtor(void)
 DECLARE_MODULE(libxml) = {
     "libxml",
     libxml_ctor,
+    NULL,
     libxml_dtor,
     NULL
 };
