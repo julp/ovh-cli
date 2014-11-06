@@ -2,12 +2,9 @@
 #include <string.h>
 #include <libxml/parser.h>
 #include "common.h"
-#if defined(WITH_READLINE)
-# include <readline/readline.h>
-# include <readline/history.h>
-#elif defined(WITH_EDITLINE)
+#ifdef WITH_EDITLINE
 # include <histedit.h>
-#endif
+#endif /* WITH_EDITLINE */
 #include "modules/api.h"
 #include "commands/account.h"
 #include "struct/dptrarray.h"
@@ -252,43 +249,7 @@ void cleanup(void)
     }
 }
 
-#if defined(WITH_READLINE)
-char *command_generator(const char *text, int state)
-{
-    size_t i;
-    const command_t *c;
-
-    for (i = 0; i < ARRAY_SIZE(modules); i++) {
-        if (NULL != modules[i]->commands) {
-            for (c = modules[i]->commands; NULL != c->handle; c++) {
-//                 if (NULL != c->args) {
-//                     const char **v;
-//
-//                     for (v = c->args; apply && NULL != *v && j < args_count; v++) {
-//                     }
-//                 }
-                if (0 == strncmp(c->args[0], text, len)) {
-                    return c->args[0];
-                }
-            }
-        }
-    }
-
-    return NULL;
-}
-
-char **command_completion(const char *text, int start, int end)
-{
-    char **matches;
-
-    matches = NULL;
-    if (start == 0) {
-        matches = rl_completion_matches(text, command_generator);
-    }
-
-    return matches;
-}
-#elif defined(WITH_EDITLINE)
+#ifdef WITH_EDITLINE
 static const char *prompt(EditLine *UNUSED(e))
 {
     char *p;
@@ -420,7 +381,7 @@ static unsigned char complete(EditLine *el, int ch)
 
     return res;
 }
-#endif
+#endif /* WITH_EDITLINE */
 
 int main(int argc, char **argv)
 {
@@ -442,18 +403,7 @@ int main(int argc, char **argv)
     }
     atexit(cleanup);
     if (1 == argc) {
-#if defined(WITH_READLINE)
-        rl_readline_name = "ovh";
-        rl_attempted_completion_function = command_completion;
-        while (1) {
-            char *line, prompt[512], *p;
-
-            *prompt = '\0';
-            p = stpcpy(prompt, account_current());
-            p = stpcpy(p, "> ");
-
-            line = readline(prompt);
-#elif defined(WITH_EDITLINE)
+#ifdef WITH_EDITLINE
         int count;
         EditLine *el;
         History *hist;
@@ -480,7 +430,7 @@ int main(int argc, char **argv)
         printf("%s> ", account_current());
         fflush(stdout);
         while (NULL != fgets(line, STR_SIZE(line), stdin)) {
-#endif
+#endif /* WITH_EDITLINE */
             int args_len;
             char **args;
 
@@ -489,20 +439,18 @@ int main(int argc, char **argv)
             run_command(args_len, (const char **) args, &error);
             print_error(error);
             free(args[0]);
-#if defined(WITH_READLINE)
-            free(line);
-#elif defined(WITH_EDITLINE)
+#ifdef WITH_EDITLINE
             history(hist, &ev, H_ENTER, line);
 #else
             printf("%s> ", account_current());
             fflush(stdout);
-#endif
+#endif /* WITH_EDITLINE */
         }
 #ifdef WITH_EDITLINE
         history_end(hist);
         el_end(el);
         puts("");
-#endif
+#endif /* WITH_EDITLINE */
     } else {
         --argc;
         ++argv;
