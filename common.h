@@ -12,11 +12,23 @@
 #  define __has_attribute(x) 0
 # endif /* !__has_attribute */
 
-# if __GNUC__ || __has_attribute(unused)
+# if GCC_VERSION || __has_attribute(unused)
 #  define UNUSED(x) UNUSED_ ## x __attribute__((unused))
 # else
 #  define UNUSED
 # endif /* UNUSED */
+
+# if (GCC_VERSION >= 3003 || __has_attribute(nonnull))
+#  define NONNULL(...) __attribute__((nonnull(__VA_ARGS__)))
+# else
+#  define NONNULL(...)
+# endif /* NONNULL */
+
+# if GCC_VERSION || __has_attribute(sentinel)
+#  define SENTINEL __attribute__((sentinel))
+# else
+#  define SENTINEL
+# endif /* SENTINEL */
 
 # if GCC_VERSION >= 2003 || __has_attribute(format)
 #  define FORMAT(archetype, string_index, first_to_check) __attribute__((format(archetype, string_index, first_to_check)))
