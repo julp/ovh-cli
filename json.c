@@ -143,7 +143,7 @@ static int json_array_write(json_document_t *doc, json_value_t value, String *bu
     assert(JSON_TYPE_ARRAY == json_get_type(value));
 
     node = (json_node_t *) value;
-    dptrarray_to_iterator(&it,(DPtrArray *) node->value);
+    dptrarray_to_iterator(&it, (DPtrArray *) node->value);
 //     if (TRUE) {
 //         string_append_char(buffer, '\n');
 //         string_append_n_times(buffer, "    ", STR_LEN("    "), doc->current_depth);
