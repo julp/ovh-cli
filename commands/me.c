@@ -20,9 +20,8 @@ static int me(int UNUSED(argc), const char **UNUSED(argv), error_t **error)
     request_t *req;
     xmlNodePtr root;
 
-    req = request_get(API_BASE_URL "/me");
+    req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/me");
     request_add_header(req, "Accept: text/xml");
-    request_sign(req);
     request_execute(req, RESPONSE_XML, (void **) &doc, error);
     request_dtor(req);
     if (NULL == (root = xmlDocGetRootElement(doc))) {

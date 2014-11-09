@@ -8,10 +8,9 @@ enum {
     RESPONSE_HTML
 };
 
-enum {
-    STRING_COPY,
-    STRING_NOCOPY
-};
+#define REQUEST_FLAG_NONE 0
+#define REQUEST_FLAG_SIGN (1<<1)
+#define REQUEST_FLAG_COPY (1<<2)
 
 typedef struct request_t request_t;
 
@@ -21,11 +20,10 @@ void request_add_post_field(request_t *, const char *, const char *);
 void request_add_header(request_t *, const char *);
 
 void request_dtor(request_t *);
-request_t *request_get(const char *, ...) PRINTF(1, 2);
-request_t *request_delete(const char *, ...) PRINTF(1, 2);
-request_t *request_post(const char *, int, const char *, ...) PRINTF(3, 4);
+request_t *request_get(uint32_t, const char *, ...) PRINTF(2, 3);
+request_t *request_delete(uint32_t, const char *, ...) PRINTF(2, 3);
+request_t *request_post(uint32_t, const char *, const char *, ...) PRINTF(3, 4);
 
-void request_sign(request_t *);
 bool request_execute(request_t *, int, void **, error_t **);
 
 # include <time.h>

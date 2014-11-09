@@ -24,6 +24,7 @@ typedef enum {
 struct request_t {
     CURL *ch;
     char *url;
+    uint32_t flags;
     // <CURLOPT_POSTFIELDS>
     const char *data;
     const char *pdata; // if pdata != data, pdata is a copy (= needs to be freed)
@@ -98,7 +99,7 @@ void request_add_header(request_t *req, const char *header)
 }*/
 
 // "$1$" + SHA1_HEX(AS+"+"+CK+"+"+METHOD+"+"+QUERY+"+"+BODY+"+"+TSTAMP)
-void request_sign(request_t *req)
+static void request_sign(request_t *req)
 {
     EVP_MD_CTX ctx;
     int i, hash_len;
@@ -157,13 +158,14 @@ void request_sign(request_t *req)
     request_add_header(req, header);
 }
 
-static request_t *request_ctor(http_method_t method, const char *url, va_list args)
+static request_t *request_ctor(uint32_t flags, http_method_t method, const char *url, va_list args)
 {
     CURLcode res;
     request_t *req;
     va_list cpyargs;
 
     req = mem_new(*req);
+    req->flags = flags;
     req->headers = NULL;
     req->method = method;
     va_copy(cpyargs, args);
@@ -206,29 +208,29 @@ void request_dtor(request_t *req)
     free(req->buffer.ptr);
 }
 
-request_t *request_get(const char *url, ...) /* PRINTF(1, 2) */
+request_t *request_get(uint32_t flags, const char *url, ...) /* PRINTF(2, 3) */
 {
     va_list args;
     request_t *req;
 
     va_start(args, url);
-    req = request_ctor(HTTP_GET, url, args);
+    req = request_ctor(flags, HTTP_GET, url, args);
     va_end(args);
 
     return req;
 }
 
-request_t *request_post(const char *data, int copy, const char *url, ...) /* PRINTF(3, 4) */
+request_t *request_post(uint32_t flags, const char *data, const char *url, ...) /* PRINTF(3, 4) */
 {
     va_list args;
     request_t *req;
 
     va_start(args, url);
-    req = request_ctor(HTTP_POST, url, args);
+    req = request_ctor(flags, HTTP_POST, url, args);
     va_end(args);
     if (NULL != data && '\0' != *data) {
         req->pdata = req->data = data;
-        if (copy) {
+        if (HAS_FLAG(flags, REQUEST_FLAG_COPY)) {
             // NOTE: we don't use CURLOPT_COPYPOSTFIELDS because we need this string later for hashing/signature
             req->pdata = strdup(data);
         }
@@ -238,13 +240,13 @@ request_t *request_post(const char *data, int copy, const char *url, ...) /* PRI
     return req;
 }
 
-request_t *request_delete(const char *url, ...) /* PRINTF(1, 2) */
+request_t *request_delete(uint32_t flags, const char *url, ...) /* PRINTF(2, 3) */
 {
     va_list args;
     request_t *req;
 
     va_start(args, url);
-    req = request_ctor(HTTP_DELETE, url, args);
+    req = request_ctor(flags, HTTP_DELETE, url, args);
     va_end(args);
 
     return req;
@@ -266,6 +268,9 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
     long http_status;
     char *content_type;
 
+    if (HAS_FLAG(req->flags, REQUEST_FLAG_SIGN)) {
+        request_sign(req);
+    }
 #if 0
     if (RESPONSE_IGNORE == output_type) {
         curl_easy_setopt(req->ch, CURLOPT_NOBODY, 1L);
@@ -385,7 +390,7 @@ const char *request_consumer_key(const char *account, const char *password, time
         xmlNodePtr root;
 
 #ifndef JSON_RULES
-        req = request_post(API_BASE_URL "/auth/credential", "{ \
+        req = request_post(REQUEST_FLAG_NONE, API_BASE_URL "/auth/credential", "{ \
     \"accessRules\": [ \
         { \
             \"method\": \"GET\", \
@@ -397,7 +402,7 @@ const char *request_consumer_key(const char *account, const char *password, time
         } \
     ], \
     \"redirection\":\"https://www.mywebsite.com/\" \
-}", STRING_NOCOPY);
+}");
 #else
         String *buffer;
         {
@@ -426,12 +431,13 @@ const char *request_consumer_key(const char *account, const char *password, time
             json_document_serialize(doc, buffer);
             json_document_destroy(doc);
         }
-        req = request_post(buffer->ptr, STRING_NOCOPY, API_BASE_URL "/auth/credential");
+        req = request_post(REQUEST_FLAG_NONE, buffer->ptr, API_BASE_URL "/auth/credential");
 #endif /* !JSON_RULES */
         request_add_header(req, "Accept: text/xml");
         request_add_header(req, "Content-type: application/json");
         request_add_header(req, "X-Ovh-Application: " APPLICATION_KEY);
         request_execute(req, RESPONSE_XML, (void **) &doc, error); // TODO: check returned value
+debug("%d", __LINE__);
 #if 0
         puts("====================");
         xmlDocFormatDump(stdout, doc, 1);
@@ -442,6 +448,7 @@ const char *request_consumer_key(const char *account, const char *password, time
             request_dtor(req);
             return 0;
         }
+debug("%d", __LINE__);
         consumerKey = xmlGetPropAsString(root, "consumerKey");
         validationUrl = xmlGetPropAsString(root, "validationUrl");
         xmlFreeDoc(doc);
@@ -450,7 +457,7 @@ const char *request_consumer_key(const char *account, const char *password, time
         string_destroy(buffer);
 #endif /* JSON_RULES */
     }
-
+debug("%d", __LINE__);
     {
         char *token;
         char *account_field_name;
@@ -462,20 +469,21 @@ const char *request_consumer_key(const char *account, const char *password, time
             xmlXPathObjectPtr res;
             xmlXPathContextPtr ctxt;
 
-            req = request_get("%s", validationUrl);
+            req = request_get(REQUEST_FLAG_NONE, "%s", validationUrl);
             request_execute(req, RESPONSE_HTML, (void **) &doc, error); // TODO: check returned value
 #if 0
             puts("====================");
             htmlDocDump(stdout, doc);
             puts("====================");
 #endif
-            xmlXPathInit();
+debug("%d", __LINE__);
             if (NULL == (ctxt = xmlXPathNewContext(doc))) {
                 xmlFreeDoc(doc);
                 request_dtor(req);
                 free(validationUrl);
                 return 0;
             }
+debug("%d", __LINE__);
             if (NULL == (res = xmlXPathEvalExpression(BAD_CAST "string(//form//input[@name=\"credentialToken\"]/@value)", ctxt))) {
                 xmlXPathFreeObject(res);
                 xmlFreeDoc(doc);
@@ -483,6 +491,7 @@ const char *request_consumer_key(const char *account, const char *password, time
                 free(validationUrl);
                 return 0;
             }
+debug("%d", __LINE__);
             token = strdup((char *) xmlXPathCastToString(res));
             xmlXPathFreeObject(res);
             if (NULL == (res = xmlXPathEvalExpression(BAD_CAST "string(//form//input[@type=\"password\"]/@name)", ctxt))) {
@@ -492,6 +501,7 @@ const char *request_consumer_key(const char *account, const char *password, time
                 free(validationUrl);
                 return 0;
             }
+debug("%d", __LINE__);
             password_field_name = strdup((char *) xmlXPathCastToString(res));
             xmlXPathFreeObject(res);
             if (NULL == (res = xmlXPathEvalExpression(BAD_CAST "string(//form//input[@type=\"text\"]/@name)", ctxt))) {
@@ -510,9 +520,9 @@ debug("password field name = %s", password_field_name);
             xmlFreeDoc(doc);
             request_dtor(req);
         }
-
+debug("%d", __LINE__);
         // POST validationUrl
-        req = request_post(NULL, STRING_NOCOPY, "%s", validationUrl);
+        req = request_post(REQUEST_FLAG_NONE, NULL, "%s", validationUrl);
         request_add_post_field(req, "credentialToken", token);
         request_add_post_field(req, account_field_name, account);
         request_add_post_field(req, password_field_name, password);
@@ -520,13 +530,14 @@ debug("password field name = %s", password_field_name);
         request_add_post_field(req, "duration", STRINGIFY_EXPANDED(DEFAULT_CONSUMER_KEY_EXPIRATION));
         request_execute(req, RESPONSE_IGNORE, NULL, error); // TODO: check returned value
         request_dtor(req);
-
+debug("%d", __LINE__);
         free(token);
         free(account_field_name);
         free(password_field_name);
     }
     free(validationUrl);
     *expires_at = time(NULL) + DEFAULT_CONSUMER_KEY_EXPIRATION;
+debug("%d", __LINE__);
 
     return consumerKey;
 }

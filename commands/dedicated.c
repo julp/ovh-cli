@@ -19,9 +19,8 @@ static int dedicated_list(int UNUSED(argc), const char **UNUSED(argv), error_t *
     request_t *req;
     xmlNodePtr root, n;
 
-    req = request_get(API_BASE_URL "/dedicated/server");
+    req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server");
     request_add_header(req, "Accept: text/xml");
-    request_sign(req);
     request_execute(req, RESPONSE_XML, (void **) &doc, error);
     request_dtor(req);
     if (NULL == (root = xmlDocGetRootElement(doc))) {

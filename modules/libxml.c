@@ -6,6 +6,7 @@
 static bool libxml_ctor(void)
 {
     xmlInitParser();
+    xmlXPathInit();
 
     return TRUE;
 }

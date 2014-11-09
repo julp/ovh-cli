@@ -201,9 +201,8 @@ static int domain_list(int argc, const char **argv, error_t **error)
         request_t *req;
         xmlNodePtr root, n;
 
-        req = request_get(API_BASE_URL "/domain");
+        req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain");
         request_add_header(req, "Accept: text/xml");
-        request_sign(req);
         request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
         request_dtor(req);
 
@@ -262,9 +261,8 @@ static int get_domain_records(const char *domain, domain_t **d, error_t **error)
         if (NULL == *d) {
             hashtable_put(domains, (void *) domain, *d = domain_new(), NULL);
         }
-        req = request_get(API_BASE_URL "/domain/zone/%s/record", domain);
+        req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/record", domain);
         request_add_header(req, "Accept: text/xml");
-        request_sign(req);
         request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
         request_dtor(req);
         // result
@@ -278,9 +276,8 @@ static int get_domain_records(const char *domain, domain_t **d, error_t **error)
 
                 content = xmlNodeGetContent(n);
                 puts((const char *) content);
-                req = request_get(API_BASE_URL "/domain/zone/%s/record/%s", domain, (const char *) content);
+                req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/record/%s", domain, (const char *) content);
                 request_add_header(req, "Accept: text/xml");
-                request_sign(req);
                 request_success &= request_execute(req, RESPONSE_XML, (void **) &doc, error); // request_success is assumed to be TRUE before the first iteration
                 request_dtor(req);
                 // result
@@ -385,10 +382,9 @@ static int record_add(int argc, const char **argv, error_t **error)
         {
             request_t *req;
 
-            req = request_post(buffer->ptr, STRING_NOCOPY, API_BASE_URL "/domain/zone/%s/record", argv[0]);
+            req = request_post(REQUEST_FLAG_SIGN, buffer->ptr, API_BASE_URL "/domain/zone/%s/record", argv[0]);
             request_add_header(req, "Accept: text/xml");
             request_add_header(req, "Content-type: application/json");
-            request_sign(req);
             request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
             request_dtor(req);
             string_destroy(buffer);
@@ -471,9 +467,8 @@ static int record_delete(int argc, const char **argv, error_t **error)
 
             // request
 #if 0
-            req = request_delete(API_BASE_URL "/domain/zone/%s/%" PRIu32, argv[0], match->id);
+            req = request_delete(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/%" PRIu32, argv[0], match->id);
             request_add_header(req, "Accept: text/xml");
-            request_sign(req);
             request_success = request_execute(req, RESPONSE_IGNORE, NULL, error);
             request_dtor(req);
 #else
@@ -517,8 +512,7 @@ static int record_update(int argc, const char **argv, error_t **error)
         json_document_serialize(doc, buffer);
         json_document_destroy(doc);
     }
-    req = request_put(API_BASE_URL "/domain/zone/%s/%" PRIu32, argv[0], <id>);
-    request_sign(req);
+    req = request_put(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/%" PRIu32, argv[0], <id>);
     request_execute(req, RESPONSE_IGNORE, NULL, error);
     request_dtor(req);
 #endif
