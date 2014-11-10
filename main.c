@@ -9,6 +9,11 @@
 #include "commands/account.h"
 #include "struct/dptrarray.h"
 
+typedef struct {
+    Tokenizer *tokenizer;
+    DPtrArray *possibilities;
+} editline_data_t;
+
 extern module_t openssl_module;
 extern module_t curl_module;
 extern module_t libxml_module;
@@ -103,8 +108,9 @@ void report(int type, const char *format, ...)
 //     }
 }
 
+#if 1
 // TODO: remove backslash before " characters
-static int str_split(const char *string, char ***args)
+int str_split(const char *string, char ***args)
 {
     char *dup;
     int count, i;
@@ -175,6 +181,19 @@ static int str_split(const char *string, char ***args)
 
     return i;
 }
+#else
+static int str_split(const char *string, Tokenizer *tokenizer, char ***argv)
+{
+    int argc;
+
+    tok_reset(tokenizer);
+    if (-1 == tok_str(tokenizer, string, &argc, argv)) {
+        return -1;
+    } else {
+        return argc;
+    }
+}
+#endif
 
 static int run_command(int args_count, const char **args, error_t **error)
 {
@@ -267,23 +286,22 @@ static int strcmpp(const void *p1, const void *p2)
     return strcmp(*(char * const *) p1, *(char * const *) p2);
 }
 
-static unsigned char complete(EditLine *el, int ch)
+static unsigned char complete(EditLine *el, int UNUSED(ch))
 {
-    /*static */Tokenizer *t = NULL;
     const LineInfo *li;
     const char **argv;
-    int argc;
-    int cursorc;
-    int cursoro;
-    int arraylen;
-    int res = CC_ERROR;
-    DPtrArray *possibilities;
+    editline_data_t *client_data;
+    int argc, res, cursorc, cursoro;
 
+    res = CC_ERROR;
     li = el_line(el);
-    t = tok_init(NULL); // TODO: don't create/destroy it each call - just reset it
-    possibilities = dptrarray_new(NULL, NULL, NULL); // TODO: don't create/destroy it each call - just clear it
-    if (-1 == tok_line(t, li, &argc, &argv, &cursorc, &cursoro)) {
-        //
+    if (0 != el_get(el, EL_CLIENTDATA, &client_data)) {
+        return res;
+    }
+    tok_reset(client_data->tokenizer);
+    dptrarray_clear(client_data->possibilities);
+    if (-1 == tok_line(client_data->tokenizer, li, &argc, &argv, &cursorc, &cursoro)) { // TODO: handle cases tok_line returns value > 0
+        return res;
     }
     {
         size_t i;
@@ -338,7 +356,7 @@ static unsigned char complete(EditLine *el, int ch)
                             break;
 #else
                             if (NULL == prev || 0 != strcmp(v, prev)) {
-                                dptrarray_push(possibilities, (void *) v);
+                                dptrarray_push(client_data->possibilities, (void *) v);
                             }
                             prev = v;
 #endif
@@ -348,13 +366,12 @@ static unsigned char complete(EditLine *el, int ch)
             }
         }
     }
-    tok_end(t);
-    switch (dptrarray_length(possibilities)) {
+    switch (dptrarray_length(client_data->possibilities)) {
         case 0:
             res = CC_ERROR;
             break;
         case 1:
-            if (-1 == el_insertstr(el, dptrarray_at_unsafe(possibilities, 0, const char) + cursoro)) {
+            if (-1 == el_insertstr(el, dptrarray_at_unsafe(client_data->possibilities, 0, const char) + cursoro)) {
                 res = CC_ERROR;
             } else {
                 res = CC_REFRESH;
@@ -365,8 +382,8 @@ static unsigned char complete(EditLine *el, int ch)
             Iterator it;
 
             puts("");
-            dptrarray_sort(possibilities, strcmpp);
-            dptrarray_to_iterator(&it, possibilities);
+            dptrarray_sort(client_data->possibilities, strcmpp);
+            dptrarray_to_iterator(&it, client_data->possibilities);
             for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
                 fputc('\t', stdout);
                 fputs(iterator_current(&it, NULL), stdout);
@@ -377,20 +394,26 @@ static unsigned char complete(EditLine *el, int ch)
             break;
         }
     }
-    dptrarray_destroy(possibilities);
 
     return res;
 }
 #endif /* WITH_EDITLINE */
+
+#ifdef TEST
+extern void graph_test(void);
+#endif
 
 int main(int argc, char **argv)
 {
     int ret;
     size_t i;
     error_t *error;
+    editline_data_t client_data;
 
     error = NULL;
     ret = EXIT_SUCCESS;
+    client_data.tokenizer = tok_init(NULL);
+    client_data.possibilities = dptrarray_new(NULL, NULL, NULL);
     for (i = 0; i < ARRAY_SIZE(modules); i++) {
         if (NULL != modules[i]->early_init) {
             modules[i]->early_init();
@@ -402,6 +425,9 @@ int main(int argc, char **argv)
         }
     }
     atexit(cleanup);
+#ifdef TEST
+    graph_test();
+#endif
     if (1 == argc) {
 #ifdef WITH_EDITLINE
         int count;
@@ -418,6 +444,7 @@ int main(int argc, char **argv)
             history(hist, &ev, H_SETUNIQUE, 1);
         }
         el = el_init(*argv, stdin, stdout, stderr);
+        el_set(el, EL_CLIENTDATA, &client_data);
         el_set(el, EL_PROMPT, prompt);
         el_set(el, EL_HIST, history, hist);
         el_set(el, EL_ADDFN, "ed-complete", "Complete argument", complete);
@@ -448,6 +475,8 @@ int main(int argc, char **argv)
         }
 #ifdef WITH_EDITLINE
         history_end(hist);
+        tok_end(client_data.tokenizer);
+        dptrarray_destroy(client_data.possibilities);
         el_end(el);
         puts("");
 #endif /* WITH_EDITLINE */
