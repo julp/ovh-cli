@@ -7,12 +7,7 @@
 #include "modules/api.h"
 #include "modules/libxml.h"
 #include "commands/account.h"
-
-struct buffer {
-    char *ptr;
-    size_t length;
-    size_t allocated;
-};
+#include "struct/xtring.h"
 
 typedef enum {
     HTTP_GET,
@@ -29,8 +24,8 @@ struct request_t {
     const char *data;
     const char *pdata; // if pdata != data, pdata is a copy (= needs to be freed)
     // </CURLOPT_POSTFIELDS>
+    String *buffer;
     http_method_t method;
-    struct buffer buffer; // TODO: struct buffer => String
     unsigned int timestamp;
     struct curl_slist *headers;
     struct curl_httppost *formpost, *lastptr;
@@ -69,18 +64,12 @@ static inline size_t nearest_power(size_t requested_length)
 
 static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
 {
-    struct buffer *b;
+    String *buffer;
     size_t total_size;
 
     total_size = size * nmemb;
-    b = (struct buffer *) userp;
-    if (total_size >= (b->allocated - b->length)) {
-        b->allocated = nearest_power(total_size);
-        b->ptr = mem_renew(b->ptr, *b->ptr, b->allocated);
-    }
-    memcpy(b->ptr + b->length, contents, total_size);
-    b->length += total_size;
-    b->ptr[b->length] = '\0';
+    buffer = (String *) userp;
+    string_append_string_len(buffer, contents, total_size);
 
     return total_size;
 }
@@ -99,7 +88,7 @@ void request_add_header(request_t *req, const char *header)
 }*/
 
 // "$1$" + SHA1_HEX(AS+"+"+CK+"+"+METHOD+"+"+QUERY+"+"+BODY+"+"+TSTAMP)
-static void request_sign(request_t *req)
+static void/*TODO: bool?*/ request_sign(request_t *req/*TODO: error_t **error*/)
 {
     EVP_MD_CTX ctx;
     int i, hash_len;
@@ -174,11 +163,9 @@ static request_t *request_ctor(uint32_t flags, http_method_t method, const char 
     vsprintf(req->url, url, args);
     req->pdata = req->data = NULL;
     req->ch = curl_easy_init();
+    req->buffer = string_new();
     req->formpost = req->lastptr = NULL;
     req->timestamp = (unsigned int) time(NULL);
-    req->buffer.length = 0;
-    req->buffer.allocated = 8192;
-    req->buffer.ptr = mem_new_n(*req->buffer.ptr, req->buffer.allocated);
     if (0 == methods[method].curlconst) {
         curl_easy_setopt(req->ch, CURLOPT_CUSTOMREQUEST, methods[method].name);
     } else {
@@ -187,7 +174,7 @@ static request_t *request_ctor(uint32_t flags, http_method_t method, const char 
 //     curl_easy_setopt(req->ch, CURLOPT_USERAGENT, "ovh-cli");
     curl_easy_setopt(req->ch, CURLOPT_URL, req->url);
     curl_easy_setopt(req->ch, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-    curl_easy_setopt(req->ch, CURLOPT_WRITEDATA, (void *) &req->buffer);
+    curl_easy_setopt(req->ch, CURLOPT_WRITEDATA, (void *) req->buffer);
 
     return req;
 }
@@ -205,7 +192,9 @@ void request_dtor(request_t *req)
         free((void *) req->pdata);
     }
     curl_easy_cleanup(req->ch);
-    free(req->buffer.ptr);
+    if (NULL != req->buffer) {
+        string_destroy(req->buffer);
+    }
 }
 
 request_t *request_get(uint32_t flags, const char *url, ...) /* PRINTF(2, 3) */
@@ -296,8 +285,8 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
         debug("RESPONSE (HTTP status) = %ld", http_status);
         debug("RESPONSE (effective URL) = %s", url);
         debug("RESPONSE (Content-Type) = %s", content_type);
-        debug("RESPONSE (Content-Length) = %zu", req->buffer.length);
-        debug("RESPONSE (body) = %s", req->buffer.ptr);
+        debug("RESPONSE (Content-Length) = %zu", req->buffer->len);
+        debug("RESPONSE (body) = %s", req->buffer->ptr);
         debug("==========");
     }
     if (200 != http_status) {
@@ -305,7 +294,7 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
         if (NULL != content_type && (0 == strcmp(content_type, "application/xml") || 0 == strcmp(content_type, "text/xml"))) {
             xmlDocPtr doc;
 
-            if (NULL != (doc = xmlParseMemory(req->buffer.ptr, req->buffer.length))) {
+            if (NULL != (doc = xmlParseMemory(req->buffer->ptr, req->buffer->len))) {
                 xmlNodePtr root;
 
                 if (NULL != (root = xmlDocGetRootElement(doc)) && xmlHasProp(root, BAD_CAST "message")) {
@@ -318,7 +307,7 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
                 xmlFreeDoc(doc);
             }
             if (NULL != error && NULL == *error) { // an error can be set and any was already set
-                error_set(error, WARN, "failed to parse following xml: %s", req->buffer.ptr);
+                error_set(error, WARN, "failed to parse following xml: %s", req->buffer->ptr);
             }
         } else {
             error_set(error, WARN, "HTTP request to '%s' failed with status %ld", req->url, http_status);
@@ -333,7 +322,7 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
             {
                 htmlParserCtxtPtr ctxt;
 
-                ctxt = htmlCreateMemoryParserCtxt(req->buffer.ptr, req->buffer.length);
+                ctxt = htmlCreateMemoryParserCtxt(req->buffer->ptr, req->buffer->len);
                 assert(NULL != ctxt);
 //                 htmlCtxtUseOptions(ctxt, options);
                 htmlParseDocument(ctxt);
@@ -346,7 +335,7 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
 #if 0
                 xmlParserCtxtPtr ctxt;
 
-                if (NULL == (ctxt = xmlCreateMemoryParserCtxt(req->buffer.ptr, req->buffer.length))) {
+                if (NULL == (ctxt = xmlCreateMemoryParserCtxt(req->buffer->ptr, req->buffer->len))) {
                     return NULL;
                 }
                 xmlCtxtUseOptions(ctxt, 0);
@@ -356,7 +345,7 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
                 doc = ctxt->myDoc;
                 xmlFreeParserCtxt(ctxt);
 #else
-                *((xmlDocPtr *) output) = xmlParseMemory(req->buffer.ptr, req->buffer.length);
+                *((xmlDocPtr *) output) = xmlParseMemory(req->buffer->ptr, req->buffer->len);
 #endif
                 break;
             }
