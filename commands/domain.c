@@ -522,9 +522,9 @@ static int record_update(int argc, const char **argv, error_t **error)
 static const command_t domain_commands[] = {
     { domain_list, 2, (const char * const []) { ARG_MODULE_NAME, "list", NULL } },
     { record_list, 4, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "list", NULL } },
-    { record_add, 8, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "add", ARG_ANY_VALUE, "type", ARG_ANY_VALUE, ARG_ANY_VALUE, NULL } },
-    { record_delete, 5, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "delete", ARG_ANY_VALUE, /*"type", ARG_ANY_VALUE,*/ NULL } },
-    //{ record_update, 5, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "update", ARG_ANY_VALUE, NULL } },
+    { record_add, 8, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", ARG_ANY_VALUE, "add", "type", ARG_ANY_VALUE, ARG_ANY_VALUE, NULL } },
+    { record_delete, 5, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", ARG_ANY_VALUE, "delete", /*"type", ARG_ANY_VALUE,*/ NULL } },
+    //{ record_update, 5, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", ARG_ANY_VALUE, "update", NULL } },
     { NULL }
 };
 

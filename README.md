@@ -30,6 +30,7 @@ cmake . \
     -DAPI_BASE_URL="https://eu.api.ovh.com/1.0"
 make
 ```
+(for now, these parameters have to be set at compile time)
 
 ## Commands
 
@@ -41,8 +42,8 @@ make
     * switch \<nickhandle>
 * domain
     * list
-    * \<domain name> record add \<record name> type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT> \<target>
-    * \<domain name> record delete \<record name> [type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT>]
+    * \<domain name> record \<record name> add type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT> \<target>
+    * \<domain name> record \<record name> delete [type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT>]
 * dedicated
     * list
 * me
