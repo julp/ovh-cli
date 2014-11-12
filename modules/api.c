@@ -51,17 +51,6 @@ bool api_ctor(void)
     return TRUE;
 }
 
-static inline size_t nearest_power(size_t requested_length)
-{
-    int i;
-
-    while ((1U << i) < requested_length) {
-        i++;
-    }
-
-    return (1U << i);
-}
-
 static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
 {
     String *buffer;
@@ -80,15 +69,7 @@ void request_add_header(request_t *req, const char *header)
     req->headers = curl_slist_append(req->headers, header);
 }
 
-/*static size_t hash_httppost_callback(void *arg, const char *buf, size_t len)
-{
-    EVP_DigestUpdate((EVP_MD_CTX *) arg, buf, len);
-
-    return len;
-}*/
-
-// "$1$" + SHA1_HEX(AS+"+"+CK+"+"+METHOD+"+"+QUERY+"+"+BODY+"+"+TSTAMP)
-static void/*TODO: bool?*/ request_sign(request_t *req/*TODO: error_t **error*/)
+static bool request_sign(request_t *req, error_t **error)
 {
     EVP_MD_CTX ctx;
     int i, hash_len;
@@ -98,7 +79,7 @@ static void/*TODO: bool?*/ request_sign(request_t *req/*TODO: error_t **error*/)
     const char *consumer_key = account_key();
 
     if (NULL == consumer_key) {
-        return; // TODO: let caller know we failed
+        return FALSE;
     }
     EVP_MD_CTX_init(&ctx);
     EVP_DigestInit_ex(&ctx, md, NULL);
@@ -111,16 +92,15 @@ static void/*TODO: bool?*/ request_sign(request_t *req/*TODO: error_t **error*/)
     EVP_DigestUpdate(&ctx, req->url, strlen(req->url));
     EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
     // <data>
-    /*if (NULL != req->formpost) {
-        curl_formget(req->formpost, &ctx, hash_httppost_callback);
-    } else */if (NULL != req->pdata) {
+    if (NULL != req->pdata) {
         EVP_DigestUpdate(&ctx, req->pdata, strlen(req->pdata));
     }
     // </data>
     EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
     // <timestamp>
     if (snprintf(buffer, ARRAY_SIZE(buffer), "%u", req->timestamp) >= (int) ARRAY_SIZE(buffer)) {
-        // failed
+        error_set(error, FATAL, "buffer overflow"); // should not happen
+        return FALSE;
     }
     EVP_DigestUpdate(&ctx, buffer, strlen(buffer));
     // </timestamp>
@@ -131,10 +111,9 @@ static void/*TODO: bool?*/ request_sign(request_t *req/*TODO: error_t **error*/)
     *header = '\0';
     p = stpcpy(header, "X-Ovh-Signature: $1$");
     for (i = 0; i < hash_len; i++) {
-        p += snprintf(p, end - p, "%02x", hash[i]);
+        p += snprintf(p, end - p, "%02x", hash[i]); // TODO: check
     }
     request_add_header(req, header);
-//     debug("%s+%s+%s+%s+%s+%s = %s", APPLICATION_SECRET, consumer_key, methods[req->method].name, req->url, NULL == req->pdata ? "" : req->pdata, buffer, header + STR_LEN("X-Ovh-Signature: $1$"));
     // X-Ovh-Timestamp header
     *header = '\0';
     p = stpcpy(header, "X-Ovh-Timestamp: ");
@@ -145,6 +124,8 @@ static void/*TODO: bool?*/ request_sign(request_t *req/*TODO: error_t **error*/)
     p = stpcpy(header, "X-Ovh-Consumer: ");
     p = stpcpy(p, consumer_key);
     request_add_header(req, header);
+
+    return TRUE;
 }
 
 static request_t *request_ctor(uint32_t flags, http_method_t method, const char *url, va_list args)
@@ -258,9 +239,11 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
     char *content_type;
 
     if (HAS_FLAG(req->flags, REQUEST_FLAG_SIGN)) {
-        request_sign(req);
+        if (!request_sign(req, error)) {
+            return FALSE;
+        }
     }
-#if 0
+#ifndef TEST
     if (RESPONSE_IGNORE == output_type) {
         curl_easy_setopt(req->ch, CURLOPT_NOBODY, 1L);
         curl_easy_setopt(req->ch, CURLOPT_WRITEFUNCTION, NULL);
@@ -277,17 +260,34 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
     }
     curl_easy_getinfo(req->ch, CURLINFO_CONTENT_TYPE, &content_type);
     curl_easy_getinfo(req->ch, CURLINFO_RESPONSE_CODE, &http_status);
-    {
-        char *url;
+    if (TRUE) { // TODO: program option and/or variable environment?
+        FILE *fp;
 
-        curl_easy_getinfo(req->ch, CURLINFO_EFFECTIVE_URL, &url);
-        debug("==========");
-        debug("RESPONSE (HTTP status) = %ld", http_status);
-        debug("RESPONSE (effective URL) = %s", url);
-        debug("RESPONSE (Content-Type) = %s", content_type);
-        debug("RESPONSE (Content-Length) = %zu", req->buffer->len);
-        debug("RESPONSE (body) = %s", req->buffer->ptr);
-        debug("==========");
+        if (NULL != (fp = fopen("http.log", "a"))) {
+            char *url;
+            struct curl_slist *e;
+
+            curl_easy_getinfo(req->ch, CURLINFO_EFFECTIVE_URL, &url);
+            fputs("==========\n", fp);
+            fprintf(fp, "<<< (request) URL = %s\n", req->url);
+            fputs("Headers:\n", fp);
+            for (e = req->headers; NULL != e; e = e->next) {
+                fprintf(fp, "- %s\n", e->data);
+            }
+            if (NULL != req->data) {
+                fputs("Body:\n", fp);
+                fputs(req->data, fp);
+                fputc('\n', fp);
+            }
+            fprintf(fp, "\n>>> (reponse) URL = %s\n", url);
+            fprintf(fp, "HTTP status = %ld\n", http_status);
+            fprintf(fp, "Content-Type = %s\n", content_type);
+            fprintf(fp, "Content-Length = %zu\n", req->buffer->len);
+            fputs("Body:\n", fp);
+            fputs(req->buffer->ptr, fp);
+            fputs("\n==========\n", fp);
+            fclose(fp);
+        }
     }
     if (200 != http_status) {
         // API may throw 403 if forbidden (consumer_key no more valid, object that doesn't belong to us) or 404 on unknown objects?
