@@ -426,7 +426,6 @@ const char *request_consumer_key(const char *account, const char *password, time
         request_add_header(req, "Content-type: application/json");
         request_add_header(req, "X-Ovh-Application: " APPLICATION_KEY);
         request_execute(req, RESPONSE_XML, (void **) &doc, error); // TODO: check returned value
-debug("%d", __LINE__);
 #if 0
         puts("====================");
         xmlDocFormatDump(stdout, doc, 1);
@@ -437,7 +436,6 @@ debug("%d", __LINE__);
             request_dtor(req);
             return 0;
         }
-debug("%d", __LINE__);
         consumerKey = xmlGetPropAsString(root, "consumerKey");
         validationUrl = xmlGetPropAsString(root, "validationUrl");
         xmlFreeDoc(doc);
@@ -446,7 +444,6 @@ debug("%d", __LINE__);
         string_destroy(buffer);
 #endif /* JSON_RULES */
     }
-debug("%d", __LINE__);
     {
         char *token;
         char *account_field_name;
@@ -465,14 +462,12 @@ debug("%d", __LINE__);
             htmlDocDump(stdout, doc);
             puts("====================");
 #endif
-debug("%d", __LINE__);
             if (NULL == (ctxt = xmlXPathNewContext(doc))) {
                 xmlFreeDoc(doc);
                 request_dtor(req);
                 free(validationUrl);
                 return 0;
             }
-debug("%d", __LINE__);
             if (NULL == (res = xmlXPathEvalExpression(BAD_CAST "string(//form//input[@name=\"credentialToken\"]/@value)", ctxt))) {
                 xmlXPathFreeObject(res);
                 xmlFreeDoc(doc);
@@ -480,7 +475,6 @@ debug("%d", __LINE__);
                 free(validationUrl);
                 return 0;
             }
-debug("%d", __LINE__);
             token = strdup((char *) xmlXPathCastToString(res));
             xmlXPathFreeObject(res);
             if (NULL == (res = xmlXPathEvalExpression(BAD_CAST "string(//form//input[@type=\"password\"]/@name)", ctxt))) {
@@ -490,7 +484,6 @@ debug("%d", __LINE__);
                 free(validationUrl);
                 return 0;
             }
-debug("%d", __LINE__);
             password_field_name = strdup((char *) xmlXPathCastToString(res));
             xmlXPathFreeObject(res);
             if (NULL == (res = xmlXPathEvalExpression(BAD_CAST "string(//form//input[@type=\"text\"]/@name)", ctxt))) {
@@ -509,7 +502,6 @@ debug("password field name = %s", password_field_name);
             xmlFreeDoc(doc);
             request_dtor(req);
         }
-debug("%d", __LINE__);
         // POST validationUrl
         req = request_post(REQUEST_FLAG_NONE, NULL, "%s", validationUrl);
         request_add_post_field(req, "credentialToken", token);
@@ -519,14 +511,12 @@ debug("%d", __LINE__);
         request_add_post_field(req, "duration", STRINGIFY_EXPANDED(DEFAULT_CONSUMER_KEY_EXPIRATION));
         request_execute(req, RESPONSE_IGNORE, NULL, error); // TODO: check returned value
         request_dtor(req);
-debug("%d", __LINE__);
         free(token);
         free(account_field_name);
         free(password_field_name);
     }
     free(validationUrl);
     *expires_at = time(NULL) + DEFAULT_CONSUMER_KEY_EXPIRATION;
-debug("%d", __LINE__);
 
     return consumerKey;
 }
