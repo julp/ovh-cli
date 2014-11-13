@@ -3,7 +3,7 @@
 
 #include "common.h"
 
-static bool libxml_ctor(void)
+static bool libxml_ctor(graph_t *UNUSED(g))
 {
     xmlInitParser();
     xmlXPathInit();
@@ -20,8 +20,7 @@ DECLARE_MODULE(libxml) = {
     "libxml",
     libxml_ctor,
     NULL,
-    libxml_dtor,
-    NULL
+    libxml_dtor
 };
 
 char *xmlGetPropAsString(xmlNodePtr node, const char *name)

@@ -42,10 +42,7 @@ if(GETTEXT_FOUND)
     list(APPEND MISC_SOURCES "modules/nls.c")
 endif(GETTEXT_FOUND)
 
-# <DEV>
-set(WITH_EDITLINE true)
 option(DEBUG "Enable/disable debugging" OFF)
-# </DEV>
 
 configure_file(
     "config.h.in"
@@ -57,6 +54,7 @@ add_executable(ovh main.c
     modules/openssl.c modules/curl.c modules/libxml.c
     modules/api.c modules/conv.c
     modules/base.c
+    graph.c
     json.c error.c
     struct/iterator.c struct/hashtable.c struct/dptrarray.c struct/xtring.c # struct/stack.c
     commands/account.c commands/domain.c commands/me.c commands/dedicated.c

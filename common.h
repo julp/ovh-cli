@@ -121,10 +121,6 @@ typedef int (*ForeachFunc)();
 # define DECLARE_MODULE(foo) \
     module_t foo##_module
 
-# define ARG_MODULE_NAME ((const char *) 1)
-# define ARG_ANY_VALUE   ((const char *) 2)
-# define ARG_ON_OFF      ((const char *) 3)
-
 typedef enum {
     COMMAND_SUCCESS,
     COMMAND_FAILURE,
@@ -144,19 +140,13 @@ typedef enum {
 # endif /* DEBUG */
 
 # include "error.h"
-
-typedef struct {
-    int (*handle)(int, const char **, error_t **);
-    int argc;
-    const char * const *args;
-} command_t;
+# include "graph.h"
 
 typedef struct {
     const char *name;
-    bool (*early_init)(void);
-    bool (*late_init)(void);
+    bool (*early_init)(graph_t *);
+    bool (*late_init)(graph_t *);
     void (*dtor)(void);
-    const command_t *commands;
 } module_t;
 
 #endif /* COMMON_H */

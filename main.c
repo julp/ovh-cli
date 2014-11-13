@@ -2,14 +2,13 @@
 #include <string.h>
 #include <libxml/parser.h>
 #include "common.h"
-#ifdef WITH_EDITLINE
-# include <histedit.h>
-#endif /* WITH_EDITLINE */
+#include <histedit.h>
 #include "modules/api.h"
 #include "commands/account.h"
 #include "struct/dptrarray.h"
 
 typedef struct {
+    graph_t *graph;
     Tokenizer *tokenizer;
     DPtrArray *possibilities;
 } editline_data_t;
@@ -29,7 +28,7 @@ extern module_t domain_module;
 extern module_t dedicated_module;
 extern module_t me_module;
 
-const module_t */*builtin_*/modules[] = {
+static const module_t */*builtin_*/modules[] = {
     &openssl_module,
     &curl_module,
     &libxml_module,
@@ -45,8 +44,6 @@ const module_t */*builtin_*/modules[] = {
     &dedicated_module,
     &me_module
 };
-
-const size_t /*builtin_*/modules_count = ARRAY_SIZE(/*builtin_*/modules);
 
 void print_error(error_t *error)
 {
@@ -195,6 +192,7 @@ static int str_split(const char *string, Tokenizer *tokenizer, char ***argv)
 }
 #endif
 
+#if 0
 static int run_command(int args_count, const char **args, error_t **error)
 {
     size_t i;
@@ -256,6 +254,7 @@ static int run_command(int args_count, const char **args, error_t **error)
 
     return 0;
 }
+#endif
 
 void cleanup(void)
 {
@@ -268,7 +267,6 @@ void cleanup(void)
     }
 }
 
-#ifdef WITH_EDITLINE
 static const char *prompt(EditLine *UNUSED(e))
 {
     char *p;
@@ -281,6 +279,7 @@ static const char *prompt(EditLine *UNUSED(e))
     return prompt;
 }
 
+#if 0
 static int strcmpp(const void *p1, const void *p2)
 {
     return strcmp(*(char * const *) p1, *(char * const *) p2);
@@ -397,43 +396,40 @@ static unsigned char complete(EditLine *el, int UNUSED(ch))
 
     return res;
 }
-#endif /* WITH_EDITLINE */
-
-#ifdef TEST
-extern void graph_test(void);
 #endif
+
+extern unsigned char graph_complete(EditLine *, int);
 
 int main(int argc, char **argv)
 {
     int ret;
     size_t i;
+    graph_t *g;
     error_t *error;
-    editline_data_t client_data;
 
     error = NULL;
     ret = EXIT_SUCCESS;
-    client_data.tokenizer = tok_init(NULL);
-    client_data.possibilities = dptrarray_new(NULL, NULL, NULL);
+    g = graph_new();
     for (i = 0; i < ARRAY_SIZE(modules); i++) {
         if (NULL != modules[i]->early_init) {
-            modules[i]->early_init();
+            modules[i]->early_init(g);
         }
     }
     for (i = 0; i < ARRAY_SIZE(modules); i++) {
         if (NULL != modules[i]->late_init) {
-            modules[i]->late_init();
+            modules[i]->late_init(g);
         }
     }
     atexit(cleanup);
-#ifdef TEST
-    graph_test();
+#ifdef DEBUG
+    graph_display(g);
 #endif
     if (1 == argc) {
-#ifdef WITH_EDITLINE
         int count;
         EditLine *el;
         History *hist;
         const char *line;
+        editline_data_t client_data;
 
         puts(_("needs help? Type help!"));
         hist = history_init();
@@ -443,49 +439,39 @@ int main(int argc, char **argv)
             history(hist, &ev, H_SETSIZE, 100);
             history(hist, &ev, H_SETUNIQUE, 1);
         }
+        client_data.graph = g;
+        client_data.tokenizer = tok_init(NULL);
+        client_data.possibilities = dptrarray_new(NULL, NULL, NULL);
         el = el_init(*argv, stdin, stdout, stderr);
         el_set(el, EL_CLIENTDATA, &client_data);
         el_set(el, EL_PROMPT, prompt);
         el_set(el, EL_HIST, history, hist);
-        el_set(el, EL_ADDFN, "ed-complete", "Complete argument", complete);
+        el_set(el, EL_ADDFN, "ed-complete", "Complete argument", graph_complete);
         el_set(el, EL_BIND, "^I", "ed-complete", NULL);
         while (NULL != (line = el_gets(el, &count))/* && -1 != count*/) {
-            HistEvent ev;
-#else
-        char line[2048];
-
-        printf("%s> ", account_current());
-        fflush(stdout);
-        while (NULL != fgets(line, STR_SIZE(line), stdin)) {
-#endif /* WITH_EDITLINE */
-            int args_len;
             char **args;
+            int args_len;
+            HistEvent ev;
 
             error = NULL; // reinitialize it
             args_len = str_split(line, &args);
-            run_command(args_len, (const char **) args, &error);
+            graph_run_command(g, args_len, (const char **) args, &error);
             print_error(error);
             free(args[0]);
-#ifdef WITH_EDITLINE
             history(hist, &ev, H_ENTER, line);
-#else
-            printf("%s> ", account_current());
-            fflush(stdout);
-#endif /* WITH_EDITLINE */
         }
-#ifdef WITH_EDITLINE
         history_end(hist);
         tok_end(client_data.tokenizer);
         dptrarray_destroy(client_data.possibilities);
         el_end(el);
         puts("");
-#endif /* WITH_EDITLINE */
     } else {
         --argc;
         ++argv;
-        ret = run_command(argc, (const char **) argv, &error) ? EXIT_SUCCESS : EXIT_FAILURE;
+        ret = graph_run_command(g, argc, (const char **) argv, &error) ? EXIT_SUCCESS : EXIT_FAILURE;
         print_error(error);
     }
+    graph_destroy(g);
 
     return ret;
 }

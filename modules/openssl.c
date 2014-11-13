@@ -1,7 +1,7 @@
 #include <openssl/evp.h>
 #include "common.h"
 
-static bool openssl_ctor(void)
+static bool openssl_ctor(graph_t *UNUSED(g))
 {
     SSL_library_init();
     OpenSSL_add_all_digests();
@@ -18,6 +18,5 @@ DECLARE_MODULE(openssl) = {
     "openssl",
     openssl_ctor,
     NULL,
-    openssl_dtor,
-    NULL
+    openssl_dtor
 };

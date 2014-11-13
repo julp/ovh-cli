@@ -44,7 +44,7 @@ static struct {
     [ HTTP_DELETE ] = { "DELETE", STR_LEN("DELETE"), 0 }
 };
 
-bool api_ctor(void)
+bool api_ctor(graph_t *UNUSED(g))
 {
     md = EVP_sha1();
 
@@ -243,7 +243,7 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
             return FALSE;
         }
     }
-#ifndef TEST
+#ifndef DEBUG
     if (RESPONSE_IGNORE == output_type) {
         curl_easy_setopt(req->ch, CURLOPT_NOBODY, 1L);
         curl_easy_setopt(req->ch, CURLOPT_WRITEFUNCTION, NULL);
@@ -260,7 +260,7 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
     }
     curl_easy_getinfo(req->ch, CURLINFO_CONTENT_TYPE, &content_type);
     curl_easy_getinfo(req->ch, CURLINFO_RESPONSE_CODE, &http_status);
-    if (TRUE) { // TODO: program option and/or variable environment?
+    if (TRUE) { // TODO: command option and/or variable environment?
         FILE *fp;
 
         if (NULL != (fp = fopen("http.log", "a"))) {
@@ -524,7 +524,6 @@ debug("password field name = %s", password_field_name);
 DECLARE_MODULE(api) = {
     "api",
     api_ctor,
-    NULL,
     NULL,
     NULL
 };

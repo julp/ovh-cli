@@ -35,15 +35,17 @@ make
 ## Commands
 
 * account
-    * add \<nickhandle> \<password or use empty string - "" - to not record it> (\<consumer key> expires in|at \<expiration date or delay>)
     * list
-    * delete \<nickhandle>
-    * default \<nickhandle>
-    * switch \<nickhandle>
+    * \<nickhandle>
+        * add \<password or use empty string - "" - to not record it> (\<consumer key> expires in|at \<expiration date or delay>)
+        * delete
+        * default
+        * switch
 * domain
     * list
-    * \<domain name> record \<record name> add type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT> \<target>
-    * \<domain name> record \<record name> delete [type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT>]
+    * \<domain name> record \<record name>
+        * add type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT> \<target>
+        * delete [type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT>]
 * dedicated
     * list
 * me

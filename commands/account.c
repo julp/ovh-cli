@@ -413,7 +413,7 @@ static void account_account_dtor(void *data)
     free(account);
 }
 
-static bool account_early_init(void)
+static bool account_early_init(graph_t *UNUSED(g))
 {
     char *home;
     char buffer[MAXPATHLEN];
@@ -464,12 +464,12 @@ static bool account_early_init(void)
     return TRUE;
 }
 
-static bool account_late_init(void)
-{
-    account_load(NULL);
-
-    return TRUE;
-}
+typedef struct {
+    char *account;
+    char *password;
+    char *expiration;
+    char *consumer_key;
+} account_argument_t;
 
 static void account_dtor(void)
 {
@@ -482,7 +482,7 @@ static void account_dtor(void)
     acd = NULL;
 }
 
-static int account_list(int UNUSED(argc), const char **UNUSED(argv), error_t **UNUSED(error))
+static command_status_t account_list(void *UNUSED(arg), error_t **UNUSED(error))
 {
     Iterator it;
 
@@ -507,7 +507,7 @@ static int account_list(int UNUSED(argc), const char **UNUSED(argv), error_t **U
     }
     iterator_close(&it);
 
-    return 1;
+    return COMMAND_SUCCESS;
 }
 
 /**
@@ -517,47 +517,42 @@ static int account_list(int UNUSED(argc), const char **UNUSED(argv), error_t **U
  * - in order to not record password, use an empty string (with "")
  * - default expiration of consumer key is 0 (unlimited)
  **/
-static int account_add(int argc, const char **argv, error_t **error)
+static command_status_t account_add(void *arg, error_t **error)
 {
     hash_t h;
     time_t expires_at;
-    const char *account, *password, *consumer_key;
+    account_argument_t *args;
 
-    consumer_key = NULL;
     expires_at = (time_t) 0;
-    switch (argc) {
-        case 6:
-            if (0 != strcmp(argv[3], "expires")) {
-                return COMMAND_USAGE;
-            }
-            if (0 == strcmp(argv[4], "in")) {
-                if (!parse_duration(argv[5], &expires_at)) {
-                    return COMMAND_USAGE;
-                }
-            } else if (0 == strcmp(argv[4], "at")) {
-                char *endptr;
-                struct tm ltm = { 0 };
+    args = (account_argument_t *) arg;
 
-                endptr = strptime(argv[5], "%c", &ltm);
-                if (NULL == endptr || '\0' != *endptr) {
-                    return COMMAND_USAGE;
-                }
-                expires_at = mktime(&ltm);
-            } else {
+    assert(NULL != args->account);
+    assert(NULL != args->password);
+
+#if TODO
+    if (NULL != args->expiration) {
+        if (0 != strcmp(argv[3], "expires")) {
+            return COMMAND_USAGE;
+        }
+        if (0 == strcmp(argv[4], "in")) {
+            if (!parse_duration(args->expiration, &expires_at)) {
                 return COMMAND_USAGE;
             }
-            /* no break */
-        case 3:
-            consumer_key = strdup(argv[2]);
-            /* no break */
-        case 2:
-            password = argv[1];
-            account = argv[0];
-            break;
-        default:
+        } else if (0 == strcmp(argv[4], "at")) {
+            char *endptr;
+            struct tm ltm = { 0 };
+
+            endptr = strptime(args->expiration, "%c", &ltm);
+            if (NULL == endptr || '\0' != *endptr) {
+                return COMMAND_USAGE;
+            }
+            expires_at = mktime(&ltm);
+        } else {
             return COMMAND_USAGE;
+        }
     }
-    h = hashtable_hash(acd->accounts, account);
+#endif
+    h = hashtable_hash(acd->accounts, args->account);
     // TODO: how to handle account overwrites? Don't allow it, add an update command? Keep password (if any for both) and non-expired CK (if any for both)?
 #if 0
     if (hashtable_quick_contains(acd->accounts, h, account)) {
@@ -569,13 +564,13 @@ static int account_add(int argc, const char **argv, error_t **error)
         account_t *a;
 
         a = mem_new(*a);
-        a->account = strdup(account);
-        a->password = strdup(password);
-        a->consumer_key = consumer_key;
+        a->account = strdup(args->account);
+        a->password = strdup(args->password);
+        a->consumer_key = strdup(args->consumer_key);
         a->expires_at = expires_at;
         a->modules_data = hashtable_ascii_cs_new(NULL, NULL, NULL);
 //         hashtable_quick_put_ex(acd->accounts, HT_PUT_ON_DUP_KEY_PRESERVE, h, (void *) account, a, NULL);
-        hashtable_quick_put_ex(acd->accounts, 0, h, (void *) account, a, NULL); // TODO: old value (overwrite) is not freed!
+        hashtable_quick_put_ex(acd->accounts, 0, h, (void *) a->account, a, NULL); // TODO: old value (overwrite) is not freed!
         // TODO: if this is the first account, set it as current?
         account_save(error);
     }
@@ -583,49 +578,49 @@ static int account_add(int argc, const char **argv, error_t **error)
     return COMMAND_SUCCESS;
 }
 
-static int account_default_set(int argc, const char **argv, error_t **error)
+static command_status_t account_default_set(void *arg, error_t **error)
 {
     int ret;
     void *ptr;
-    const char *account;
+    account_argument_t *args;
 
-    assert(1 == argc);
-    account = argv[0];
-    if ((ret = hashtable_get(acd->accounts, account, &ptr))) {
+    args = (account_argument_t *) arg;
+    assert(NULL != args->account);
+    if ((ret = hashtable_get(acd->accounts, args->account, &ptr))) {
         acd->autosel = ptr;
         account_save(error);
     } else {
-        error_set(error, NOTICE, "Any account named '%s' was found", account);
+        error_set(error, NOTICE, "Any account named '%s' was found", args->account);
     }
 
     return ret ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static int account_delete(int argc, const char **argv, error_t **error)
+static command_status_t account_delete(void *arg, error_t **error)
 {
     int ret;
-    const char *account;
+    account_argument_t *args;
 
-    assert(1 == argc);
-    account = argv[0];
-    if ((ret = hashtable_delete(acd->accounts, account, DTOR_CALL))) {
+    args = (account_argument_t *) arg;
+    assert(NULL != args->account);
+    if ((ret = hashtable_delete(acd->accounts, args->account, DTOR_CALL))) {
         account_save(error);
     } else {
-        error_set(error, NOTICE, "Any account named '%s' was found", account);
+        error_set(error, NOTICE, "Any account named '%s' was found", args->account);
     }
 
     return ret ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static int account_switch(int argc, const char **argv, error_t **error)
+static command_status_t account_switch(void *arg, error_t **error)
 {
     int ret;
     account_t *ptr;
-    const char *account;
+    account_argument_t *args;
 
-    assert(1 == argc);
-    account = argv[0];
-    if ((ret = hashtable_get(acd->accounts, account, (void **) &ptr))) {
+    args = (account_argument_t *) arg;
+    assert(NULL != args->account);
+    if ((ret = hashtable_get(acd->accounts, args->account, (void **) &ptr))) {
         const char *consumer_key;
 
         acd->current = ptr;
@@ -634,29 +629,48 @@ static int account_switch(int argc, const char **argv, error_t **error)
         }
         account_notify_change();
     } else {
-        error_set(error, NOTICE, "Any account named '%s' was found", account);
+        error_set(error, NOTICE, "Any account named '%s' was found", args->account);
     }
 
     return ret ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static const command_t account_commands[] = {
-    // stackoverflow.com/questions/3875523/lookup-table-in-c
-    { account_list, 2, (const char * const []) { ARG_MODULE_NAME, "list", NULL } },
-    { account_add, 4, (const char * const []) { ARG_MODULE_NAME, "add", ARG_ANY_VALUE, ARG_ANY_VALUE, NULL } },
-    { account_add, 5, (const char * const []) { ARG_MODULE_NAME, "add", ARG_ANY_VALUE, ARG_ANY_VALUE, ARG_ANY_VALUE, NULL } },
-    { account_add, 8, (const char * const []) { ARG_MODULE_NAME, "add", ARG_ANY_VALUE, ARG_ANY_VALUE, ARG_ANY_VALUE, "expires", "in", ARG_ANY_VALUE, NULL } },
-    { account_add, 8, (const char * const []) { ARG_MODULE_NAME, "add", ARG_ANY_VALUE, ARG_ANY_VALUE, ARG_ANY_VALUE, "expires", "at", ARG_ANY_VALUE, NULL } },
-    { account_delete, 3, (const char * const []) { ARG_MODULE_NAME, "delete", ARG_ANY_VALUE, NULL } },
-    { account_switch, 3, (const char * const []) { ARG_MODULE_NAME, "switch", ARG_ANY_VALUE, NULL } },
-    { account_default_set, 3, (const char * const []) { ARG_MODULE_NAME, "default", ARG_ANY_VALUE, NULL } },
-    { NULL }
-};
+static bool account_late_init(graph_t *g)
+{
+    argument_t *arg_account, *arg_password, *arg_consumer_key, *arg_expiration;
+    argument_t *lit_account, *lit_list, *lit_delete, *lit_add, *lit_switch, *lit_default, *lit_expires, *lit_in, *lit_at;
+
+    lit_account = argument_create_literal("account", NULL);
+    lit_list = argument_create_literal("list", account_list);
+    lit_add = argument_create_literal("add", account_add);
+    lit_delete = argument_create_literal("delete", account_delete);
+    lit_default = argument_create_literal("default", account_default_set);
+    lit_switch = argument_create_literal("switch", account_switch);
+    lit_expires = argument_create_literal("expires", NULL);
+    lit_in = argument_create_literal("in", NULL);
+    lit_at = argument_create_literal("at", NULL);
+
+    arg_password = argument_create_string(offsetof(account_argument_t, password), NULL, NULL);
+    arg_expiration = argument_create_string(offsetof(account_argument_t, expiration), NULL, NULL);
+    arg_consumer_key = argument_create_string(offsetof(account_argument_t, consumer_key), NULL, NULL);
+    arg_account = argument_create_string(offsetof(account_argument_t, account), complete_from_hashtable_keys, acd->accounts);
+
+    graph_create_full_path(g, lit_account, lit_list, NULL);
+    graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, NULL);
+    graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, arg_consumer_key, lit_expires, lit_at, arg_expiration, NULL);
+    graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, arg_consumer_key, lit_expires, lit_in, arg_expiration, NULL);
+    graph_create_full_path(g, lit_account, arg_account, lit_delete, NULL);
+    graph_create_full_path(g, lit_account, arg_account, lit_default, NULL);
+    graph_create_full_path(g, lit_account, arg_account, lit_switch, NULL);
+
+    account_load(NULL);
+
+    return TRUE;
+}
 
 DECLARE_MODULE(account) = {
     "account",
     account_early_init,
     account_late_init,
-    account_dtor,
-    account_commands,
+    account_dtor
 };

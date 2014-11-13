@@ -3,17 +3,12 @@
 #include "common.h"
 #include "modules/api.h"
 
-static bool me_ctor(void)
-{
-    return TRUE;
-}
-
 static void me_dtor(void)
 {
     // NOP (for now)
 }
 
-static int me(int UNUSED(argc), const char **UNUSED(argv), error_t **error)
+static command_status_t me(void *UNUSED(arg), error_t **error)
 {
     xmlAttrPtr a;
     xmlDocPtr doc;
@@ -37,15 +32,20 @@ static int me(int UNUSED(argc), const char **UNUSED(argv), error_t **error)
     return 1;
 }
 
-static const command_t me_commands[] = {
-    { me, 1, (const char * const []) { "me", NULL } },
-    { NULL }
-};
+static bool me_ctor(graph_t *g)
+{
+    argument_t *lit_me;
+
+    lit_me = argument_create_literal("me", me);
+
+    graph_create_full_path(g, lit_me, NULL);
+
+    return TRUE;
+}
 
 DECLARE_MODULE(me) = {
     "me",
     me_ctor,
     NULL,
-    me_dtor,
-    me_commands
+    me_dtor
 };

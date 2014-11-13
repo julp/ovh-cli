@@ -3,17 +3,12 @@
 #include "common.h"
 #include "modules/api.h"
 
-static bool dedicated_ctor(void)
-{
-    return TRUE;
-}
-
 static void dedicated_dtor(void)
 {
     // NOP (for now)
 }
 
-static int dedicated_list(int UNUSED(argc), const char **UNUSED(argv), error_t **error)
+static command_status_t dedicated_list(void *UNUSED(arg), error_t **error)
 {
     xmlDocPtr doc;
     request_t *req;
@@ -37,15 +32,21 @@ static int dedicated_list(int UNUSED(argc), const char **UNUSED(argv), error_t *
     return 1;
 }
 
-static const command_t dedicated_commands[] = {
-    { dedicated_list, 2, (const char * const []) { ARG_MODULE_NAME, "list", NULL } },
-    { NULL }
-};
+static bool dedicated_ctor(graph_t *g)
+{
+    argument_t *lit_dedicated, *lit_list;
+
+    lit_dedicated = argument_create_literal("dedicated", NULL);
+    lit_list = argument_create_literal("list", dedicated_list);
+
+    graph_create_full_path(g, lit_dedicated, lit_list, NULL);
+
+    return TRUE;
+}
 
 DECLARE_MODULE(dedicated) = {
     "dedicated",
     dedicated_ctor,
     NULL,
-    dedicated_dtor,
-    dedicated_commands
+    dedicated_dtor
 };

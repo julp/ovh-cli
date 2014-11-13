@@ -57,6 +57,13 @@ typedef struct {
     const char *target;
 } record_t;
 
+typedef struct {
+    char *domain;
+    char *record; // also called subdomain
+    char *value; // also called target
+    char *type;
+} record_argument_t;
+
 #define MODULE_NAME "domain"
 #define ACCOUNT_SPECIFIC 1
 
@@ -108,17 +115,6 @@ static void domain_on_set_account(void **data)
     if (NULL == *data) {
         *data = hashtable_ascii_cs_new((DupFunc) strdup, free, domain_destroy);
     }
-}
-
-static bool domain_ctor(void)
-{
-#ifdef ACCOUNT_SPECIFIC
-    account_register_module_callbacks(MODULE_NAME, (DtorFunc) hashtable_destroy, domain_on_set_account);
-#else
-    domains = hashtable_ascii_cs_new((DupFunc) strdup, free, domain_destroy);
-#endif
-
-    return TRUE;
 }
 
 static void domain_dtor(void)
@@ -182,7 +178,7 @@ static int parse_record(HashTable *records, xmlDocPtr doc)
   <anon>domain2.ext</anon>
 </opt>
 */
-static int domain_list(int argc, const char **argv, error_t **error)
+static command_status_t domain_list(void *UNUSED(arg), error_t **error)
 {
 #ifdef ACCOUNT_SPECIFIC
     HashTable *domains;
@@ -275,7 +271,6 @@ static int get_domain_records(const char *domain, domain_t **d, error_t **error)
                 xmlChar *content;
 
                 content = xmlNodeGetContent(n);
-                puts((const char *) content);
                 req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/record/%s", domain, (const char *) content);
                 request_add_header(req, "Accept: text/xml");
                 request_success &= request_execute(req, RESPONSE_XML, (void **) &doc, error); // request_success is assumed to be TRUE before the first iteration
@@ -293,15 +288,16 @@ static int get_domain_records(const char *domain, domain_t **d, error_t **error)
 }
 
 // TODO: optionnal arguments fieldType and subDomain in query string
-static int record_list(int argc, const char **argv, error_t **error)
+static command_status_t record_list(void *arg, error_t **error)
 {
     domain_t *d;
     Iterator it;
     command_status_t ret;
+    record_argument_t *args;
 
-    assert(3 == argc);
-
-    if (COMMAND_SUCCESS == (ret = get_domain_records(argv[0], &d, error))) {
+    args = (record_argument_t *) arg;
+    assert(NULL != args->domain);
+    if (COMMAND_SUCCESS == (ret = get_domain_records(args->domain, &d, error))) {
         // display
         hashtable_to_iterator(&it, d->records);
         for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
@@ -313,7 +309,7 @@ static int record_list(int argc, const char **argv, error_t **error)
                 record_type_map[r->type].short_name,
                 r->name,
                 NULL == r->name || '\0' == *r->name ? "" : ".",
-                argv[0],
+                args->domain,
                 r->target,
                 r->ttl,
                 r->id
@@ -345,18 +341,18 @@ static bool str_include(const char *search, ...)
 
 // ./ovh domain domain.ext record add toto type CNAME www
 // NOTE: it seems OVH permits to create multiple times a DNS record with same name and type
-static int record_add(int argc, const char **argv, error_t **error)
+static command_status_t record_add(void *arg, error_t **error)
 {
     xmlDocPtr doc;
     bool request_success;
-    const char *target, *type, *subdomain;
+    record_argument_t *args;
 
-    assert(7 == argc);
-    subdomain = argv[3];
-    type = argv[5];
-    target = argv[6];
-    if (!str_include(type, "A", "AAAA", "CNAME", "DKIM", "LOC", "MX", "NAPTR", "NS", "PTR", "SPF", "SRV", "SSHFP", "TXT", NULL)) {
-        error_set(error, WARN, "unknown DNS record type '%s'\n", type);
+    args = (record_argument_t *) arg;
+    assert(NULL != args->type);
+    assert(NULL != args->domain);
+    assert(NULL != args->record);
+    if (!str_include(args->type, "A", "AAAA", "CNAME", "DKIM", "LOC", "MX", "NAPTR", "NS", "PTR", "SPF", "SRV", "SSHFP", "TXT", NULL)) {
+        error_set(error, WARN, "unknown DNS record type '%s'\n", args->type);
         return COMMAND_FAILURE;
     }
     {
@@ -370,10 +366,10 @@ static int record_add(int argc, const char **argv, error_t **error)
             buffer = string_new();
             doc = json_document_new();
             root = json_object();
-            json_object_set_property(root, "target", json_string(target));
-            json_object_set_property(root, "fieldType", json_string(type));
+            json_object_set_property(root, "target", json_string(args->value));
+            json_object_set_property(root, "fieldType", json_string(args->type));
 //             if ('\0' != *subdomain)
-                json_object_set_property(root, "subDomain", json_string(subdomain));
+                json_object_set_property(root, "subDomain", json_string(args->record));
             json_document_set_root(doc, root);
             json_document_serialize(doc, buffer);
             json_document_destroy(doc);
@@ -382,7 +378,7 @@ static int record_add(int argc, const char **argv, error_t **error)
         {
             request_t *req;
 
-            req = request_post(REQUEST_FLAG_SIGN, buffer->ptr, API_BASE_URL "/domain/zone/%s/record", argv[0]);
+            req = request_post(REQUEST_FLAG_SIGN, buffer->ptr, API_BASE_URL "/domain/zone/%s/record", args->domain);
             request_add_header(req, "Accept: text/xml");
             request_add_header(req, "Content-type: application/json");
             request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
@@ -403,8 +399,8 @@ static int record_add(int argc, const char **argv, error_t **error)
         account_current_get_data(MODULE_NAME, /*(void **) */&domains);
         assert(NULL != domains);
 #endif
-        if (!hashtable_get(domains, (void *) argv[0], (void **) &d)) {
-            hashtable_put(domains, (void *) argv[0], d = domain_new(), NULL);
+        if (!hashtable_get(domains, (void *) args->domain, (void **) &d)) {
+            hashtable_put(domains, (void *) args->domain, d = domain_new(), NULL);
         }
         parse_record(d->records, doc);
     }
@@ -412,15 +408,17 @@ static int record_add(int argc, const char **argv, error_t **error)
     return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static int record_delete(int argc, const char **argv, error_t **error)
+static command_status_t record_delete(void *arg, error_t **error)
 {
     domain_t *d;
     record_t *match;
-    const char *record;
     bool request_success;
+    record_argument_t *args;
 
-    record = argv[3];
-    if (request_success = (COMMAND_SUCCESS == get_domain_records(argv[0], &d, error))) {
+    args = (record_argument_t *) arg;
+    assert(NULL != args->domain);
+    assert(NULL != args->record);
+    if (request_success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, error))) {
 #if 0
         // what was the goal? If true, it is more the domain which does not exist!
         if (!hashtable_get(domains, (void *) argv[0], (void **) &d)) {
@@ -438,7 +436,7 @@ static int record_delete(int argc, const char **argv, error_t **error)
                 record_t *r;
 
                 r = iterator_current(&it, NULL);
-                if (0 == strcmp(r->name, record)) { // TODO: strcmp_l? type?
+                if (0 == strcmp(r->name, args->record)) { // TODO: strcmp_l? type?
                     ++matches;
                     match = r;
                 }
@@ -447,7 +445,7 @@ static int record_delete(int argc, const char **argv, error_t **error)
             switch (matches) {
                 case 1:
                 {
-                    printf("Confirm deletion of '%s.%s' (y/N)> ", match->name, argv[0]);
+                    printf("Confirm deletion of '%s.%s' (y/N)> ", match->name, args->domain);
                     fflush(stdout);
                     if ('y' != /*tolower*/(getchar())) {
                         return COMMAND_SUCCESS; // yeah, success because *we* canceled it
@@ -455,10 +453,10 @@ static int record_delete(int argc, const char **argv, error_t **error)
                     break;
                 }
                 case 0:
-                    error_set(error, WARN, "Abort, no record match '%s'\n", argv[3]);
+                    error_set(error, WARN, "Abort, no record match '%s'\n", args->record);
                     return COMMAND_FAILURE;
                 default:
-                    error_set(error, WARN, "Abort, more than one record match '%s'\n", argv[3]);
+                    error_set(error, WARN, "Abort, more than one record match '%s'\n", args->record);
                     return COMMAND_FAILURE;
             }
         }
@@ -467,12 +465,12 @@ static int record_delete(int argc, const char **argv, error_t **error)
 
             // request
 #if 0
-            req = request_delete(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/%" PRIu32, argv[0], match->id);
+            req = request_delete(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/%" PRIu32, args->domain, match->id);
             request_add_header(req, "Accept: text/xml");
             request_success = request_execute(req, RESPONSE_IGNORE, NULL, error);
             request_dtor(req);
 #else
-            printf("deletion of '%s.%s' done\n", match->name, argv[0]);
+            printf("deletion of '%s.%s' done\n", match->name, args->domain);
 #endif
             // result
             if (request_success) {
@@ -487,7 +485,7 @@ static int record_delete(int argc, const char **argv, error_t **error)
 // arguments: [ttl <int>] [name <string>] [target <string>]
 // (in any order)
 // if we change record's name (subDomain), we need to update records cache
-static int record_update(int argc, const char **argv, error_t **error)
+static command_status_t record_update(void *arg, error_t **error)
 {
 #if 0
     uint32_t ttl;
@@ -519,19 +517,54 @@ static int record_update(int argc, const char **argv, error_t **error)
     return TRUE;
 }
 
-static const command_t domain_commands[] = {
-    { domain_list, 2, (const char * const []) { ARG_MODULE_NAME, "list", NULL } },
-    { record_list, 4, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", "list", NULL } },
-    { record_add, 8, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", ARG_ANY_VALUE, "add", "type", ARG_ANY_VALUE, ARG_ANY_VALUE, NULL } },
-    { record_delete, 5, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", ARG_ANY_VALUE, "delete", /*"type", ARG_ANY_VALUE,*/ NULL } },
-    //{ record_update, 5, (const char * const []) { ARG_MODULE_NAME, ARG_ANY_VALUE, "record", ARG_ANY_VALUE, "update", NULL } },
-    { NULL }
-};
+static bool domain_ctor(graph_t *g)
+{
+#ifdef ACCOUNT_SPECIFIC
+    account_register_module_callbacks(MODULE_NAME, (DtorFunc) hashtable_destroy, domain_on_set_account);
+#else
+    domains = hashtable_ascii_cs_new((DupFunc) strdup, free, domain_destroy);
+#endif
+    {
+        argument_t
+            *arg_domain,
+            *arg_record, // called subdomain by OVH
+            *arg_type,
+            *arg_value // called target by OVH
+        ;
+        argument_t *lit_domain, *lit_domain_list;
+        argument_t *lit_record, *lit_record_list, *lit_record_add, *lit_record_delete, *lit_record_update, *lit_record_type;
+
+        // domain ...
+        lit_domain = argument_create_literal("domain", NULL);
+        lit_domain_list = argument_create_literal("list", domain_list);
+        // domain X record ...
+        lit_record = argument_create_literal("record", NULL);
+        lit_record_list = argument_create_literal("list", record_list);
+        lit_record_add = argument_create_literal("add", record_add);
+        lit_record_delete = argument_create_literal("delete", record_delete);
+        lit_record_update = argument_create_literal("update", record_update);
+        lit_record_type = argument_create_literal("type", NULL);
+
+        arg_domain = argument_create_string(offsetof(record_argument_t, domain), NULL, NULL);
+        arg_record = argument_create_string(offsetof(record_argument_t, record), NULL, NULL);
+        arg_type = argument_create_string(offsetof(record_argument_t, type), NULL, NULL); // TODO: choices
+        arg_value = argument_create_string(offsetof(record_argument_t, value), NULL, NULL);
+
+        // domain ...
+        graph_create_full_path(g, lit_domain, lit_domain_list, NULL);
+        // domain X record ...
+        graph_create_full_path(g, lit_domain, arg_domain, lit_record, lit_record_list, NULL);
+        graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_add, arg_value, lit_record_type, arg_type, NULL);
+        graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_delete, NULL);
+//         graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_update, NULL);
+    }
+
+    return TRUE;
+}
 
 DECLARE_MODULE(domain) = {
     MODULE_NAME,
     domain_ctor,
     NULL,
-    domain_dtor,
-    domain_commands
+    domain_dtor
 };

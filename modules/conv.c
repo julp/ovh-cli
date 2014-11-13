@@ -5,7 +5,7 @@
 
 static const char *local;
 
-bool convert_ctor(void)
+bool convert_ctor(graph_t *UNUSED(g))
 {
 #ifdef BSD
     {
@@ -194,7 +194,6 @@ int convert_utf8_to_local(const char *src, size_t src_len, char **dst, size_t *d
 DECLARE_MODULE(conv) = {
     "conv",
     convert_ctor,
-    NULL,
     NULL,
     NULL
 };
