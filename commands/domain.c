@@ -545,8 +545,8 @@ static bool domain_ctor(graph_t *g)
         lit_record_update = argument_create_literal("update", record_update);
         lit_record_type = argument_create_literal("type", NULL);
 
-        arg_domain = argument_create_string(offsetof(record_argument_t, domain), NULL, NULL);
-        arg_record = argument_create_string(offsetof(record_argument_t, record), NULL, NULL);
+        arg_domain = argument_create_string(offsetof(record_argument_t, domain), NULL, NULL); // TODO: completion
+        arg_record = argument_create_string(offsetof(record_argument_t, record), NULL, NULL); // TODO: completion
         arg_type = argument_create_string(offsetof(record_argument_t, type), NULL, NULL); // TODO: choices
         arg_value = argument_create_string(offsetof(record_argument_t, value), NULL, NULL);
 
