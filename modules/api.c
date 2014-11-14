@@ -269,7 +269,7 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
 
             curl_easy_getinfo(req->ch, CURLINFO_EFFECTIVE_URL, &url);
             fputs("==========\n", fp);
-            fprintf(fp, "<<< (request) URL = %s\n", req->url);
+            fprintf(fp, "<<< (request) %s %s\n", methods[req->method].name, req->url);
             fputs("Headers:\n", fp);
             for (e = req->headers; NULL != e; e = e->next) {
                 fprintf(fp, "- %s\n", e->data);
@@ -417,6 +417,7 @@ const char *request_consumer_key(const char *account, const char *password, time
 //             json_object_set_property(root, "redirection", json_string("https://www.mywebsite.com/"));
             JSON_ADD_RULE(rules, "GET", "/*");
             JSON_ADD_RULE(rules, "POST", "/domain/zone/*");
+            JSON_ADD_RULE(rules, "DELETE", "/domain/zone/*");
             json_document_serialize(doc, buffer);
             json_document_destroy(doc);
         }
@@ -495,9 +496,6 @@ const char *request_consumer_key(const char *account, const char *password, time
             }
             account_field_name = strdup((char *) xmlXPathCastToString(res));
             xmlXPathFreeObject(res);
-debug("token = %s", token);
-debug("account field name = %s", account_field_name);
-debug("password field name = %s", password_field_name);
             xmlXPathFreeContext(ctxt);
             xmlFreeDoc(doc);
             request_dtor(req);

@@ -19,7 +19,7 @@ struct argument_t {
     argument_type_t type;
     complete_t complete; // spécifique à ARG_TYPE_STRING et ARG_TYPE_CHOICES
     const char *string; // spécifique à ARG_TYPE_LITERAL
-    command_status_t (*handle)(void *arguments, error_t **); // problème : où renseigne-t-on cette variable ?
+    handle_t handle; // problème : où renseigne-t-on cette variable ?
     // Sur le mot le plus parlant ("list" par exemple) mais ça le rendrait propre à une commande ("list" de "account" serait alors différent de "domain" ou autres)
     // Sur le dernier argument ? Mais "account list", c'est "list" justement le dernier !
     graph_node_t *nextSibling;
@@ -85,7 +85,7 @@ static bool complete_literal(const char *argument, size_t argument_len, DPtrArra
     return TRUE;
 }
 
-argument_t *argument_create_literal(const char *string, command_status_t (*handle)(void *, error_t **))
+argument_t *argument_create_literal(const char *string, handle_t handle)
 {
     argument_t *node;
 
@@ -337,6 +337,10 @@ static graph_node_t *graph_node_find(graph_node_t *parent, const char *value)
     return NULL;
 }
 
+// TODO:
+// - separate completion (2 DPtrArray ?) to distinguish commands to values (eg: domain<tab> will propose "bar.tld", "foo.tld", "list", "xxx.tld")
+// - fill underlaying hashtable on completion to have consistent completion? (eg: domain<tab> will only propose "list" if we haven't yet run "domain list")
+// - indicate the command is complete? (eg: domain list<tab>)
 unsigned char graph_complete(EditLine *el, int UNUSED(ch))
 {
     const char **argv;
@@ -418,6 +422,7 @@ debug("cursorc = %d", cursorc);
             } else {
                 res = CC_REFRESH;
             }
+#if TODO
             if (FALSE) { // TODO: add space if more arguments are expected
                 if (-1 == el_insertstr(el, " ")) {
                     res = CC_ERROR;
@@ -425,6 +430,7 @@ debug("cursorc = %d", cursorc);
                     res = CC_REFRESH;
                 }
             }
+#endif
             break;
         default:
         {
@@ -460,21 +466,26 @@ command_status_t graph_run_command(graph_t *g, int args_count, const char **args
     bzero(arguments, ARRAY_SIZE(arguments));
     if (hashtable_get(g->roots, args[0], (void **) &arg)) {
         int depth;
+        handle_t handle;
         graph_node_t *child;
 
+        handle = arg->handle;
         for (depth = 1; depth < args_count && NULL != arg; depth++) {
             arg = graph_node_find(arg, args[depth]);
             if (((size_t) -1) != arg->offset) {
                 // TODO: typing
                 *((const char **) (arguments + arg->offset)) = args[depth];
             }
+            if (NULL != arg && NULL != arg->handle) {
+                handle = arg->handle;
+            }
         }
         if (NULL == arg) {
             // échec : pas assez d'arguments ou ça ne correspond à rien? (quand il n'y a pas de "chaîne libre")
         } else {
             // arg doit avoir la fin pour un de ses fils
-            if (NULL != arg->handle) { // TEMPORARY
-                ret = arg->handle(&arguments, error);
+            if (NULL != handle) { // TEMPORARY
+                ret = handle((void *) arguments, error);
             } else { // TEMPORARY
                 error_set(error, NOTICE, "unknown command"); // TEMPORARY
             } // TEMPORARY

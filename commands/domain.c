@@ -460,14 +460,10 @@ static command_status_t record_delete(void *arg, error_t **error)
             request_t *req;
 
             // request
-#if 0
-            req = request_delete(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/%" PRIu32, args->domain, match->id);
+            req = request_delete(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/record/%" PRIu32, args->domain, match->id);
             request_add_header(req, "Accept: text/xml");
             request_success = request_execute(req, RESPONSE_IGNORE, NULL, error);
             request_dtor(req);
-#else
-            printf("deletion of '%s.%s' done\n", match->name, args->domain);
-#endif
             // result
             if (request_success) {
                 hashtable_quick_delete(d->records, match->id, NULL, TRUE);

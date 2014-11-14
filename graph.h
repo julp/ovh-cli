@@ -8,6 +8,7 @@ typedef struct argument_t argument_t;
 typedef argument_t graph_node_t;
 typedef struct graph_t graph_t;
 
+typedef command_status_t (*handle_t)(void *, error_t **);
 typedef bool (*complete_t)(const char *, size_t, DPtrArray *, void *);
 
 argument_t *argument_create_choices(size_t, const char *, const char * const *);
