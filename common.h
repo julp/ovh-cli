@@ -144,8 +144,9 @@ typedef enum {
 
 typedef struct {
     const char *name;
-    bool (*early_init)(graph_t *);
-    bool (*late_init)(graph_t *);
+    void (*register_commands)(graph_t *);
+    bool (*early_init)(void);
+    bool (*late_init)(void);
     void (*dtor)(void);
 } module_t;
 

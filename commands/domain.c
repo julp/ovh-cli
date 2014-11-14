@@ -13,40 +13,28 @@ typedef struct {
 } domain_t;
 
 typedef enum {
-    RECORD_TYPE_ANY, /* special value to target any type */
-    RECORD_TYPE_A,
-    RECORD_TYPE_AAAA,
-    RECORD_TYPE_CNAME,
-    RECORD_TYPE_DKIM,
-    RECORD_TYPE_LOC,
-    RECORD_TYPE_MX,
-    RECORD_TYPE_NAPTR,
-    RECORD_TYPE_NS,
-    RECORD_TYPE_PTR,
-    RECORD_TYPE_SPF,
-    RECORD_TYPE_SRV,
-    RECORD_TYPE_SSHFP,
-    RECORD_TYPE_TXT
+#define DECLARE_RECORD_TYPE(name) \
+    RECORD_TYPE_ ## name,
+#include "record.h"
+#undef DECLARE_RECORD_TYPE
 } record_type_t;
 
 static struct {
     const char *short_name;
     // ...
 } record_type_map[] = {
-    [ RECORD_TYPE_ANY ] = { "ANY" },
-    [ RECORD_TYPE_A ] = { "A" },
-    [ RECORD_TYPE_AAAA ] = { "AAAA" },
-    [ RECORD_TYPE_CNAME ] = { "CNAME" },
-    [ RECORD_TYPE_DKIM ] = { "DKIM" },
-    [ RECORD_TYPE_LOC ] = { "LOC" },
-    [ RECORD_TYPE_MX ] = { "MX" },
-    [ RECORD_TYPE_NAPTR ] = { "NAPTR" },
-    [ RECORD_TYPE_NS ] = { "NS" },
-    [ RECORD_TYPE_PTR ] = { "PTR" },
-    [ RECORD_TYPE_SPF ] = { "SPF" },
-    [ RECORD_TYPE_SRV ] = { "SRV" },
-    [ RECORD_TYPE_SSHFP ] = { "SSHFP" },
-    [ RECORD_TYPE_TXT ] = { "TXT" }
+#define DECLARE_RECORD_TYPE(name) \
+    [ RECORD_TYPE_ ## name ] = { #name },
+#include "record.h"
+#undef DECLARE_RECORD_TYPE
+};
+
+static const char *domain_record_types[] = {
+#define DECLARE_RECORD_TYPE(name) \
+    #name,
+#include "record.h"
+#undef DECLARE_RECORD_TYPE
+    NULL
 };
 
 typedef struct {
@@ -115,6 +103,17 @@ static void domain_on_set_account(void **data)
     if (NULL == *data) {
         *data = hashtable_ascii_cs_new((DupFunc) strdup, free, domain_destroy);
     }
+}
+
+static bool domain_ctor(void)
+{
+#ifdef ACCOUNT_SPECIFIC
+    account_register_module_callbacks(MODULE_NAME, (DtorFunc) hashtable_destroy, domain_on_set_account);
+#else
+    domains = hashtable_ascii_cs_new((DupFunc) strdup, free, domain_destroy);
+#endif
+
+    return TRUE;
 }
 
 static void domain_dtor(void)
@@ -321,25 +320,22 @@ static command_status_t record_list(void *arg, error_t **error)
     return ret;
 }
 
-static bool str_include(const char *search, ...)
+static bool str_include(const char *search, const char * const *choices)
 {
-    char *str;
     bool found;
-    va_list ap;
+    const char * const *v;
 
     found = FALSE;
-    va_start(ap, search);
-    while (!found && NULL != (str = va_arg(ap, char *))) {
-        if (0 == strcmp(search, str)) {
+    for (v = choices; !found && NULL != *v; v++) {
+        if (0 == strcmp(search, *v)) {
             found = TRUE;
         }
     }
-    va_end(ap);
 
     return found;
 }
 
-// ./ovh domain domain.ext record add toto type CNAME www
+// ./ovh domain domain.ext record toto add www type CNAME
 // NOTE: it seems OVH permits to create multiple times a DNS record with same name and type
 static command_status_t record_add(void *arg, error_t **error)
 {
@@ -351,7 +347,7 @@ static command_status_t record_add(void *arg, error_t **error)
     assert(NULL != args->type);
     assert(NULL != args->domain);
     assert(NULL != args->record);
-    if (!str_include(args->type, "A", "AAAA", "CNAME", "DKIM", "LOC", "MX", "NAPTR", "NS", "PTR", "SPF", "SRV", "SSHFP", "TXT", NULL)) {
+    if (!str_include(args->type, domain_record_types)) { // NOTE: this should be assumed later by the caller (graph stuffs)
         error_set(error, WARN, "unknown DNS record type '%s'\n", args->type);
         return COMMAND_FAILURE;
     }
@@ -517,53 +513,65 @@ static command_status_t record_update(void *arg, error_t **error)
     return TRUE;
 }
 
-static bool domain_ctor(graph_t *g)
+static bool complete_domains(const char *argument, size_t argument_len, DPtrArray *possibilities, void *data)
 {
-#ifdef ACCOUNT_SPECIFIC
-    account_register_module_callbacks(MODULE_NAME, (DtorFunc) hashtable_destroy, domain_on_set_account);
-#else
-    domains = hashtable_ascii_cs_new((DupFunc) strdup, free, domain_destroy);
-#endif
-    {
-        argument_t
-            *arg_domain,
-            *arg_record, // called subdomain by OVH
-            *arg_type,
-            *arg_value // called target by OVH
-        ;
-        argument_t *lit_domain, *lit_domain_list;
-        argument_t *lit_record, *lit_record_list, *lit_record_add, *lit_record_delete, *lit_record_update, *lit_record_type;
+    HashTable *domains;
 
-        // domain ...
-        lit_domain = argument_create_literal("domain", NULL);
-        lit_domain_list = argument_create_literal("list", domain_list);
-        // domain X record ...
-        lit_record = argument_create_literal("record", NULL);
-        lit_record_list = argument_create_literal("list", record_list);
-        lit_record_add = argument_create_literal("add", record_add);
-        lit_record_delete = argument_create_literal("delete", record_delete);
-        lit_record_update = argument_create_literal("update", record_update);
-        lit_record_type = argument_create_literal("type", NULL);
+    // <TODO> : DRY and fill hashtable if we haven't all domains owned by the current account ?
+    domains = NULL;
+    account_current_get_data(MODULE_NAME, /*(void **) */&domains);
+    assert(NULL != domains);
+    // </TODO>
 
-        arg_domain = argument_create_string(offsetof(record_argument_t, domain), NULL, NULL); // TODO: completion
-        arg_record = argument_create_string(offsetof(record_argument_t, record), NULL, NULL); // TODO: completion
-        arg_type = argument_create_string(offsetof(record_argument_t, type), NULL, NULL); // TODO: choices
-        arg_value = argument_create_string(offsetof(record_argument_t, value), NULL, NULL);
+    return complete_from_hashtable_keys(argument, argument_len, possibilities, domains);
+}
 
-        // domain ...
-        graph_create_full_path(g, lit_domain, lit_domain_list, NULL);
-        // domain X record ...
-        graph_create_full_path(g, lit_domain, arg_domain, lit_record, lit_record_list, NULL);
-        graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_add, arg_value, lit_record_type, arg_type, NULL);
-        graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_delete, NULL);
-//         graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_update, NULL);
-    }
+static bool complete_records(const char *argument, size_t argument_len, DPtrArray *possibilities, void *data)
+{
+    //
+}
 
-    return TRUE;
+// (const char * const []) { "A", "AAAA", "CNAME", "DKIM", "LOC", "MX", "NAPTR", "NS", "PTR", "SPF", "SRV", "SSHFP", "TXT", NULL }
+
+static void domain_regcomm(graph_t *g)
+{
+    argument_t
+        *arg_domain,
+        *arg_record, // called subdomain by OVH
+        *arg_type,
+        *arg_value // called target by OVH
+    ;
+    argument_t *lit_domain, *lit_domain_list;
+    argument_t *lit_record, *lit_record_list, *lit_record_add, *lit_record_delete, *lit_record_update, *lit_record_type;
+
+    // domain ...
+    lit_domain = argument_create_literal("domain", NULL);
+    lit_domain_list = argument_create_literal("list", domain_list);
+    // domain X record ...
+    lit_record = argument_create_literal("record", NULL);
+    lit_record_list = argument_create_literal("list", record_list);
+    lit_record_add = argument_create_literal("add", record_add);
+    lit_record_delete = argument_create_literal("delete", record_delete);
+    lit_record_update = argument_create_literal("update", record_update);
+    lit_record_type = argument_create_literal("type", NULL);
+
+    arg_domain = argument_create_string(offsetof(record_argument_t, domain), "<domain>", complete_domains, NULL);
+    arg_record = argument_create_string(offsetof(record_argument_t, record), "<record>", NULL, NULL); // TODO: completion
+    arg_type = argument_create_choices(offsetof(record_argument_t, type), "<type>",  domain_record_types);
+    arg_value = argument_create_string(offsetof(record_argument_t, value), "<value>", NULL, NULL);
+
+    // domain ...
+    graph_create_full_path(g, lit_domain, lit_domain_list, NULL);
+    // domain X record ...
+    graph_create_full_path(g, lit_domain, arg_domain, lit_record, lit_record_list, NULL);
+    graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_add, arg_value, lit_record_type, arg_type, NULL);
+    graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_delete, NULL);
+//     graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_update, NULL);
 }
 
 DECLARE_MODULE(domain) = {
     MODULE_NAME,
+    domain_regcomm,
     domain_ctor,
     NULL,
     domain_dtor

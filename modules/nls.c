@@ -3,7 +3,7 @@
 
 #define PACKAGE "ovh-cli"
 
-bool nls_ctor(graph_t *UNUSED(g))
+bool nls_ctor(void)
 {
     setlocale(LC_ALL, "");
     bindtextdomain(PACKAGE, LOCALEDIR);
@@ -14,6 +14,7 @@ bool nls_ctor(graph_t *UNUSED(g))
 
 DECLARE_MODULE(nls) = {
     "nls",
+    NULL,
     nls_ctor,
     NULL,
     NULL

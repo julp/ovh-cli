@@ -3,6 +3,13 @@
 #include "common.h"
 #include "modules/api.h"
 
+static bool me_ctor(void)
+{
+    // NOP (for now)
+
+    return TRUE;
+}
+
 static void me_dtor(void)
 {
     // NOP (for now)
@@ -32,19 +39,18 @@ static command_status_t me(void *UNUSED(arg), error_t **error)
     return 1;
 }
 
-static bool me_ctor(graph_t *g)
+static void me_regcomm(graph_t *g)
 {
     argument_t *lit_me;
 
     lit_me = argument_create_literal("me", me);
 
     graph_create_full_path(g, lit_me, NULL);
-
-    return TRUE;
 }
 
 DECLARE_MODULE(me) = {
     "me",
+    me_regcomm,
     me_ctor,
     NULL,
     me_dtor

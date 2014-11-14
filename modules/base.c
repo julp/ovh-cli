@@ -13,7 +13,7 @@ static command_status_t help(void *UNUSED(arg), error_t **UNUSED(error))
     return COMMAND_SUCCESS;
 }
 
-static bool base_ctor(graph_t *g)
+static void base_regcomm(graph_t *g)
 {
     argument_t *lit_help, *lit_quit;
 
@@ -22,13 +22,12 @@ static bool base_ctor(graph_t *g)
 
     graph_create_full_path(g, lit_help, NULL);
     graph_create_full_path(g, lit_quit, NULL);
-
-    return TRUE;
 }
 
 DECLARE_MODULE(base) = {
     "base",
-    base_ctor,
+    base_regcomm,
+    NULL,
     NULL,
     NULL
 };

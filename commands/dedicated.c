@@ -3,6 +3,13 @@
 #include "common.h"
 #include "modules/api.h"
 
+static bool dedicated_ctor(void)
+{
+    // NOP (for now)
+
+    return TRUE;
+}
+
 static void dedicated_dtor(void)
 {
     // NOP (for now)
@@ -32,7 +39,7 @@ static command_status_t dedicated_list(void *UNUSED(arg), error_t **error)
     return 1;
 }
 
-static bool dedicated_ctor(graph_t *g)
+static void dedicated_regcomm(graph_t *g)
 {
     argument_t *lit_dedicated, *lit_list;
 
@@ -40,12 +47,11 @@ static bool dedicated_ctor(graph_t *g)
     lit_list = argument_create_literal("list", dedicated_list);
 
     graph_create_full_path(g, lit_dedicated, lit_list, NULL);
-
-    return TRUE;
 }
 
 DECLARE_MODULE(dedicated) = {
     "dedicated",
+    dedicated_regcomm,
     dedicated_ctor,
     NULL,
     dedicated_dtor

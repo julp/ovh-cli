@@ -1,7 +1,7 @@
 #include <curl/curl.h>
 #include "common.h"
 
-static bool curl_ctor(graph_t *UNUSED(g))
+static bool curl_ctor(void)
 {
     return CURLE_OK == curl_global_init(CURL_GLOBAL_ALL);
 }
@@ -13,6 +13,7 @@ static void curl_dtor(void)
 
 DECLARE_MODULE(curl) = {
     "curl",
+    NULL,
     curl_ctor,
     NULL,
     curl_dtor

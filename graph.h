@@ -10,9 +10,9 @@ typedef struct graph_t graph_t;
 
 typedef bool (*complete_t)(const char *, size_t, DPtrArray *, void *);
 
-argument_t *argument_create_choices(size_t, const char * const *);
+argument_t *argument_create_choices(size_t, const char *, const char * const *);
 argument_t *argument_create_literal(const char *, command_status_t (*) (void *, error_t **));
-argument_t *argument_create_string(size_t, complete_t, void *);
+argument_t *argument_create_string(size_t, const char *, complete_t, void *);
 bool complete_from_hashtable_keys(const char *, size_t, DPtrArray *, void *);
 void graph_create_all_path(graph_node_t *, graph_node_t *, ...) SENTINEL;
 void graph_create_full_path(graph_t *, graph_node_t *, ...) SENTINEL;

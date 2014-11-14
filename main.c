@@ -229,15 +229,20 @@ int main(int argc, char **argv)
     g = graph_new();
     for (i = 0; i < ARRAY_SIZE(modules); i++) {
         if (NULL != modules[i]->early_init) {
-            modules[i]->early_init(g);
-        }
-    }
-    for (i = 0; i < ARRAY_SIZE(modules); i++) {
-        if (NULL != modules[i]->late_init) {
-            modules[i]->late_init(g);
+            modules[i]->early_init();
         }
     }
     atexit(cleanup);
+    for (i = 0; i < ARRAY_SIZE(modules); i++) {
+        if (NULL != modules[i]->late_init) {
+            modules[i]->late_init();
+        }
+    }
+    for (i = 0; i < ARRAY_SIZE(modules); i++) {
+        if (NULL != modules[i]->register_commands) {
+            modules[i]->register_commands(g);
+        }
+    }
 #ifdef DEBUG
     graph_display(g);
 #endif

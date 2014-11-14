@@ -19,7 +19,6 @@ struct argument_t {
     argument_type_t type;
     complete_t complete; // spécifique à ARG_TYPE_STRING et ARG_TYPE_CHOICES
     const char *string; // spécifique à ARG_TYPE_LITERAL
-    const char * const *values; // spécifique à ARG_TYPE_CHOICES
     command_status_t (*handle)(void *arguments, error_t **); // problème : où renseigne-t-on cette variable ?
     // Sur le mot le plus parlant ("list" par exemple) mais ça le rendrait propre à une commande ("list" de "account" serait alors différent de "domain" ou autres)
     // Sur le dernier argument ? Mais "account list", c'est "list" justement le dernier !
@@ -73,6 +72,7 @@ graph_t *graph_new(void)
         node->string = NULL; \
         node->handle = NULL; \
         node->complete = NULL; \
+        node->offset = (size_t) -1; \
         node->nextSibling = node->previousSibling = node->firstChild = node->lastChild = NULL; \
     } while (0);
 
@@ -91,7 +91,6 @@ argument_t *argument_create_literal(const char *string, command_status_t (*handl
 
     CREATE_ARG(node);
     node->type = ARG_TYPE_LITERAL;
-    node->offset = (size_t) -1;
     node->string = string;
     node->handle = handle;
     node->data = (void *) string;
@@ -102,21 +101,9 @@ argument_t *argument_create_literal(const char *string, command_status_t (*handl
 
 static bool complete_choices(const char *argument, size_t argument_len, DPtrArray *possibilities, void *data)
 {
-#if 0
-    Iterator it;
-
-    dptrarray_to_iterator(&it, possibilities);
-    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        on
-        iterator_current(&it, NULL);
-    }
-    iterator_close(&it);
-#endif
     const char * const *v;
-    const char **values;
 
-    values = (const char * const *) data;
-    for (v = values; NULL != *v; v++) {
+    for (v = (const char * const *) data; NULL != *v; v++) {
         if (0 == strncmp(argument, *v, argument_len)) {
             dptrarray_push(possibilities, (void *) *v);
         }
@@ -125,26 +112,28 @@ static bool complete_choices(const char *argument, size_t argument_len, DPtrArra
     return TRUE;
 }
 
-argument_t *argument_create_choices(size_t offset, const char * const *values)
+argument_t *argument_create_choices(size_t offset, const char *hint, const char * const * values)
 {
     argument_t *node;
 
     CREATE_ARG(node);
-    node->type = ARG_TYPE_CHOICES;
+    node->string = hint;
     node->offset = offset;
+    node->type = ARG_TYPE_CHOICES;
     node->complete = complete_choices;
     node->data = (void *) values;
 
     return node;
 }
 
-argument_t *argument_create_string(size_t offset, complete_t complete, void *data)
+argument_t *argument_create_string(size_t offset, const char *hint, complete_t complete, void *data)
 {
     argument_t *node;
 
     CREATE_ARG(node);
-    node->type = ARG_TYPE_STRING;
+    node->string = hint;
     node->offset = offset;
+    node->type = ARG_TYPE_STRING;
     node->complete = complete;
     node->data = data;
 
@@ -263,7 +252,7 @@ static void traverse_graph_node(graph_node_t *node, int depth)
 {
     graph_node_t *current;
 
-    printf("%*c %s\n", depth * 4, ' ', ARG_TYPE_LITERAL == node->type ? node->string : "<TODO>");
+    printf("%*c %s\n", depth * 4, ' ', node->string);
     for (current = node->firstChild; NULL != current; current = current->nextSibling) {
         traverse_graph_node(current, depth + 1);
     }
@@ -271,13 +260,13 @@ static void traverse_graph_node(graph_node_t *node, int depth)
 
 extern int str_split(const char *string, char ***args);
 
-/* <COPIED FROM main.c FOR TESTS> */
+/* <TODO: DRY (share this with main.c)> */
 typedef struct {
     graph_t *graph;
     Tokenizer *tokenizer;
     DPtrArray *possibilities;
 } editline_data_t;
-/* </COPIED FROM main.c FOR TESTS> */
+/* </TODO: DRY> */
 
 static int strcmpp(const void *p1, const void *p2)
 {
@@ -312,9 +301,9 @@ static bool agument_literal_match(argument_t *arg, const char *value/*, size_t v
 
 static bool argument_choices_match(argument_t *arg, const char *value/*, size_t value_len*/)
 {
-    const char **v;
+    const char * const *v;
 
-    for (v = (const char **) arg->data; NULL != *v; v++) {
+    for (v = (const char * const *) arg->data; NULL != *v; v++) {
         if (0 == strcmp(value, *v)) {
             return TRUE;
         }

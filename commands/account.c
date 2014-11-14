@@ -413,7 +413,7 @@ static void account_account_dtor(void *data)
     free(account);
 }
 
-static bool account_early_init(graph_t *UNUSED(g))
+static bool account_early_init(void)
 {
     char *home;
     char buffer[MAXPATHLEN];
@@ -460,6 +460,13 @@ static bool account_early_init(graph_t *UNUSED(g))
     duration_test("3 days 1", FALSE, 0);
     duration_test("3 days 1 second", TRUE, 3 * 24 * 60 * 60 + 1);
 #endif
+
+    return TRUE;
+}
+
+static bool account_late_init(void)
+{
+    account_load(NULL);
 
     return TRUE;
 }
@@ -635,7 +642,7 @@ static command_status_t account_switch(void *arg, error_t **error)
     return ret ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static bool account_late_init(graph_t *g)
+static void account_regcomm(graph_t *g)
 {
     argument_t *arg_account, *arg_password, *arg_consumer_key, *arg_expiration;
     argument_t *lit_account, *lit_list, *lit_delete, *lit_add, *lit_switch, *lit_default, *lit_expires, *lit_in, *lit_at;
@@ -650,10 +657,10 @@ static bool account_late_init(graph_t *g)
     lit_in = argument_create_literal("in", NULL);
     lit_at = argument_create_literal("at", NULL);
 
-    arg_password = argument_create_string(offsetof(account_argument_t, password), NULL, NULL);
-    arg_expiration = argument_create_string(offsetof(account_argument_t, expiration), NULL, NULL);
-    arg_consumer_key = argument_create_string(offsetof(account_argument_t, consumer_key), NULL, NULL);
-    arg_account = argument_create_string(offsetof(account_argument_t, account), complete_from_hashtable_keys, acd->accounts);
+    arg_password = argument_create_string(offsetof(account_argument_t, password), "<password>", NULL, NULL);
+    arg_expiration = argument_create_string(offsetof(account_argument_t, expiration), "<expiration>", NULL, NULL);
+    arg_consumer_key = argument_create_string(offsetof(account_argument_t, consumer_key), "<consumer key>", NULL, NULL);
+    arg_account = argument_create_string(offsetof(account_argument_t, account), "<account>", complete_from_hashtable_keys, acd->accounts);
 
     graph_create_full_path(g, lit_account, lit_list, NULL);
     graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, NULL);
@@ -664,12 +671,11 @@ static bool account_late_init(graph_t *g)
     graph_create_full_path(g, lit_account, arg_account, lit_switch, NULL);
 
     account_load(NULL);
-
-    return TRUE;
 }
 
 DECLARE_MODULE(account) = {
     "account",
+    account_regcomm,
     account_early_init,
     account_late_init,
     account_dtor

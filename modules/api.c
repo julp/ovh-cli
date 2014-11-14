@@ -44,7 +44,7 @@ static struct {
     [ HTTP_DELETE ] = { "DELETE", STR_LEN("DELETE"), 0 }
 };
 
-bool api_ctor(graph_t *UNUSED(g))
+bool api_ctor(void)
 {
     md = EVP_sha1();
 
@@ -523,6 +523,7 @@ debug("password field name = %s", password_field_name);
 
 DECLARE_MODULE(api) = {
     "api",
+    NULL,
     api_ctor,
     NULL,
     NULL
