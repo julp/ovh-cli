@@ -43,9 +43,12 @@ make
         * switch
 * domain
     * list
-    * \<domain name> record \<record name>
-        * add type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT> \<target>
-        * delete [type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT>]
+    * \<domain name>
+        * export
+        * refresh
+        * record \<record name>
+            * add \<target> type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT>
+            * delete [type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT>]
 * dedicated
     * list
 * me

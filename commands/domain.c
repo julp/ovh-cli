@@ -392,7 +392,7 @@ static command_status_t record_add(void *arg, error_t **error)
     assert(NULL != args->type);
     assert(NULL != args->domain);
     assert(NULL != args->record);
-    if (!str_include(args->type, domain_record_types)) { // NOTE: this should be assumed later by the caller (graph stuffs)
+    if (!str_include(args->type, domain_record_types)) { // NOTE: this should be assumed in the future by the caller (graph stuffs)
         error_set(error, WARN, "unknown DNS record type '%s'\n", args->type);
         return COMMAND_FAILURE;
     }
@@ -583,12 +583,30 @@ static bool complete_domains(const char *argument, size_t argument_len, DPtrArra
     return complete_from_hashtable_keys(argument, argument_len, possibilities, domains);
 }
 
+#if 0
 static bool complete_records(const char *argument, size_t argument_len, DPtrArray *possibilities, void *data)
 {
-    //
-}
+    domain_t *d;
+    bool request_success;
 
-// (const char * const []) { "A", "AAAA", "CNAME", "DKIM", "LOC", "MX", "NAPTR", "NS", "PTR", "SPF", "SRV", "SSHFP", "TXT", NULL }
+    if (request_success = (COMMAND_SUCCESS == get_domain_records(/* DOMAIN NAME */, &d, NULL))) {
+        Iterator it;
+
+        hashtable_to_iterator(&it, d->records);
+        for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+            record_t *r;
+
+            r = iterator_current(&it, NULL);
+            if (0 == strncmp(r->name, argument, argument_len)) {
+                dptrarray_push(possibilities, (void *) r->name);
+            }
+        }
+        iterator_close(&it);
+    }
+
+    return request_success;
+}
+#endif
 
 static void domain_regcomm(graph_t *g)
 {
