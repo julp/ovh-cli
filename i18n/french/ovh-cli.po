@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ovh-cli VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2014-10-31 19:01+0100\n"
+"POT-Creation-Date: 2014-11-15 22:52+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,6 +17,22 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: main.c:459
+#: /home/julp/ovh-cli/main.c:256
 msgid "needs help? Type help!"
 msgstr "Besoin d'aide ? Tapez help !"
+
+#: /home/julp/ovh-cli/commands/domain.c:627
+msgid "enabled"
+msgstr "activé"
+
+#: /home/julp/ovh-cli/commands/domain.c:628
+msgid "disabled"
+msgstr "désactivé"
+
+#: /home/julp/ovh-cli/commands/domain.c:629
+msgid "enableInProgress"
+msgstr "activation en cours"
+
+#: /home/julp/ovh-cli/commands/domain.c:630
+msgid "disableInProgress"
+msgstr "désactivation en cours"

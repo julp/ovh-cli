@@ -29,6 +29,7 @@ cmake . \
     -DAPPLICATION_SECRET="<your application secret>" \
     -DAPI_BASE_URL="https://eu.api.ovh.com/1.0"
 make
+(sudo) make install
 ```
 (for now, these parameters have to be set at compile time)
 
@@ -46,6 +47,10 @@ make
     * \<domain name>
         * export
         * refresh
+        * dnssec
+            * status
+            * enable
+            * disable
         * record \<record name>
             * add \<target> type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT>
             * delete [type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT>]

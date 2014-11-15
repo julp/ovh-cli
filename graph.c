@@ -26,7 +26,9 @@ struct argument_t {
     graph_node_t *previousSibling;
     graph_node_t *firstChild;
     graph_node_t *lastChild;
-    void *data;
+    void *data; // TODO: removal in favor of *_data
+    void *completion_data; // data for completion
+    void *command_data; // data to run command
 //     graph_t *owner;
 };
 
@@ -483,7 +485,8 @@ command_status_t graph_run_command(graph_t *g, int args_count, const char **args
         if (NULL == arg) {
             // échec : pas assez d'arguments ou ça ne correspond à rien? (quand il n'y a pas de "chaîne libre")
         } else {
-            // arg doit avoir la fin pour un de ses fils
+            // arg doit avoir "la fin" pour un de ses fils
+            // TODO: créer et ajouter un noeud ou pointeur virtuel pour représenter la fin
             if (NULL != handle) { // TEMPORARY
                 ret = handle((void *) arguments, error);
             } else { // TEMPORARY

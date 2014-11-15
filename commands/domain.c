@@ -514,7 +514,6 @@ static command_status_t record_delete(void *arg, error_t **error)
 
             // request
             req = request_delete(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/record/%" PRIu32, args->domain, match->id);
-            request_add_header(req, "Accept: text/xml");
             request_success = request_execute(req, RESPONSE_IGNORE, NULL, error);
             request_dtor(req);
             // result
@@ -608,6 +607,72 @@ static bool complete_records(const char *argument, size_t argument_len, DPtrArra
 }
 #endif
 
+static command_status_t dnssec_status(void *arg, error_t **error)
+{
+    xmlDocPtr doc;
+    request_t *req;
+    xmlNodePtr root;
+    bool request_success;
+    record_argument_t *args;
+
+    args = (record_argument_t *) arg;
+    assert(NULL != args->domain);
+    req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
+    request_add_header(req, "Accept: text/xml");
+    if (request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error)) {
+        if (NULL != (root = xmlDocGetRootElement(doc))) {
+            xmlChar *content;
+
+#if 0
+            _("enabled")
+            _("disabled")
+            _("enableInProgress")
+            _("disableInProgress")
+#endif
+            if (NULL != (content = xmlGetProp(root, BAD_CAST "status"))) {
+                puts(_((const char *) content));
+                xmlFree(content);
+            }
+        }
+        request_success &= NULL != root;
+        xmlFreeDoc(doc);
+    }
+    request_dtor(req);
+
+    return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
+// TODO: refactor code for dnssec (dis|en)able
+static command_status_t dnssec_enable(void *arg, error_t **error)
+{
+    request_t *req;
+    bool request_success;
+    record_argument_t *args;
+
+    args = (record_argument_t *) arg;
+    assert(NULL != args->domain);
+    req = request_post(REQUEST_FLAG_SIGN, NULL, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
+    request_success = request_execute(req, RESPONSE_IGNORE, NULL, error);
+    request_dtor(req);
+
+    return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
+static command_status_t dnssec_disable(void *arg, error_t **error)
+{
+    request_t *req;
+    bool request_success;
+    record_argument_t *args;
+
+    args = (record_argument_t *) arg;
+    assert(NULL != args->domain);
+    req = request_delete(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
+    request_success = request_execute(req, RESPONSE_IGNORE, NULL, error);
+    request_dtor(req);
+
+    return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
 static void domain_regcomm(graph_t *g)
 {
     argument_t
@@ -617,6 +682,7 @@ static void domain_regcomm(graph_t *g)
         *arg_value // called target by OVH
     ;
     argument_t *lit_domain, *lit_domain_list, *lit_domain_refresh, *lit_domain_export;
+    argument_t *lit_dnssec, *lit_dnssec_status, *lit_dnssec_enable, *lit_dnssec_disable;
     argument_t *lit_record, *lit_record_list, *lit_record_add, *lit_record_delete, *lit_record_update, *lit_record_type;
 
     // domain ...
@@ -624,6 +690,11 @@ static void domain_regcomm(graph_t *g)
     lit_domain_list = argument_create_literal("list", domain_list);
     lit_domain_export = argument_create_literal("export", domain_export);
     lit_domain_refresh = argument_create_literal("refresh", domain_refresh);
+    // domain X dnssec ...
+    lit_dnssec = argument_create_literal("dnssec", NULL);
+    lit_dnssec_status = argument_create_literal("status", dnssec_status);
+    lit_dnssec_enable = argument_create_literal("enable", dnssec_enable);
+    lit_dnssec_disable = argument_create_literal("disable", dnssec_disable);
     // domain X record ...
     lit_record = argument_create_literal("record", NULL);
     lit_record_list = argument_create_literal("list", record_list);
@@ -641,6 +712,10 @@ static void domain_regcomm(graph_t *g)
     graph_create_full_path(g, lit_domain, lit_domain_list, NULL);
     graph_create_full_path(g, lit_domain, arg_domain, lit_domain_export, NULL);
     graph_create_full_path(g, lit_domain, arg_domain, lit_domain_refresh, NULL);
+    // domain X dnssec ...
+    graph_create_full_path(g, lit_domain, arg_domain, lit_dnssec, lit_dnssec_status, NULL);
+    graph_create_full_path(g, lit_domain, arg_domain, lit_dnssec, lit_dnssec_enable, NULL);
+    graph_create_full_path(g, lit_domain, arg_domain, lit_dnssec, lit_dnssec_disable, NULL);
     // domain X record ...
     graph_create_full_path(g, lit_domain, arg_domain, lit_record, lit_record_list, NULL);
     graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_add, arg_value, lit_record_type, arg_type, NULL);
