@@ -319,6 +319,11 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
             case RESPONSE_IGNORE:
                 /* NOP */
                 break;
+            case RESPONSE_TEXT:
+            {
+                *((const char **) output) = req->buffer->ptr;
+                break;
+            }
             case RESPONSE_HTML:
             {
                 htmlParserCtxtPtr ctxt;

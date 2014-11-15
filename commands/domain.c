@@ -235,6 +235,51 @@ static command_status_t domain_list(void *UNUSED(arg), error_t **error)
     return COMMAND_SUCCESS;
 }
 
+static command_status_t domain_export(void *arg, error_t **error)
+{
+    xmlDocPtr doc;
+    request_t *req;
+    xmlNodePtr root;
+    bool request_success;
+    record_argument_t *args;
+
+    args = (record_argument_t *) arg;
+    assert(NULL != args->domain);
+
+    req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/export", args->domain);
+    request_add_header(req, "Accept: text/xml"); // we ask XML instead of JSON else we have to parse/unescape string
+    if (request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error)) {
+        if (NULL != (root = xmlDocGetRootElement(doc))) {
+            xmlChar *content;
+
+            content = xmlNodeGetContent(root);
+            puts((const char *) content);
+            xmlFree(content);
+        }
+        request_success &= NULL != root;
+        xmlFreeDoc(doc);
+    }
+    request_dtor(req);
+
+    return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
+static command_status_t domain_refresh(void *arg, error_t **error)
+{
+    request_t *req;
+    bool request_success;
+    record_argument_t *args;
+
+    args = (record_argument_t *) arg;
+    assert(NULL != args->domain);
+
+    req = request_post(REQUEST_FLAG_SIGN, NULL, API_BASE_URL "/domain/zone/%s/refresh", args->domain);
+    request_success = request_execute(req, RESPONSE_IGNORE, NULL, error); // Response is void
+    request_dtor(req);
+
+    return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
 static int get_domain_records(const char *domain, domain_t **d, error_t **error)
 {
 #ifdef ACCOUNT_SPECIFIC
@@ -553,12 +598,14 @@ static void domain_regcomm(graph_t *g)
         *arg_type,
         *arg_value // called target by OVH
     ;
-    argument_t *lit_domain, *lit_domain_list;
+    argument_t *lit_domain, *lit_domain_list, *lit_domain_refresh, *lit_domain_export;
     argument_t *lit_record, *lit_record_list, *lit_record_add, *lit_record_delete, *lit_record_update, *lit_record_type;
 
     // domain ...
     lit_domain = argument_create_literal("domain", NULL);
     lit_domain_list = argument_create_literal("list", domain_list);
+    lit_domain_export = argument_create_literal("export", domain_export);
+    lit_domain_refresh = argument_create_literal("refresh", domain_refresh);
     // domain X record ...
     lit_record = argument_create_literal("record", NULL);
     lit_record_list = argument_create_literal("list", record_list);
@@ -574,6 +621,8 @@ static void domain_regcomm(graph_t *g)
 
     // domain ...
     graph_create_full_path(g, lit_domain, lit_domain_list, NULL);
+    graph_create_full_path(g, lit_domain, arg_domain, lit_domain_export, NULL);
+    graph_create_full_path(g, lit_domain, arg_domain, lit_domain_refresh, NULL);
     // domain X record ...
     graph_create_full_path(g, lit_domain, arg_domain, lit_record, lit_record_list, NULL);
     graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_add, arg_value, lit_record_type, arg_type, NULL);
