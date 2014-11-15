@@ -43,7 +43,7 @@ typedef struct {
     void (*on_set_account)(void **);
 } module_callbacks_t;
 
-static account_command_data_t *acd;
+static account_command_data_t *acd = NULL;
 
 enum {
     SECONDS_DONE,
@@ -669,8 +669,6 @@ static void account_regcomm(graph_t *g)
     graph_create_full_path(g, lit_account, arg_account, lit_delete, NULL);
     graph_create_full_path(g, lit_account, arg_account, lit_default, NULL);
     graph_create_full_path(g, lit_account, arg_account, lit_switch, NULL);
-
-    account_load(NULL);
 }
 
 DECLARE_MODULE(account) = {
