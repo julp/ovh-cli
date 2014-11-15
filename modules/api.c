@@ -398,7 +398,15 @@ const char *request_consumer_key(const char *account, const char *password, time
             JSON_ADD_RULE(rules, "GET", "/*");
             JSON_ADD_RULE(rules, "POST", "/domain/zone/*");
             JSON_ADD_RULE(rules, "DELETE", "/domain/zone/*");
-            json_document_serialize(doc, buffer);
+            json_document_serialize(
+                doc,
+                buffer,
+#ifdef DEBUG
+                JSON_OPT_PRETTY_PRINT
+#else
+                0
+#endif /* DEBUG */
+            );
             json_document_destroy(doc);
 
 #undef JSON_ADD_RULE

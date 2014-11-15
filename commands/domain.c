@@ -367,7 +367,15 @@ static command_status_t record_add(void *arg, error_t **error)
 //             if ('\0' != *subdomain)
                 json_object_set_property(root, "subDomain", json_string(args->record));
             json_document_set_root(doc, root);
-            json_document_serialize(doc, buffer);
+            json_document_serialize(
+                doc,
+                buffer,
+#ifdef DEBUG
+                JSON_OPT_PRETTY_PRINT
+#else
+                0
+#endif /* DEBUG */
+            );
             json_document_destroy(doc);
         }
         // request
@@ -499,7 +507,15 @@ static command_status_t record_update(void *arg, error_t **error)
             json_object_set_property(root, "subDomain", json_string(subdomain));
         json_object_set_property(root, "ttl", json_integer(ttl));
         json_document_set_root(doc, root);
-        json_document_serialize(doc, buffer);
+        json_document_serialize(
+            doc,
+            buffer,
+#ifdef DEBUG
+            JSON_OPT_PRETTY_PRINT
+#else
+            0
+#endif /* DEBUG */
+        );
         json_document_destroy(doc);
     }
     req = request_put(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/%" PRIu32, argv[0], <id>);

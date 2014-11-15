@@ -16,7 +16,7 @@ typedef enum {
     JSON_TYPE_OBJECT
 } json_type_t;
 
-#define JSON_OPT_PRETTY_PRINT (0<<1)
+#define JSON_OPT_PRETTY_PRINT (1<<0)
 
 #define JSON_MAX_DEPTH 32
 
@@ -49,7 +49,7 @@ enum {
 json_value_t json_array(void) WARN_UNUSED_RESULT;
 void json_document_destroy(json_document_t *);
 json_document_t *json_document_new(void) WARN_UNUSED_RESULT;
-int json_document_serialize(json_document_t *, String *);
+int json_document_serialize(json_document_t *, String *, uint32_t);
 void json_document_set_root(json_document_t *, json_value_t);
 json_value_t json_integer(int64_t) WARN_UNUSED_RESULT;
 json_value_t json_number(double) WARN_UNUSED_RESULT;

@@ -20,11 +20,11 @@
  * - strings have to be UTF-8 encoded
  **/
 
-static int json_array_write(json_document_t *, json_value_t, String *);
-static int json_object_write(json_document_t *, json_value_t, String *);
 static inline json_type_t json_get_type(json_value_t);
+static int json_array_write(json_document_t *, json_value_t, String *, uint32_t);
+static int json_object_write(json_document_t *, json_value_t, String *, uint32_t);
 
-static int json_null_write(json_document_t *doc, json_value_t UNUSED(value), String *buffer)
+static int json_null_write(json_document_t *doc, json_value_t UNUSED(value), String *buffer, uint32_t UNUSED(flags))
 {
     string_append_string_len(buffer, "null", STR_LEN("null"));
     ++doc->values_by_depth[doc->current_depth];
@@ -32,7 +32,7 @@ static int json_null_write(json_document_t *doc, json_value_t UNUSED(value), Str
     return TRUE;
 }
 
-static int json_true_write(json_document_t *doc, json_value_t UNUSED(value), String *buffer)
+static int json_true_write(json_document_t *doc, json_value_t UNUSED(value), String *buffer, uint32_t UNUSED(flags))
 {
     string_append_string_len(buffer, "true", STR_LEN("true"));
     ++doc->values_by_depth[doc->current_depth];
@@ -40,7 +40,7 @@ static int json_true_write(json_document_t *doc, json_value_t UNUSED(value), Str
     return TRUE;
 }
 
-static int json_false_write(json_document_t *doc, json_value_t UNUSED(value), String *buffer)
+static int json_false_write(json_document_t *doc, json_value_t UNUSED(value), String *buffer, uint32_t UNUSED(flags))
 {
     string_append_string_len(buffer, "false", STR_LEN("false"));
     ++doc->values_by_depth[doc->current_depth];
@@ -48,7 +48,7 @@ static int json_false_write(json_document_t *doc, json_value_t UNUSED(value), St
     return TRUE;
 }
 
-static int json_string_write(json_document_t *doc, json_value_t value, String *buffer)
+static int json_string_write(json_document_t *doc, json_value_t value, String *buffer, uint32_t UNUSED(flags))
 {
     json_node_t *node;
 
@@ -61,7 +61,7 @@ static int json_string_write(json_document_t *doc, json_value_t value, String *b
     return TRUE;
 }
 
-static int json_number_write(json_document_t *doc, json_value_t value, String *buffer)
+static int json_number_write(json_document_t *doc, json_value_t value, String *buffer, uint32_t UNUSED(flags))
 {
     assert(JSON_TYPE_NUMBER == json_get_type(value));
 
@@ -80,7 +80,7 @@ static int json_number_write(json_document_t *doc, json_value_t value, String *b
 
 static struct json_type_handler_t {
     DtorFunc dtor;
-    int (*write)(json_document_t *, json_value_t, String *);
+    int (*write)(json_document_t *, json_value_t, String *, uint32_t);
 } handlers[] = {
     [ JSON_TYPE_NULL ] = { NULL, json_null_write },
     [ JSON_TYPE_TRUE ] = { NULL, json_true_write },
@@ -135,7 +135,7 @@ static inline json_type_t json_get_type(json_value_t v)
     return type;
 }
 
-static int json_array_write(json_document_t *doc, json_value_t value, String *buffer)
+static int json_array_write(json_document_t *doc, json_value_t value, String *buffer, uint32_t flags)
 {
     Iterator it;
     json_node_t *node;
@@ -160,16 +160,16 @@ static int json_array_write(json_document_t *doc, json_value_t value, String *bu
         if (doc->values_by_depth[doc->current_depth]) {
             string_append_char(buffer, ',');
         }
-        if (TRUE) {
+        if (HAS_FLAG(flags, JSON_OPT_PRETTY_PRINT)) {
             string_append_char(buffer, '\n');
             string_append_n_times(buffer, "    ", STR_LEN("    "), doc->current_depth);
         }
         handler = json_get_type_handler(v);
-        handler->write(doc, v, buffer);
+        handler->write(doc, v, buffer, flags);
     }
     iterator_close(&it);
     --doc->current_depth;
-    if (TRUE) {
+    if (HAS_FLAG(flags, JSON_OPT_PRETTY_PRINT)) {
         string_append_char(buffer, '\n');
         string_append_n_times(buffer, "    ", STR_LEN("    "), doc->current_depth);
     }
@@ -178,7 +178,7 @@ static int json_array_write(json_document_t *doc, json_value_t value, String *bu
     return TRUE;
 }
 
-static int json_object_write(json_document_t *doc, json_value_t value, String *buffer)
+static int json_object_write(json_document_t *doc, json_value_t value, String *buffer, uint32_t flags)
 {
     Iterator it;
     json_node_t *node;
@@ -200,7 +200,7 @@ static int json_object_write(json_document_t *doc, json_value_t value, String *b
         if (doc->values_by_depth[doc->current_depth]) {
             string_append_char(buffer, ',');
         }
-        if (TRUE) {
+        if (HAS_FLAG(flags, JSON_OPT_PRETTY_PRINT)) {
             string_append_char(buffer, '\n');
             string_append_n_times(buffer, "    ", STR_LEN("    "), doc->current_depth);
         }
@@ -208,11 +208,11 @@ static int json_object_write(json_document_t *doc, json_value_t value, String *b
 //         string_append_char(buffer, ':');
         string_append_string_len(buffer, ": ", STR_LEN(": "));
         handler = json_get_type_handler(v);
-        handler->write(doc, v, buffer);
+        handler->write(doc, v, buffer, flags);
     }
     iterator_close(&it);
     --doc->current_depth;
-    if (TRUE) {
+    if (HAS_FLAG(flags, JSON_OPT_PRETTY_PRINT)) {
         string_append_char(buffer, '\n');
         string_append_n_times(buffer, "    ", STR_LEN("    "), doc->current_depth);
     }
@@ -257,7 +257,7 @@ void json_document_set_root(json_document_t *doc, json_value_t new_root)
     doc->root = new_root;
 }
 
-int json_document_serialize(json_document_t *doc, String *buffer/*, uint32_t flags*/)
+int json_document_serialize(json_document_t *doc, String *buffer, uint32_t flags)
 {
     assert(NULL != doc);
 
@@ -266,7 +266,7 @@ int json_document_serialize(json_document_t *doc, String *buffer/*, uint32_t fla
         const struct json_type_handler_t *handler;
 
         handler = json_get_type_handler(doc->root);
-        handler->write(doc, doc->root, buffer);
+        handler->write(doc, doc->root, buffer, flags);
     }
 
     return TRUE;
