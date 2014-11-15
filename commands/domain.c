@@ -118,14 +118,8 @@ static bool domain_ctor(void)
 
 static void domain_dtor(void)
 {
-#if 0
-#ifdef ACCOUNT_SPECIFIC
-    HashTable *domains;
-
-    if (account_current_get_data(MODULE_NAME, /*(void **) */&domains)) {
-#else
+#ifndef ACCOUNT_SPECIFIC
     if (NULL != domains) {
-#endif
         hashtable_destroy(domains);
     }
 #endif
@@ -185,13 +179,13 @@ static command_status_t domain_list(void *UNUSED(arg), error_t **error)
     bool request_success;
 
     // populate
-    // TODO: hashtable_size(domains) < 1 is not sufficient to known if we have the full list of domains in this hashtable
+    // TODO: hashtable_size(domains) < 1 is not sufficient to know if we have the full list of domains in this hashtable
 #ifdef ACCOUNT_SPECIFIC
     domains = NULL;
     account_current_get_data(MODULE_NAME, /*(void **) */&domains);
     assert(NULL != domains);
 #endif
-    if (hashtable_size(domains) < 1/* || (1 == argc && 0 == strcmp(argv[0], "nocache"))*/) {
+    if (hashtable_size(domains) < 1/* || args->nocache */) {
         xmlDocPtr doc;
         request_t *req;
         xmlNodePtr root, n;
