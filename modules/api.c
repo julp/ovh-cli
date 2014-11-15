@@ -4,6 +4,7 @@
 #include <libxml/xpath.h>
 #include <libxml/HTMLparser.h>
 
+#include "json.h"
 #include "modules/api.h"
 #include "modules/libxml.h"
 #include "commands/account.h"
@@ -152,8 +153,8 @@ static request_t *request_ctor(uint32_t flags, http_method_t method, const char 
     } else {
         curl_easy_setopt(req->ch, methods[method].curlconst, 1L);
     }
-//     curl_easy_setopt(req->ch, CURLOPT_USERAGENT, "ovh-cli");
     curl_easy_setopt(req->ch, CURLOPT_URL, req->url);
+    curl_easy_setopt(req->ch, CURLOPT_USERAGENT, "ovh-cli");
     curl_easy_setopt(req->ch, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
     curl_easy_setopt(req->ch, CURLOPT_WRITEDATA, (void *) req->buffer);
 
@@ -361,12 +362,6 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
 #define STRINGIFY_EXPANDED(x) STRINGIFY(x)
 #define DEFAULT_CONSUMER_KEY_EXPIRATION 86400 /* 1 day */
 
-#define JSON_RULES 1
-
-#ifdef JSON_RULES
-# include "json.h"
-#endif /* JSON_RULES */
-
 const char *request_consumer_key(const char *account, const char *password, time_t *expires_at, error_t **error)
 {
     request_t *req;
@@ -376,24 +371,9 @@ const char *request_consumer_key(const char *account, const char *password, time
     // POST /auth/credential
     {
         xmlDocPtr doc;
+        String *buffer;
         xmlNodePtr root;
 
-#ifndef JSON_RULES
-        req = request_post(REQUEST_FLAG_NONE, API_BASE_URL "/auth/credential", "{ \
-    \"accessRules\": [ \
-        { \
-            \"method\": \"GET\", \
-            \"path\": \"/*\" \
-        }, \
-        { \
-            \"method\": \"POST\", \
-            \"path\": \"/domain/zone/*\" \
-        } \
-    ], \
-    \"redirection\":\"https://www.mywebsite.com/\" \
-}");
-#else
-        String *buffer;
         {
             json_document_t *doc;
             json_value_t root, rules, method;
@@ -420,9 +400,10 @@ const char *request_consumer_key(const char *account, const char *password, time
             JSON_ADD_RULE(rules, "DELETE", "/domain/zone/*");
             json_document_serialize(doc, buffer);
             json_document_destroy(doc);
+
+#undef JSON_ADD_RULE
         }
         req = request_post(REQUEST_FLAG_NONE, buffer->ptr, API_BASE_URL "/auth/credential");
-#endif /* !JSON_RULES */
         request_add_header(req, "Accept: text/xml");
         request_add_header(req, "Content-type: application/json");
         request_add_header(req, "X-Ovh-Application: " APPLICATION_KEY);
@@ -441,9 +422,7 @@ const char *request_consumer_key(const char *account, const char *password, time
         validationUrl = xmlGetPropAsString(root, "validationUrl");
         xmlFreeDoc(doc);
         request_dtor(req);
-#ifdef JSON_RULES
         string_destroy(buffer);
-#endif /* JSON_RULES */
     }
     {
         char *token;
