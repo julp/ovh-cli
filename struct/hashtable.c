@@ -219,7 +219,6 @@ static bool hashtable_put_real(HashTable *this, uint32_t flags, hash_t h, void *
     while (NULL != n) {
         if (n->hash == h && this->ef(key, n->key)) {
             if (NULL != oldvalue) {
-                assert(NULL != oldvalue);
                 *oldvalue = n->data;
             }
             if (!HAS_FLAG(flags, HT_PUT_ON_DUP_KEY_PRESERVE)) {
