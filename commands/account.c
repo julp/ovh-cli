@@ -484,6 +484,9 @@ static void account_dtor(void)
         if (NULL != acd->accounts) {
             hashtable_destroy(acd->accounts);
         }
+        if (NULL != acd->modules_callbacks) {
+            hashtable_destroy(acd->modules_callbacks);
+        }
         free(acd);
     }
     acd = NULL;
@@ -640,6 +643,11 @@ static command_status_t account_switch(void *arg, error_t **error)
     }
 
     return ret ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
+static command_status_t account_update(void *arg, error_t **error)
+{
+    return COMMAND_SUCCESS;
 }
 
 static void account_regcomm(graph_t *g)
