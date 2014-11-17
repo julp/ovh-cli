@@ -46,12 +46,10 @@ static inline uint32_t nearest_power(size_t requested, size_t minimal)
     }
 }
 
-/*
 hash_t value_hash(const void *k)
 {
-    return (hash_t) k; // makes no sense with hash_t = uint32_t on 64 bits arch
+    return (hash_t) k;
 }
-*/
 
 bool value_equal(const void *k1, const void *k2)
 {

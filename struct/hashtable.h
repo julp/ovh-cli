@@ -7,7 +7,7 @@
 
 typedef struct _HashTable HashTable;
 
-typedef uint32_t hash_t;
+typedef uintptr_t hash_t;
 typedef hash_t (*HashFunc)(const void *);
 
 # define HT_FOREACH_ACCEPT   (1<<1)
@@ -46,7 +46,7 @@ bool hashtable_put_ex(HashTable *, uint32_t, void *, void *, void **);
 bool hashtable_quick_put_ex(HashTable *, uint32_t, hash_t, void *, void *, void **);
 size_t hashtable_size(HashTable *);
 bool value_equal(const void *, const void *);
-// hash_t value_hash(const void *);
+hash_t value_hash(const void *);
 void *hashtable_first(HashTable *);
 
 void hashtable_to_iterator(Iterator *, HashTable *);
