@@ -20,7 +20,6 @@ void iterator_init(
     this->collection = collection;
     this->first = first;
     this->last = last;
-    //this->type = type;
     this->current = current;
     this->next = next;
     this->previous = previous;
@@ -78,4 +77,50 @@ void iterator_previous(Iterator *this)
 bool iterator_is_valid(Iterator *this)
 {
     return this->valid(this->collection, &this->state);
+}
+
+static void null_terminated_ptr_array_iterator_first(const void *collection, void **state)
+{
+    assert(NULL != collection);
+    assert(NULL != state);
+
+    *(void ***) state = (void **) collection;
+}
+
+static bool null_terminated_ptr_array_iterator_is_valid(const void *UNUSED(collection), void **state)
+{
+    assert(NULL != state);
+
+    return NULL != **((void ***) state);
+}
+
+static void null_terminated_ptr_array_iterator_current(const void *collection, void **state, void **value, void **key)
+{
+    assert(NULL != collection);
+    assert(NULL != state);
+    assert(NULL != value);
+
+    if (NULL != key) {
+        *((int *) key) = *((void ***) state) - (void **) collection;
+    }
+    *value = **(void ***) state;
+}
+
+static void null_terminated_ptr_array_iterator_next(const void *UNUSED(collection), void **state)
+{
+    assert(NULL != state);
+
+    ++*((void ***) state);
+}
+
+void null_terminated_ptr_array_to_iterator(Iterator *it, void **array)
+{
+    iterator_init(
+        it, array, NULL,
+        null_terminated_ptr_array_iterator_first, NULL,
+        null_terminated_ptr_array_iterator_current,
+        null_terminated_ptr_array_iterator_next, NULL,
+        null_terminated_ptr_array_iterator_is_valid,
+        NULL
+    );
 }

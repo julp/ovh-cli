@@ -44,6 +44,6 @@ void iterator_previous(Iterator *);
 bool iterator_is_valid(Iterator *);
 void iterator_close(Iterator *);
 
-void array_to_iterator(Iterator *, void *, size_t, size_t);
+void null_terminated_ptr_array_to_iterator(Iterator *, void **);
 
 #endif /* !ITERATOR_H */
