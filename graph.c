@@ -8,6 +8,7 @@
 typedef enum {
 //     ARG_TYPE_HEAD, // virtual
 //     ARG_TYPE_TAIL, // virtual
+    ARG_TYPE_END, // dummy
     ARG_TYPE_LITERAL, // "list", "add", ...
     ARG_TYPE_NUMBER,
     ARG_TYPE_CHOICES, // comme le type de record dns
@@ -33,39 +34,11 @@ struct argument_t {
 };
 
 struct graph_t {
-//     DupFunc dup;
     DtorFunc dtor;
     HashTable *roots;
-//     graph_node_t *head;
-//     graph_node_t *tail;
+    HashTable *nodes;
+    graph_node_t *end;
 };
-
-graph_t *graph_new(void)
-{
-    graph_t *g;
-
-    g = mem_new(*g);
-//     g->head = graph_create_node(g, ?);
-//     g->tail = graph_create_node(g, ?);
-    g->roots = hashtable_ascii_cs_new(NULL, NULL, NULL);
-
-    return g;
-}
-
-// graph_node_t */* const */graph_get_head(graph_t *g)
-// {
-//     return g->head;
-// }
-//
-// graph_node_t */* const */graph_get_tail(graph_t *g)
-// {
-//     return g->tail;
-// }
-//
-// graph_node_t *graph_node_append_child(graph_node_t *parent, void *data)
-// {
-//     //
-// }
 
 #define CREATE_ARG(node) \
     do { \
@@ -78,9 +51,21 @@ graph_t *graph_new(void)
         node->nextSibling = node->previousSibling = node->firstChild = node->lastChild = NULL; \
     } while (0);
 
-static bool complete_literal(const char *argument, size_t argument_len, DPtrArray *possibilities, void *data)
+graph_t *graph_new(void)
 {
-    if (0 == strncmp(argument, (const char *) data, argument_len)) {
+    graph_t *g;
+
+    g = mem_new(*g);
+    CREATE_ARG(g->end);
+    g->end->string = "(END)";
+    g->roots = hashtable_ascii_cs_new(NULL, NULL, NULL);
+
+    return g;
+}
+
+static bool complete_literal(void *UNUSED(parsed_arguments), const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *data)
+{
+    if (0 == strncmp(current_argument, (const char *) data, current_argument_len)) {
         dptrarray_push(possibilities, (void *) data);
     }
 
@@ -101,12 +86,12 @@ argument_t *argument_create_literal(const char *string, handle_t handle)
     return node;
 }
 
-static bool complete_choices(const char *argument, size_t argument_len, DPtrArray *possibilities, void *data)
+static bool complete_choices(void *UNUSED(parsed_arguments), const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *data)
 {
     const char * const *v;
 
     for (v = (const char * const *) data; NULL != *v; v++) {
-        if (0 == strncmp(argument, *v, argument_len)) {
+        if (0 == strncmp(current_argument, *v, current_argument_len)) {
             dptrarray_push(possibilities, (void *) *v);
         }
     }
@@ -142,24 +127,70 @@ argument_t *argument_create_string(size_t offset, const char *hint, complete_t c
     return node;
 }
 
-// graph_node_t *graph_create_node(graph_t *g, void *data)
-// {
-//     graph_node_t *node;
-//
-//     node = mem_new(*node);
-//     node->nextSibling = node->previousSibling = node->firstChild = node->lastChild = NULL;
-//     node->data = data;
-//     node->owner = g;
-//
-//     return node;
-// }
+static void traverse_graph_node1(graph_node_t *node, DtorFunc dtor, HashTable *ht)
+{
+    graph_node_t *current, *next;
+
+    current = node->firstChild;
+    while (NULL != current) {
+        next = current->nextSibling;
+#ifdef LAZY_WAY
+        hashtable_quick_put_ex(ht, HT_PUT_ON_DUP_KEY_PRESERVE, (hash_t) current, current, current, NULL);
+#else
+        if (!hashtable_quick_contains(ht, (hash_t) current, current)) {
+            hashtable_quick_put_ex(ht, HT_PUT_ON_DUP_KEY_PRESERVE, (hash_t) current, current, current, NULL);
+#endif
+            traverse_graph_node1(current, dtor, ht);
+            free(current);
+#ifndef LAZY_WAY
+        }
+//         free(current);
+#endif
+        current = next;
+    }
+}
+
+static void traverse_graph_root1(graph_t *g, DtorFunc dtor, HashTable *ht)
+{
+    Iterator it;
+
+    hashtable_to_iterator(&it, g->roots);
+    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        argument_t *arg;
+
+        arg = iterator_current(&it, NULL);
+#ifdef LAZY_WAY
+        hashtable_quick_put_ex(ht, HT_PUT_ON_DUP_KEY_PRESERVE, (hash_t) arg, arg, arg, NULL);
+#else
+        if (!hashtable_quick_contains(ht, (hash_t) arg, arg)) {
+            hashtable_quick_put_ex(ht, HT_PUT_ON_DUP_KEY_PRESERVE, (hash_t) arg, arg, arg, NULL);
+#endif
+            traverse_graph_node1(arg, dtor, ht);
+            free(arg);
+#ifndef LAZY_WAY
+        }
+//         free(arg);
+#endif
+    }
+    iterator_close(&it);
+}
 
 void graph_destroy(graph_t *g)
 {
-    // TODO
-    // pour chaque élément de g->roots
-    // appel à une fonction récursive qui supprime les noeuds (en commençant par ceux de la fin)
-    // ?
+    HashTable *ht;
+
+    assert(NULL != g);
+
+    // HashFunc, EqualFunc, DupFunc, DtorFunc, DtorFunc
+#ifdef LAZY_WAY
+    ht = hashtable_new(value_hash, value_equal, NULL, free, NULL);
+#else
+    ht = hashtable_new(value_hash, value_equal, NULL, NULL, NULL);
+#endif
+    traverse_graph_root1(g, free, ht);
+    hashtable_destroy(ht);
+    hashtable_destroy(g->roots);
+    free(g);
 }
 
 static void graph_node_insert_child(graph_t *g, graph_node_t *parent, graph_node_t *child)
@@ -216,6 +247,7 @@ void graph_create_full_path(graph_t *g, graph_node_t *start, ...) /* SENTINEL */
         parent = node;
     }
     va_end(nodes);
+    graph_node_insert_child(g, parent, g->end);
 }
 
 // créer un chemin entre 2 sommets (end = NULL peut être NULL)
@@ -235,7 +267,7 @@ void graph_create_path(graph_t *g, graph_node_t *start, graph_node_t *end, ...) 
     }
     va_end(nodes);
     if (NULL != end) {
-        graph_node_insert_child(g, node, end);
+        graph_node_insert_child(g, parent, end);
     }
 }
 
@@ -275,7 +307,7 @@ static int strcmpp(const void *p1, const void *p2)
     return strcmp(*(char * const *) p1, *(char * const *) p2);
 }
 
-bool complete_from_hashtable_keys(const char *argument, size_t argument_len, DPtrArray *possibilities, void *data)
+bool complete_from_hashtable_keys(void *arguments, const char *argument, size_t argument_len, DPtrArray *possibilities, void *data)
 {
     Iterator it;
 
@@ -319,11 +351,17 @@ static bool argument_string_match(argument_t *arg, const char *value/*, size_t v
     return TRUE;
 }
 
+static bool argument_end_match(argument_t *arg, const char *value/*, size_t value_len*/)
+{
+    return FALSE;
+}
+
 static argument_description_t descriptions[] = {
     [ ARG_TYPE_NUMBER ] = { "number", NULL },
+    [ ARG_TYPE_END ] = { "", argument_end_match },
     [ ARG_TYPE_LITERAL ] = { "literal", agument_literal_match },
     [ ARG_TYPE_CHOICES ] = { "choices", argument_choices_match },
-    [ ARG_TYPE_STRING ] = { "(free) string", argument_string_match }
+    [ ARG_TYPE_STRING ] = { "a free string", argument_string_match }
 };
 
 static graph_node_t *graph_node_find(graph_node_t *parent, const char *value)
@@ -337,6 +375,19 @@ static graph_node_t *graph_node_find(graph_node_t *parent, const char *value)
     }
 
     return NULL;
+}
+
+static bool graph_node_end_in_children(/*graph_t *g,*/graph_node_t *node)
+{
+    graph_node_t *child;
+
+    for (child = node->firstChild; NULL != child; child = child->nextSibling) {
+        if (ARG_TYPE_END == child->type/*child == g->end*/) {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
 }
 
 // TODO:
@@ -361,6 +412,7 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
         return res;
     } else {
         argument_t *arg;
+        char arguments[8192];
 
 #if 0
         {
@@ -372,6 +424,7 @@ debug("cursorc = %d", cursorc);
             }
         }
 #endif
+        bzero(arguments, ARRAY_SIZE(arguments));
         if (0 == cursorc) {
             Iterator it;
 
@@ -400,6 +453,10 @@ debug("cursorc = %d", cursorc);
 //                     for (child = parent->firstChild; NULL != child; child = child->nextSibling) {
 //                         apply |= descriptions[child->type].matcher(child, value);
 //                     }
+                    if (((size_t) -1) != arg->offset) {
+                        // TODO: typing (bool, uint32_t et autres si nécessaire)
+                        *((const char **) (arguments + arg->offset)) = argv[depth];
+                    }
                 }
                 if (/*apply && */NULL != arg) {
                     graph_node_t *child;
@@ -407,7 +464,7 @@ debug("cursorc = %d", cursorc);
 // debug("ARG = %s", NULL != arg->string ? arg->string : descriptions[arg->type].name);
                     for (child = arg->firstChild; NULL != child; child = child->nextSibling) {
                         if (NULL != child->complete) {
-                            child->complete(NULL == argv[cursorc] ? "" : argv[cursorc], cursoro, client_data->possibilities, child->data);
+                            child->complete((void *) arguments, NULL == argv[cursorc] ? "" : argv[cursorc], cursoro, client_data->possibilities, child->data);
                         }
                     }
                 }
@@ -455,11 +512,102 @@ debug("cursorc = %d", cursorc);
     return res;
 }
 
+static size_t my_vsnprintf(void *args, char *dst, size_t dst_size, const char *fmt, va_list ap)
+{
+    char *w;
+    va_list cpy;
+    const char *r;
+    size_t dst_len;
+
+    w = dst;
+    r = fmt;
+    dst_len = 0;
+    va_copy(cpy, ap);
+    while ('\0' != r) {
+        if ('%' == *r) {
+            ++r;
+            switch (*r) {
+                case '%':
+                    ++dst_len;
+                    if (dst_size > dst_len) {
+                        *w++ = '%';
+                    }
+                    break;
+                case 'S':
+                {
+                    const char *s;
+                    size_t offset, s_len;
+
+                    offset = va_arg(ap, size_t);
+                    s = *((const char **) (args + offset));
+                    s_len = strlen(s);
+                    dst_len += s_len;
+                    if (dst_size > dst_len) {
+                        memcpy(w, s, s_len);
+                        w += s_len;
+                    }
+                    break;
+                }
+                case 's':
+                {
+                    size_t s_len;
+                    const char *s;
+
+                    s = va_arg(ap, const char *);
+                    s_len = strlen(s);
+                    dst_len += s_len;
+                    if (dst_size > dst_len) {
+                        memcpy(w, s, s_len);
+                        w += s_len;
+                    }
+                    break;
+                }
+                case 'U':
+                {
+                    // TODO
+                    break;
+                }
+                case 'u':
+                {
+#include <math.h>
+                    uint32_t num;
+                    size_t num_len;
+
+                    num = va_arg(ap, uint32_t);
+                    num_len = log10(num) + 1;
+                    dst_len += num_len;
+                    if (dst_size > dst_len) {
+                        size_t i;
+                        uint32_t m;
+
+                        i = num_len;
+                        do {
+                            w[i--] = '0' + num % 10;
+                            num /= 10;
+                        } while (0 != num);
+                        w += num_len;
+                    }
+                    break;
+                }
+            }
+        } else {
+            *w++ = *r;
+        }
+        ++r;
+    }
+    va_end(cpy);
+    if (dst_size > dst_len) {
+        *w++ = '\0';
+    }
+
+    return dst_len;
+}
+
 command_status_t graph_run_command(graph_t *g, int args_count, const char **args, error_t **error)
 {
-    argument_t *arg;
     char arguments[8192];
     command_status_t ret;
+    argument_t *prev_arg, *arg;
 
     ret = COMMAND_USAGE;
     if (args_count < 1) {
@@ -473,35 +621,39 @@ command_status_t graph_run_command(graph_t *g, int args_count, const char **args
 
         handle = arg->handle;
         for (depth = 1; depth < args_count && NULL != arg; depth++) {
-            arg = graph_node_find(arg, args[depth]);
+            prev_arg = arg;
+            if (NULL == (arg = graph_node_find(arg, args[depth]))) {
+                error_set(error, NOTICE, "too many arguments");
+                traverse_graph_node(prev_arg, 0);
+                handle = NULL;
+                return COMMAND_USAGE;
+            }
             if (((size_t) -1) != arg->offset) {
-                // TODO: typing
+                // TODO: typing (bool, uint32_t et autres si nécessaire)
                 *((const char **) (arguments + arg->offset)) = args[depth];
             }
             if (NULL != arg && NULL != arg->handle) {
                 handle = arg->handle;
             }
         }
-        if (NULL == arg) {
-            // échec : pas assez d'arguments ou ça ne correspond à rien? (quand il n'y a pas de "chaîne libre")
+        if (NULL == handle || !graph_node_end_in_children(arg)) {
+            error_set(error, NOTICE, "unknown command");
+            traverse_graph_node(arg, 0);
         } else {
-            // arg doit avoir "la fin" pour un de ses fils
-            // TODO: créer et ajouter un noeud ou pointeur virtuel pour représenter la fin
-            if (NULL != handle) { // TEMPORARY
-                ret = handle((void *) arguments, error);
-            } else { // TEMPORARY
-                error_set(error, NOTICE, "unknown command"); // TEMPORARY
-            } // TEMPORARY
+            ret = handle((void *) arguments, error);
         }
+    } else {
+        graph_display(g);
+        error_set(error, NOTICE, "unknown command");
     }
 
     return ret;
 }
+
 void graph_display(graph_t *g)
 {
     Iterator it;
 
-    puts("----------");
     hashtable_to_iterator(&it, g->roots);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         argument_t *arg;
@@ -510,76 +662,4 @@ void graph_display(graph_t *g)
         traverse_graph_node(arg, 0);
     }
     iterator_close(&it);
-    puts("----------");
 }
-
-#if 0
-static command_status_t domain_list(void *arguments, error_t **UNUSED(error))
-{
-    debug("domain list");
-}
-
-typedef struct {
-    char *a;
-    char *b;
-    char *domain;
-    char *c;
-    char *record;
-    char *d;
-    char *e;
-} record_argument_t;
-
-static command_status_t record_list(void *arguments, error_t **UNUSED(error))
-{
-    debug("record list for domain %s", ((record_argument_t *) arguments)->domain);
-}
-
-static command_status_t record_delete(void *arguments, error_t **UNUSED(error))
-{
-    debug("record delete for %s.%s", ((record_argument_t *) arguments)->record, ((record_argument_t *) arguments)->domain);
-}
-
-static command_status_t print_help(void *arguments, error_t **UNUSED(error))
-{
-    debug("help");
-}
-
-graph_t *graph_test(void)
-{
-    graph_t *g;
-    argument_t *help, *domain, *record, *domlist, *reclist, *recdelete, *domainarg, *recordarg, *recnocache;
-    HashTable *domains, *records;
-
-    g = graph_new();
-    domains = hashtable_ascii_cs_new(NULL, NULL, NULL);
-    hashtable_put(domains, (void *) "mars", NULL, NULL);
-    hashtable_put(domains, (void *) "mai", NULL, NULL);
-    hashtable_put(domains, (void *) "aout", NULL, NULL);
-
-    records = hashtable_ascii_cs_new(NULL, NULL, NULL);
-    hashtable_put(records, (void *) "juin", NULL, NULL);
-    hashtable_put(records, (void *) "juillet", NULL, NULL);
-    hashtable_put(records, (void *) "avril", NULL, NULL);
-
-    g = graph_new();
-    help = argument_create_literal("help", print_help);
-    domain = argument_create_literal("domain", NULL);
-    record = argument_create_literal("record", NULL);
-    domlist = argument_create_literal("list", domain_list);
-    reclist = argument_create_literal("list", record_list);
-    recnocache = argument_create_literal("nocache", record_list);
-    recdelete = argument_create_literal("delete", record_delete);
-    domainarg = argument_create_string(offsetof(record_argument_t, domain), complete_from_hashtable_keys, domains);
-    recordarg = argument_create_string(offsetof(record_argument_t, record), complete_from_hashtable_keys, records);
-
-    graph_create_full_path(g, help, NULL);
-    graph_create_full_path(g, domain, domlist, NULL);
-    graph_create_full_path(g, domain, domainarg, record, reclist, NULL);
-    graph_create_path(g, reclist, NULL, recnocache, NULL);
-    graph_create_full_path(g, domain, domainarg, record, recordarg, recdelete, NULL);
-
-    graph_display(g);
-
-    return g;
-}
-#endif

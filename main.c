@@ -243,9 +243,6 @@ int main(int argc, char **argv)
             modules[i]->register_commands(g);
         }
     }
-#ifdef DEBUG
-    graph_display(g);
-#endif
     if (1 == argc) {
         int count;
         EditLine *el;

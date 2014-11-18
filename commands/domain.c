@@ -563,7 +563,7 @@ static command_status_t record_update(void *arg, error_t **error)
     return TRUE;
 }
 
-static bool complete_domains(const char *argument, size_t argument_len, DPtrArray *possibilities, void *data)
+static bool complete_domains(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *data)
 {
     HashTable *domains;
 
@@ -573,16 +573,18 @@ static bool complete_domains(const char *argument, size_t argument_len, DPtrArra
     assert(NULL != domains);
     // </TODO>
 
-    return complete_from_hashtable_keys(argument, argument_len, possibilities, domains);
+    return complete_from_hashtable_keys(parsed_arguments, current_argument, current_argument_len, possibilities, domains);
 }
 
-#if 0
-static bool complete_records(const char *argument, size_t argument_len, DPtrArray *possibilities, void *data)
+static bool complete_records(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *data)
 {
     domain_t *d;
     bool request_success;
+    record_argument_t *args;
 
-    if (request_success = (COMMAND_SUCCESS == get_domain_records(/* DOMAIN NAME */, &d, NULL))) {
+    args = (record_argument_t *) parsed_arguments;
+    assert(NULL != args->domain);
+    if (request_success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, NULL))) {
         Iterator it;
 
         hashtable_to_iterator(&it, d->records);
@@ -590,7 +592,7 @@ static bool complete_records(const char *argument, size_t argument_len, DPtrArra
             record_t *r;
 
             r = iterator_current(&it, NULL);
-            if (0 == strncmp(r->name, argument, argument_len)) {
+            if (0 == strncmp(r->name, current_argument, current_argument_len)) {
                 dptrarray_push(possibilities, (void *) r->name);
             }
         }
@@ -599,7 +601,6 @@ static bool complete_records(const char *argument, size_t argument_len, DPtrArra
 
     return request_success;
 }
-#endif
 
 static command_status_t dnssec_status(void *arg, error_t **error)
 {
@@ -694,11 +695,11 @@ static void domain_regcomm(graph_t *g)
     lit_record_list = argument_create_literal("list", record_list);
     lit_record_add = argument_create_literal("add", record_add);
     lit_record_delete = argument_create_literal("delete", record_delete);
-    lit_record_update = argument_create_literal("update", record_update);
+//     lit_record_update = argument_create_literal("update", record_update);
     lit_record_type = argument_create_literal("type", NULL);
 
     arg_domain = argument_create_string(offsetof(record_argument_t, domain), "<domain>", complete_domains, NULL);
-    arg_record = argument_create_string(offsetof(record_argument_t, record), "<record>", NULL, NULL); // TODO: completion
+    arg_record = argument_create_string(offsetof(record_argument_t, record), "<record>", complete_records, NULL); // TODO: completion
     arg_type = argument_create_choices(offsetof(record_argument_t, type), "<type>",  domain_record_types);
     arg_value = argument_create_string(offsetof(record_argument_t, value), "<value>", NULL, NULL);
 
