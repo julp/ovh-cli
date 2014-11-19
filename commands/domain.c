@@ -287,6 +287,7 @@ static int get_domain_records(const char *domain, domain_t **d, error_t **error)
     account_current_get_data(MODULE_NAME, /*(void **) */&domains);
     assert(NULL != domains);
 #endif
+    request_success = TRUE;
     if (!hashtable_get(domains, (void *) domain, (void **) d) || !(*d)->uptodate) {
         xmlDocPtr doc;
         request_t *req;
@@ -699,7 +700,7 @@ static void domain_regcomm(graph_t *g)
     lit_record_type = argument_create_literal("type", NULL);
 
     arg_domain = argument_create_string(offsetof(record_argument_t, domain), "<domain>", complete_domains, NULL);
-    arg_record = argument_create_string(offsetof(record_argument_t, record), "<record>", complete_records, NULL); // TODO: completion
+    arg_record = argument_create_string(offsetof(record_argument_t, record), "<record>", complete_records, NULL);
     arg_type = argument_create_choices(offsetof(record_argument_t, type), "<type>",  domain_record_types);
     arg_value = argument_create_string(offsetof(record_argument_t, value), "<value>", NULL, NULL);
 
