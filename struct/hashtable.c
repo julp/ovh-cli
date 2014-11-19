@@ -630,6 +630,7 @@ void hashtable_to_iterator(Iterator *it, HashTable *this)
 
 #ifdef DEBUG
 # include <stdio.h>
+# include <inttypes.h>
 void hashtable_print(HashTable *this)
 {
     size_t i;
@@ -639,7 +640,7 @@ void hashtable_print(HashTable *this)
         n = this->nodes[i];
         printf("%zu/%zu:\n", i, this->capacity);
         while (NULL != n) {
-            printf("    %p <==> %p (%d)\n", n->key, n->data, n->hash);
+            printf("    %p <==> %p (%" PRIuPTR ")\n", n->key, n->data, n->hash);
             n = n->nNext;
         }
     }
