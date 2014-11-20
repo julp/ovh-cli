@@ -368,21 +368,6 @@ static command_status_t record_list(void *arg, error_t **error)
     return ret;
 }
 
-static bool str_include(const char *search, const char * const *choices)
-{
-    bool found;
-    const char * const *v;
-
-    found = FALSE;
-    for (v = choices; !found && NULL != *v; v++) {
-        if (0 == strcmp(search, *v)) {
-            found = TRUE;
-        }
-    }
-
-    return found;
-}
-
 // ./ovh domain domain.ext record toto add www type CNAME
 // NOTE: it seems OVH permits to create multiple times a DNS record with same name and type
 static command_status_t record_add(void *arg, error_t **error)
@@ -392,15 +377,9 @@ static command_status_t record_add(void *arg, error_t **error)
     domain_record_argument_t *args;
 
     args = (domain_record_argument_t *) arg;
-    assert(-1 != args->type);
+    assert(-1 != args->type); // TODO: not really relevant
     assert(NULL != args->domain);
     assert(NULL != args->record);
-#if 0
-    if (!str_include(args->type, domain_record_types)) { // NOTE: this should be assumed in the future by the caller (graph stuffs)
-        error_set(error, WARN, "unknown DNS record type '%s'\n", args->type);
-        return COMMAND_FAILURE;
-    }
-#endif
     {
         String *buffer;
 
