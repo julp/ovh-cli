@@ -3,9 +3,12 @@
 
 #include "common.h"
 #include "json.h"
+#include "util.h"
 #include "modules/api.h"
 #include "modules/libxml.h"
 #include "struct/hashtable.h"
+
+// account 0,N <=> 1,1 domain 0,N <=> 1,1 record
 
 typedef struct {
     bool uptodate;
@@ -489,9 +492,7 @@ static command_status_t record_delete(void *arg, error_t **error)
             switch (matches) {
                 case 1:
                 {
-                    printf("Confirm deletion of '%s.%s' (y/N)> ", match->name, args->domain);
-                    fflush(stdout);
-                    if ('y' != /*tolower*/(getchar())) {
+                    if (!confirm("Confirm deletion of '%s.%s'", match->name, args->domain)) {
                         return COMMAND_SUCCESS; // yeah, success because *we* canceled it
                     }
                     break;
