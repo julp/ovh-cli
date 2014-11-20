@@ -8,12 +8,16 @@
 #include "modules/libxml.h"
 #include "struct/hashtable.h"
 
-// account 0,N <=> 1,1 domain 0,N <=> 1,1 record
+#define MODULE_NAME "domain"
 
-typedef struct {
-    bool uptodate;
-    HashTable *records;
-} domain_t;
+#define FETCH_ACCOUNT_DOMAINS(/*domain_set **/ ds) \
+    do { \
+        ds = NULL; \
+        account_current_get_data(MODULE_NAME, &ds); \
+        assert(NULL != ds); \
+    } while (0);
+
+// account 0,N <=> 1,1 domain 0,N <=> 1,1 record
 
 typedef enum {
 #define DECLARE_RECORD_TYPE(name) \
@@ -40,6 +44,19 @@ static const char *domain_record_types[] = {
     NULL
 };
 
+// describe all domains owned by a given account
+typedef struct {
+    bool uptodate;
+    HashTable *domains;
+} domain_set_t;
+
+// describe a domain
+typedef struct {
+    bool uptodate;
+    HashTable *records;
+} domain_t;
+
+// describe a DNS record of a given domain
 typedef struct {
     uint32_t id;
     uint32_t ttl;
@@ -53,9 +70,7 @@ typedef struct {
     char *record; // also called subdomain
     char *value; // also called target
     char *type;
-} record_argument_t;
-
-#define MODULE_NAME "domain"
+} domain_record_argument_t;
 
 static void domain_destroy(void *data)
 {
@@ -95,16 +110,33 @@ static domain_t *domain_new(void)
     return d;
 }
 
+static void domain_set_destroy(void *data)
+{
+    domain_set_t *ds;
+
+    assert(NULL != data);
+    ds = (domain_set_t *) data;
+    if (NULL != ds->domains) {
+        hashtable_destroy(ds->domains);
+    }
+    free(ds);
+}
+
 static void domain_on_set_account(void **data)
 {
     if (NULL == *data) {
-        *data = hashtable_ascii_cs_new((DupFunc) strdup, free, domain_destroy);
+        domain_set_t *ds;
+
+        ds = mem_new(*ds);
+        ds->uptodate = FALSE;
+        ds->domains = hashtable_ascii_cs_new((DupFunc) strdup, free, domain_destroy);
+        *data = ds;
     }
 }
 
 static bool domain_ctor(void)
 {
-    account_register_module_callbacks(MODULE_NAME, (DtorFunc) hashtable_destroy, domain_on_set_account);
+    account_register_module_callbacks(MODULE_NAME, domain_set_destroy, domain_on_set_account);
 
     return TRUE;
 }
@@ -149,54 +181,55 @@ static int parse_record(HashTable *records, xmlDocPtr doc)
     return TRUE;
 }
 
-/*
-<opt>
-  <anon>domain1.ext</anon>
-  <anon>domain2.ext</anon>
-</opt>
-*/
-static command_status_t domain_list(void *UNUSED(arg), error_t **error)
+static command_status_t fetch_domains(domain_set_t *ds, bool force, error_t **error)
 {
-    HashTable *domains;
-    bool request_success;
-
-    // populate
-    // TODO: hashtable_size(domains) < 1 is not sufficient to know if we have the full list of domains in this hashtable
-    domains = NULL;
-    account_current_get_data(MODULE_NAME, &domains);
-    assert(NULL != domains);
-    if (hashtable_size(domains) < 1/* || args->nocache */) {
+    if (!ds->uptodate || force) {
         xmlDocPtr doc;
         request_t *req;
         xmlNodePtr root, n;
+        bool request_success;
 
         req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain");
         request_add_header(req, "Accept: text/xml");
         request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
         request_dtor(req);
-
         if (request_success) {
             if (NULL == (root = xmlDocGetRootElement(doc))) {
                 error_set(error, WARN, "Failed to parse XML document");
                 return COMMAND_FAILURE;
             }
-            hashtable_clear(domains);
+            hashtable_clear(ds->domains);
             for (n = root->children; n != NULL; n = n->next) {
                 xmlChar *content;
 
                 content = xmlNodeGetContent(n);
-                hashtable_put(domains, content, domain_new(), NULL);
+                hashtable_put(ds->domains, content, domain_new(), NULL);
                 xmlFree(content);
             }
+            ds->uptodate = TRUE;
         } else {
             return COMMAND_FAILURE;
         }
+    }
+
+    return COMMAND_SUCCESS;
+}
+
+static command_status_t domain_list(void *UNUSED(arg), error_t **error)
+{
+    domain_set_t *ds;
+    command_status_t ret;
+
+    FETCH_ACCOUNT_DOMAINS(ds);
+    // populate
+    if (COMMAND_SUCCESS != (ret = fetch_domains(ds, FALSE /*args->nocache*/, error))) {
+        return ret;
     }
     // display
     {
         Iterator it;
 
-        hashtable_to_iterator(&it, domains);
+        hashtable_to_iterator(&it, ds->domains);
         for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
             const char *domain;
 
@@ -215,9 +248,9 @@ static command_status_t domain_export(void *arg, error_t **error)
     request_t *req;
     xmlNodePtr root;
     bool request_success;
-    record_argument_t *args;
+    domain_record_argument_t *args;
 
-    args = (record_argument_t *) arg;
+    args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
 
     req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/export", args->domain);
@@ -242,9 +275,9 @@ static command_status_t domain_refresh(void *arg, error_t **error)
 {
     request_t *req;
     bool request_success;
-    record_argument_t *args;
+    domain_record_argument_t *args;
 
-    args = (record_argument_t *) arg;
+    args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
 
     req = request_post(REQUEST_FLAG_SIGN, NULL, API_BASE_URL "/domain/zone/%s/refresh", args->domain);
@@ -256,21 +289,19 @@ static command_status_t domain_refresh(void *arg, error_t **error)
 
 static int get_domain_records(const char *domain, domain_t **d, error_t **error)
 {
-    HashTable *domains;
+    domain_set_t *ds;
     bool request_success;
 
     *d = NULL;
-    domains = NULL;
-    account_current_get_data(MODULE_NAME, &domains);
-    assert(NULL != domains);
+    FETCH_ACCOUNT_DOMAINS(ds);
     request_success = TRUE;
-    if (!hashtable_get(domains, (void *) domain, (void **) d) || !(*d)->uptodate) {
+    if (!hashtable_get(ds->domains, (void *) domain, (void **) d) || !(*d)->uptodate) {
         xmlDocPtr doc;
         request_t *req;
         xmlNodePtr root, n;
 
         if (NULL == *d) {
-            hashtable_put(domains, (void *) domain, *d = domain_new(), NULL);
+            hashtable_put(ds->domains, (void *) domain, *d = domain_new(), NULL);
         }
         req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/record", domain);
         request_add_header(req, "Accept: text/xml");
@@ -308,9 +339,9 @@ static command_status_t record_list(void *arg, error_t **error)
     domain_t *d;
     Iterator it;
     command_status_t ret;
-    record_argument_t *args;
+    domain_record_argument_t *args;
 
-    args = (record_argument_t *) arg;
+    args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
     if (COMMAND_SUCCESS == (ret = get_domain_records(args->domain, &d, error))) {
         // display
@@ -357,9 +388,9 @@ static command_status_t record_add(void *arg, error_t **error)
 {
     xmlDocPtr doc;
     bool request_success;
-    record_argument_t *args;
+    domain_record_argument_t *args;
 
-    args = (record_argument_t *) arg;
+    args = (domain_record_argument_t *) arg;
     assert(NULL != args->type);
     assert(NULL != args->domain);
     assert(NULL != args->record);
@@ -409,14 +440,14 @@ static command_status_t record_add(void *arg, error_t **error)
     // result
     if (request_success) {
         domain_t *d;
-        HashTable *domains;
+        domain_set_t *ds;
 
         d = NULL;
-        domains = NULL;
-        account_current_get_data(MODULE_NAME, &domains);
-        assert(NULL != domains);
-        if (!hashtable_get(domains, (void *) args->domain, (void **) &d)) {
-            hashtable_put(domains, (void *) args->domain, d = domain_new(), NULL);
+        ds = NULL;
+        account_current_get_data(MODULE_NAME, &ds);
+        assert(NULL != ds);
+        if (!hashtable_get(ds->domains, (void *) args->domain, (void **) &d)) {
+            hashtable_put(ds->domains, (void *) args->domain, d = domain_new(), NULL);
         }
         parse_record(d->records, doc);
     }
@@ -429,9 +460,9 @@ static command_status_t record_delete(void *arg, error_t **error)
     domain_t *d;
     record_t *match;
     bool request_success;
-    record_argument_t *args;
+    domain_record_argument_t *args;
 
-    args = (record_argument_t *) arg;
+    args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
     assert(NULL != args->record);
     if (request_success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, error))) {
@@ -536,24 +567,23 @@ static command_status_t record_update(void *arg, error_t **error)
 
 static bool complete_domains(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *data)
 {
-    HashTable *domains;
+    domain_set_t *ds;
 
-    // <TODO> : DRY and fill hashtable if we haven't all domains owned by the current account ?
-    domains = NULL;
-    account_current_get_data(MODULE_NAME, &domains);
-    assert(NULL != domains);
-    // </TODO>
+    FETCH_ACCOUNT_DOMAINS(ds);
+    if (COMMAND_SUCCESS != fetch_domains(ds, FALSE, NULL)) {
+        return FALSE;
+    }
 
-    return complete_from_hashtable_keys(parsed_arguments, current_argument, current_argument_len, possibilities, domains);
+    return complete_from_hashtable_keys(parsed_arguments, current_argument, current_argument_len, possibilities, ds->domains);
 }
 
 static bool complete_records(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *data)
 {
     domain_t *d;
     bool request_success;
-    record_argument_t *args;
+    domain_record_argument_t *args;
 
-    args = (record_argument_t *) parsed_arguments;
+    args = (domain_record_argument_t *) parsed_arguments;
     assert(NULL != args->domain);
     if (request_success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, NULL))) {
         Iterator it;
@@ -579,9 +609,9 @@ static command_status_t dnssec_status(void *arg, error_t **error)
     request_t *req;
     xmlNodePtr root;
     bool request_success;
-    record_argument_t *args;
+    domain_record_argument_t *args;
 
-    args = (record_argument_t *) arg;
+    args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
     req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
     request_add_header(req, "Accept: text/xml");
@@ -590,6 +620,7 @@ static command_status_t dnssec_status(void *arg, error_t **error)
             xmlChar *content;
 
 #if 0
+            // for translations, do not remove
             _("enabled")
             _("disabled")
             _("enableInProgress")
@@ -613,11 +644,15 @@ static command_status_t dnssec_enable(void *arg, error_t **error)
 {
     request_t *req;
     bool request_success;
-    record_argument_t *args;
+    domain_record_argument_t *args;
 
-    args = (record_argument_t *) arg;
+    args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
-    req = request_post(REQUEST_FLAG_SIGN, NULL, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
+//     if (args->on) {
+        req = request_post(REQUEST_FLAG_SIGN, NULL, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
+//     } else {
+//         req = request_delete(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
+//     }
     request_success = request_execute(req, RESPONSE_IGNORE, NULL, error);
     request_dtor(req);
 
@@ -628,9 +663,9 @@ static command_status_t dnssec_disable(void *arg, error_t **error)
 {
     request_t *req;
     bool request_success;
-    record_argument_t *args;
+    domain_record_argument_t *args;
 
-    args = (record_argument_t *) arg;
+    args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
     req = request_delete(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
     request_success = request_execute(req, RESPONSE_IGNORE, NULL, error);
@@ -669,10 +704,10 @@ static void domain_regcomm(graph_t *g)
 //     lit_record_update = argument_create_literal("update", record_update);
     lit_record_type = argument_create_literal("type", NULL);
 
-    arg_domain = argument_create_string(offsetof(record_argument_t, domain), "<domain>", complete_domains, NULL);
-    arg_record = argument_create_string(offsetof(record_argument_t, record), "<record>", complete_records, NULL);
-    arg_type = argument_create_choices(offsetof(record_argument_t, type), "<type>",  domain_record_types);
-    arg_value = argument_create_string(offsetof(record_argument_t, value), "<value>", NULL, NULL);
+    arg_domain = argument_create_string(offsetof(domain_record_argument_t, domain), "<domain>", complete_domains, NULL);
+    arg_record = argument_create_string(offsetof(domain_record_argument_t, record), "<record>", complete_records, NULL);
+    arg_type = argument_create_choices(offsetof(domain_record_argument_t, type), "<type>",  domain_record_types);
+    arg_value = argument_create_string(offsetof(domain_record_argument_t, value), "<value>", NULL, NULL);
 
     // domain ...
     graph_create_full_path(g, lit_domain, lit_domain_list, NULL);
