@@ -66,10 +66,11 @@ typedef struct {
 } record_t;
 
 typedef struct {
+    bool on_off;
     char *domain;
     char *record; // also called subdomain
     char *value; // also called target
-    char *type;
+    record_type_t type;
 } domain_record_argument_t;
 
 static void domain_destroy(void *data)
@@ -391,13 +392,15 @@ static command_status_t record_add(void *arg, error_t **error)
     domain_record_argument_t *args;
 
     args = (domain_record_argument_t *) arg;
-    assert(NULL != args->type);
+    assert(-1 != args->type);
     assert(NULL != args->domain);
     assert(NULL != args->record);
+#if 0
     if (!str_include(args->type, domain_record_types)) { // NOTE: this should be assumed in the future by the caller (graph stuffs)
         error_set(error, WARN, "unknown DNS record type '%s'\n", args->type);
         return COMMAND_FAILURE;
     }
+#endif
     {
         String *buffer;
 
@@ -410,7 +413,7 @@ static command_status_t record_add(void *arg, error_t **error)
             doc = json_document_new();
             root = json_object();
             json_object_set_property(root, "target", json_string(args->value));
-            json_object_set_property(root, "fieldType", json_string(args->type));
+            json_object_set_property(root, "fieldType", json_string(domain_record_types[args->type]));
 //             if ('\0' != *subdomain)
                 json_object_set_property(root, "subDomain", json_string(args->record));
             json_document_set_root(doc, root);
@@ -639,8 +642,7 @@ static command_status_t dnssec_status(void *arg, error_t **error)
     return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-// TODO: refactor code for dnssec (dis|en)able
-static command_status_t dnssec_enable(void *arg, error_t **error)
+static command_status_t dnssec_enable_disable(void *arg, error_t **error)
 {
     request_t *req;
     bool request_success;
@@ -648,26 +650,11 @@ static command_status_t dnssec_enable(void *arg, error_t **error)
 
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
-//     if (args->on) {
+    if (args->on_off) {
         req = request_post(REQUEST_FLAG_SIGN, NULL, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
-//     } else {
-//         req = request_delete(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
-//     }
-    request_success = request_execute(req, RESPONSE_IGNORE, NULL, error);
-    request_dtor(req);
-
-    return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
-}
-
-static command_status_t dnssec_disable(void *arg, error_t **error)
-{
-    request_t *req;
-    bool request_success;
-    domain_record_argument_t *args;
-
-    args = (domain_record_argument_t *) arg;
-    assert(NULL != args->domain);
-    req = request_delete(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
+    } else {
+        req = request_delete(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
+    }
     request_success = request_execute(req, RESPONSE_IGNORE, NULL, error);
     request_dtor(req);
 
@@ -680,10 +667,11 @@ static void domain_regcomm(graph_t *g)
         *arg_domain,
         *arg_record, // called subdomain by OVH
         *arg_type,
-        *arg_value // called target by OVH
+        *arg_value, // called target by OVH
+        *arg_dnssec_on_off
     ;
+    argument_t *lit_dnssec, *lit_dnssec_status;
     argument_t *lit_domain, *lit_domain_list, *lit_domain_refresh, *lit_domain_export;
-    argument_t *lit_dnssec, *lit_dnssec_status, *lit_dnssec_enable, *lit_dnssec_disable;
     argument_t *lit_record, *lit_record_list, *lit_record_add, *lit_record_delete, *lit_record_update, *lit_record_type;
 
     // domain ...
@@ -694,8 +682,6 @@ static void domain_regcomm(graph_t *g)
     // domain X dnssec ...
     lit_dnssec = argument_create_literal("dnssec", NULL);
     lit_dnssec_status = argument_create_literal("status", dnssec_status);
-    lit_dnssec_enable = argument_create_literal("enable", dnssec_enable);
-    lit_dnssec_disable = argument_create_literal("disable", dnssec_disable);
     // domain X record ...
     lit_record = argument_create_literal("record", NULL);
     lit_record_list = argument_create_literal("list", record_list);
@@ -708,6 +694,7 @@ static void domain_regcomm(graph_t *g)
     arg_record = argument_create_string(offsetof(domain_record_argument_t, record), "<record>", complete_records, NULL);
     arg_type = argument_create_choices(offsetof(domain_record_argument_t, type), "<type>",  domain_record_types);
     arg_value = argument_create_string(offsetof(domain_record_argument_t, value), "<value>", NULL, NULL);
+    arg_dnssec_on_off = argument_create_choices_disable_enable(offsetof(domain_record_argument_t, on_off), dnssec_enable_disable);
 
     // domain ...
     graph_create_full_path(g, lit_domain, lit_domain_list, NULL);
@@ -715,8 +702,7 @@ static void domain_regcomm(graph_t *g)
     graph_create_full_path(g, lit_domain, arg_domain, lit_domain_refresh, NULL);
     // domain X dnssec ...
     graph_create_full_path(g, lit_domain, arg_domain, lit_dnssec, lit_dnssec_status, NULL);
-    graph_create_full_path(g, lit_domain, arg_domain, lit_dnssec, lit_dnssec_enable, NULL);
-    graph_create_full_path(g, lit_domain, arg_domain, lit_dnssec, lit_dnssec_disable, NULL);
+    graph_create_full_path(g, lit_domain, arg_domain, lit_dnssec, arg_dnssec_on_off, NULL);
     // domain X record ...
     graph_create_full_path(g, lit_domain, arg_domain, lit_record, lit_record_list, NULL);
     graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_add, arg_value, lit_record_type, arg_type, NULL);

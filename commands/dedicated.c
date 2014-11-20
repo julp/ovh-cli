@@ -62,9 +62,11 @@ static command_status_t dedicated_reboot(void *arg, error_t **error)
     bool request_success;
     dedicated_argument_t *args;
 
+    request_success = TRUE;
     args = (dedicated_argument_t *) arg;
     assert(NULL != args->server_name);
-    if (TRUE) { // TODO: ask for confirmation
+    // TODO: check server exists?
+    if (confirm("Confirm hard reboot of %s", args->server_name)) {
         req = request_post(REQUEST_FLAG_SIGN, NULL, API_BASE_URL "/dedicated/server/%s/reboot", args->server_name);
         request_add_header(req, "Accept: text/xml");
         request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);

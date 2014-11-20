@@ -458,7 +458,7 @@ static bool account_early_init(void)
     duration_test("3 seconds 1 hour", FALSE, 0);
     duration_test("12 11 hours", FALSE, 0);
     duration_test("3 days 1", FALSE, 0);
-    duration_test("3 days 1 second", TRUE, 3 * 24 * 60 * 60 + 1);
+    duration_test("3 days 1 second", TRUE, 3 * DAY + 1 SECOND);
 #endif
 
     return TRUE;
@@ -474,6 +474,8 @@ static bool account_late_init(void)
 typedef struct {
     char *account;
     char *password;
+    bool expires_in;
+    bool expires_at;
     char *expiration;
     char *consumer_key;
 } account_argument_t;
@@ -539,16 +541,13 @@ static command_status_t account_add(void *arg, error_t **error)
     assert(NULL != args->account);
     assert(NULL != args->password);
 
-#if TODO
     if (NULL != args->expiration) {
-        if (0 != strcmp(argv[3], "expires")) {
-            return COMMAND_USAGE;
-        }
-        if (0 == strcmp(argv[4], "in")) {
+        if (args->expires_in) {
             if (!parse_duration(args->expiration, &expires_at)) {
                 return COMMAND_USAGE;
             }
-        } else if (0 == strcmp(argv[4], "at")) {
+            expires_at += time(NULL);
+        } else if (args->expires_at) {
             char *endptr;
             struct tm ltm = { 0 };
 
@@ -558,10 +557,9 @@ static command_status_t account_add(void *arg, error_t **error)
             }
             expires_at = mktime(&ltm);
         } else {
-            return COMMAND_USAGE;
+            assert(FALSE); // we should not reach this point if "graph" have done its job
         }
     }
-#endif
     h = hashtable_hash(acd->accounts, args->account);
     // TODO: how to handle account overwrites? Don't allow it, add an update command? Keep password (if any for both) and non-expired CK (if any for both)?
 #if 0
@@ -662,8 +660,8 @@ static void account_regcomm(graph_t *g)
     lit_default = argument_create_literal("default", account_default_set);
     lit_switch = argument_create_literal("switch", account_switch);
     lit_expires = argument_create_literal("expires", NULL);
-    lit_in = argument_create_literal("in", NULL);
-    lit_at = argument_create_literal("at", NULL);
+    lit_in = argument_create_relevant_literal(offsetof(account_argument_t, expires_in), "in", NULL);
+    lit_at = argument_create_relevant_literal(offsetof(account_argument_t, expires_at), "at", NULL);
 
     arg_password = argument_create_string(offsetof(account_argument_t, password), "<password>", NULL, NULL);
     arg_expiration = argument_create_string(offsetof(account_argument_t, expiration), "<expiration>", NULL, NULL);
@@ -672,6 +670,7 @@ static void account_regcomm(graph_t *g)
 
     graph_create_full_path(g, lit_account, lit_list, NULL);
     graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, NULL);
+    graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, arg_consumer_key, NULL);
     graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, arg_consumer_key, lit_expires, lit_at, arg_expiration, NULL);
     graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, arg_consumer_key, lit_expires, lit_in, arg_expiration, NULL);
     graph_create_full_path(g, lit_account, arg_account, lit_delete, NULL);

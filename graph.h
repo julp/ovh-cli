@@ -12,6 +12,7 @@ typedef command_status_t (*handle_t)(void *, error_t **);
 typedef bool (*complete_t)(void *, const char *, size_t, DPtrArray *, void *);
 
 argument_t *argument_create_choices(size_t, const char *, const char * const *);
+argument_t *argument_create_relevant_literal(size_t, const char *, handle_t);
 argument_t *argument_create_literal(const char *, command_status_t (*) (void *, error_t **));
 argument_t *argument_create_string(size_t, const char *, complete_t, void *);
 bool complete_from_hashtable_keys(void *, const char *, size_t, DPtrArray *, void *);
@@ -22,6 +23,8 @@ void graph_destroy(graph_t *);
 void graph_display(graph_t *);
 graph_t *graph_new(void);
 command_status_t graph_run_command(graph_t *, int, const char **, error_t **);
-void graph_to_iterator(Iterator *, graph_t *, char **, int);
+
+argument_t *argument_create_choices_off_on(size_t, handle_t);
+argument_t *argument_create_choices_disable_enable(size_t, handle_t);
 
 #endif /* !GRAPH_H */

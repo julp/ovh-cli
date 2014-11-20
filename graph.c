@@ -6,23 +6,22 @@
 #include "struct/hashtable.h"
 
 typedef enum {
-//     ARG_TYPE_HEAD, // virtual
-//     ARG_TYPE_TAIL, // virtual
     ARG_TYPE_END, // dummy
     ARG_TYPE_LITERAL, // "list", "add", ...
     ARG_TYPE_NUMBER,
     ARG_TYPE_CHOICES, // comme le type de record dns
     ARG_TYPE_STRING // free string (eventually with help of completion)
+//     ARG_TYPE_END
 } argument_type_t;
 
+// méthode toString pour intégrer un élément quelconque (record_t *, server_t *, ...) à la ligne de commande (ie le résultat de la complétion) ?
+// méthode toString pour représenter un élément quelconque (record_t *, server_t *, ...) parmi les propositions à faire à l'utilisateur ?
 struct argument_t {
     size_t offset; // offsetof
     argument_type_t type;
     complete_t complete; // spécifique à ARG_TYPE_STRING et ARG_TYPE_CHOICES
-    const char *string; // spécifique à ARG_TYPE_LITERAL
-    handle_t handle; // problème : où renseigne-t-on cette variable ?
-    // Sur le mot le plus parlant ("list" par exemple) mais ça le rendrait propre à une commande ("list" de "account" serait alors différent de "domain" ou autres)
-    // Sur le dernier argument ? Mais "account list", c'est "list" justement le dernier !
+    const char *string;
+    handle_t handle;
     graph_node_t *nextSibling;
     graph_node_t *previousSibling;
     graph_node_t *firstChild;
@@ -40,14 +39,15 @@ struct graph_t {
     graph_node_t *end;
 };
 
-#define CREATE_ARG(node) \
+#define CREATE_ARG(node, arg_type, string_or_hint) \
     do { \
         node = mem_new(*node); \
         node->data = NULL; \
-        node->string = NULL; \
         node->handle = NULL; \
+        node->type = arg_type; \
         node->complete = NULL; \
         node->offset = (size_t) -1; \
+        node->string = string_or_hint; \
         node->nextSibling = node->previousSibling = node->firstChild = node->lastChild = NULL; \
     } while (0);
 
@@ -56,9 +56,9 @@ graph_t *graph_new(void)
     graph_t *g;
 
     g = mem_new(*g);
-    CREATE_ARG(g->end);
-    g->end->string = "(END)";
+    CREATE_ARG(g->end, ARG_TYPE_END, "(END)");
     g->roots = hashtable_ascii_cs_new(NULL, NULL, NULL);
+    g->nodes = hashtable_new(value_hash, value_equal, NULL, free, NULL);
 
     return g;
 }
@@ -76,12 +76,20 @@ argument_t *argument_create_literal(const char *string, handle_t handle)
 {
     argument_t *node;
 
-    CREATE_ARG(node);
-    node->type = ARG_TYPE_LITERAL;
-    node->string = string;
+    CREATE_ARG(node, ARG_TYPE_LITERAL, string);
     node->handle = handle;
     node->data = (void *) string;
     node->complete = complete_literal;
+
+    return node;
+}
+
+argument_t *argument_create_relevant_literal(size_t offset, const char *string, handle_t handle)
+{
+    argument_t *node;
+
+    node = argument_create_literal(string, handle);
+    node->offset = offset;
 
     return node;
 }
@@ -103,12 +111,48 @@ argument_t *argument_create_choices(size_t offset, const char *hint, const char 
 {
     argument_t *node;
 
-    CREATE_ARG(node);
-    node->string = hint;
+    CREATE_ARG(node, ARG_TYPE_CHOICES, hint);
     node->offset = offset;
-    node->type = ARG_TYPE_CHOICES;
     node->complete = complete_choices;
     node->data = (void *) values;
+
+    return node;
+}
+
+static const char * const off_on[] = {
+    "off",
+    "on",
+    NULL
+};
+
+argument_t *argument_create_choices_off_on(size_t offset, handle_t handle)
+{
+    argument_t *node;
+
+    CREATE_ARG(node, ARG_TYPE_CHOICES, "<on/off>");
+    node->handle = handle;
+    node->offset = offset;
+    node->complete = complete_choices;
+    node->data = (void *) off_on;
+
+    return node;
+}
+
+static const char * const disable_enable[] = {
+    "disable",
+    "enable",
+    NULL
+};
+
+argument_t *argument_create_choices_disable_enable(size_t offset, handle_t handle)
+{
+    argument_t *node;
+
+    CREATE_ARG(node, ARG_TYPE_CHOICES, "<enable/disable>");
+    node->handle = handle;
+    node->offset = offset;
+    node->complete = complete_choices;
+    node->data = (void *) disable_enable;
 
     return node;
 }
@@ -117,79 +161,20 @@ argument_t *argument_create_string(size_t offset, const char *hint, complete_t c
 {
     argument_t *node;
 
-    CREATE_ARG(node);
-    node->string = hint;
+    CREATE_ARG(node, ARG_TYPE_STRING, hint);
     node->offset = offset;
-    node->type = ARG_TYPE_STRING;
     node->complete = complete;
     node->data = data;
 
     return node;
 }
 
-static void traverse_graph_node1(graph_node_t *node, DtorFunc dtor, HashTable *ht)
-{
-    graph_node_t *current, *next;
-
-    current = node->firstChild;
-    while (NULL != current) {
-        next = current->nextSibling;
-#ifdef LAZY_WAY
-        hashtable_quick_put_ex(ht, HT_PUT_ON_DUP_KEY_PRESERVE, (hash_t) current, current, current, NULL);
-#else
-        if (!hashtable_quick_contains(ht, (hash_t) current, current)) {
-            hashtable_quick_put_ex(ht, HT_PUT_ON_DUP_KEY_PRESERVE, (hash_t) current, current, current, NULL);
-#endif
-            traverse_graph_node1(current, dtor, ht);
-            free(current);
-#ifndef LAZY_WAY
-        }
-//         free(current);
-#endif
-        current = next;
-    }
-}
-
-static void traverse_graph_root1(graph_t *g, DtorFunc dtor, HashTable *ht)
-{
-    Iterator it;
-
-    hashtable_to_iterator(&it, g->roots);
-    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        argument_t *arg;
-
-        arg = iterator_current(&it, NULL);
-#ifdef LAZY_WAY
-        hashtable_quick_put_ex(ht, HT_PUT_ON_DUP_KEY_PRESERVE, (hash_t) arg, arg, arg, NULL);
-#else
-        if (!hashtable_quick_contains(ht, (hash_t) arg, arg)) {
-            hashtable_quick_put_ex(ht, HT_PUT_ON_DUP_KEY_PRESERVE, (hash_t) arg, arg, arg, NULL);
-#endif
-            traverse_graph_node1(arg, dtor, ht);
-            free(arg);
-#ifndef LAZY_WAY
-        }
-//         free(arg);
-#endif
-    }
-    iterator_close(&it);
-}
-
 void graph_destroy(graph_t *g)
 {
-    HashTable *ht;
-
     assert(NULL != g);
 
-    // HashFunc, EqualFunc, DupFunc, DtorFunc, DtorFunc
-#ifdef LAZY_WAY
-    ht = hashtable_new(value_hash, value_equal, NULL, free, NULL);
-#else
-    ht = hashtable_new(value_hash, value_equal, NULL, NULL, NULL);
-#endif
-    traverse_graph_root1(g, free, ht);
-    hashtable_destroy(ht);
     hashtable_destroy(g->roots);
+    hashtable_destroy(g->nodes);
     free(g);
 }
 
@@ -217,6 +202,7 @@ static void graph_node_insert_child(graph_t *g, graph_node_t *parent, graph_node
             parent->firstChild = child;
         }
     } else {
+        // if (ARG_TYPE_END == current->type): current by a new "END" node
         child->nextSibling = current;
         child->previousSibling = current->previousSibling;
         if (NULL != current->previousSibling) {
@@ -234,7 +220,6 @@ void graph_create_full_path(graph_t *g, graph_node_t *start, ...) /* SENTINEL */
     va_list nodes;
     graph_node_t *node, *parent;
 
-//     parent = g->head;
     assert(NULL != g);
     assert(NULL != start);
     assert(ARG_TYPE_LITERAL == start->type);
@@ -266,7 +251,9 @@ void graph_create_path(graph_t *g, graph_node_t *start, graph_node_t *end, ...) 
         parent = node;
     }
     va_end(nodes);
-    if (NULL != end) {
+    if (NULL == end) {
+        graph_node_insert_child(g, parent, g->end);
+    } else {
         graph_node_insert_child(g, parent, end);
     }
 }
@@ -277,18 +264,25 @@ void graph_create_all_path(graph_node_t *start, graph_node_t *end, ...) /* SENTI
     //
 }
 
-void graph_to_iterator(Iterator *it, graph_t *g, char **argv, int arc)
-{
-    //
-}
-
 static void traverse_graph_node(graph_node_t *node, int depth)
 {
+    size_t children_count;
     graph_node_t *current;
 
-    printf("%*c %s\n", depth * 4, ' ', node->string);
+    children_count = 0;
     for (current = node->firstChild; NULL != current; current = current->nextSibling) {
-        traverse_graph_node(current, depth + 1);
+        if (ARG_TYPE_END != current->type) {
+            ++children_count;
+        }
+    }
+    printf("%*c%s", depth * 4, ' ', node->string);
+    if (1 != children_count) {
+        putchar('\n');
+    }
+    for (current = node->firstChild; NULL != current; current = current->nextSibling) {
+        if (ARG_TYPE_END != current->type) {
+            traverse_graph_node(current, 1 == children_count ? 0 : depth + 1); // ne va pas fonctionner ? Introduire un booléen, indent, en paramètre de façon à garder le depth pour les descendants de niveau > 1 ?
+        }
     }
 }
 
@@ -325,15 +319,15 @@ bool complete_from_hashtable_keys(void *arguments, const char *argument, size_t 
 
 typedef struct {
     const char *name;
-    bool (*matcher)(argument_t *, const char */*, size_t*/); // exact match (use strcmp, not strncmp - this is not intended for completion)
+    bool (*matcher)(argument_t *, const char *); // exact match (use strcmp, not strncmp - this is not intended for completion)
 } argument_description_t;
 
-static bool agument_literal_match(argument_t *arg, const char *value/*, size_t value_len*/)
+static bool agument_literal_match(argument_t *arg, const char *value)
 {
     return 0 == strcmp(arg->string, value);
 }
 
-static bool argument_choices_match(argument_t *arg, const char *value/*, size_t value_len*/)
+static bool argument_choices_match(argument_t *arg, const char *value)
 {
     const char * const *v;
 
@@ -346,12 +340,12 @@ static bool argument_choices_match(argument_t *arg, const char *value/*, size_t 
     return FALSE;
 }
 
-static bool argument_string_match(argument_t *arg, const char *value/*, size_t value_len*/)
+static bool argument_string_match(argument_t *arg, const char *value)
 {
     return TRUE;
 }
 
-static bool argument_end_match(argument_t *arg, const char *value/*, size_t value_len*/)
+static bool argument_end_match(argument_t *arg, const char *value)
 {
     return FALSE;
 }
@@ -369,7 +363,7 @@ static graph_node_t *graph_node_find(graph_node_t *parent, const char *value)
     graph_node_t *child;
 
     for (child = parent->firstChild; NULL != child; child = child->nextSibling) {
-        if (descriptions[child->type].matcher(child, value/*, strlen(value)*/)) {
+        if (descriptions[child->type].matcher(child, value)) {
             return child;
         }
     }
@@ -377,139 +371,17 @@ static graph_node_t *graph_node_find(graph_node_t *parent, const char *value)
     return NULL;
 }
 
-static bool graph_node_end_in_children(/*graph_t *g,*/graph_node_t *node)
+static bool graph_node_end_in_children(graph_node_t *node)
 {
     graph_node_t *child;
 
     for (child = node->firstChild; NULL != child; child = child->nextSibling) {
-        if (ARG_TYPE_END == child->type/*child == g->end*/) {
+        if (ARG_TYPE_END == child->type) {
             return TRUE;
         }
     }
 
     return FALSE;
-}
-
-// TODO:
-// - separate completion (2 DPtrArray ?) to distinguish commands to values (eg: domain<tab> will propose "bar.tld", "foo.tld", "list", "xxx.tld")
-// - fill underlaying hashtable on completion to have consistent completion? (eg: domain<tab> will only propose "list" if we haven't yet run "domain list")
-// - indicate the command is complete? (eg: domain list<tab>)
-unsigned char graph_complete(EditLine *el, int UNUSED(ch))
-{
-    const char **argv;
-    const LineInfo *li;
-    editline_data_t *client_data;
-    int argc, res, cursorc, cursoro;
-
-    res = CC_ERROR;
-    li = el_line(el);
-    if (0 != el_get(el, EL_CLIENTDATA, &client_data)) {
-        return res;
-    }
-    tok_reset(client_data->tokenizer);
-    dptrarray_clear(client_data->possibilities);
-    if (-1 == tok_line(client_data->tokenizer, li, &argc, &argv, &cursorc, &cursoro)) { // TODO: handle cases tok_line returns value > 0
-        return res;
-    } else {
-        argument_t *arg;
-        char arguments[8192];
-
-#if 0
-        {
-            int i;
-
-debug("cursorc = %d", cursorc);
-            for (i = 0; i <= cursorc; i++) {
-                debug("argv[%d] = %s", i, argv[i]);
-            }
-        }
-#endif
-        bzero(arguments, ARRAY_SIZE(arguments));
-        if (0 == cursorc) {
-            Iterator it;
-
-            hashtable_to_iterator(&it, client_data->graph->roots);
-            for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-                argument_t *arg;
-
-                arg = iterator_current(&it, NULL);
-                assert(ARG_TYPE_LITERAL == arg->type);
-                if (0 == strncmp(arg->string, argv[0], cursoro)) {
-                    dptrarray_push(client_data->possibilities, (void *) arg->string);
-                }
-            }
-            iterator_close(&it);
-        } else {
-            if (hashtable_get(client_data->graph->roots, argv[0], (void **) &arg)) {
-                int depth;
-//                 bool apply;
-                graph_node_t *child;
-
-// debug("ARG[0] = %s", NULL != arg->string ? arg->string : descriptions[arg->type].name);
-//                 apply = TRUE;
-                for (depth = 1; /*apply && */depth < cursorc && NULL != arg/* && NULL != argv[cursorc]*/; depth++) {
-                    /*apply &= */(/*NULL != */(arg = graph_node_find(arg, NULL == argv[depth] ? "" : argv[depth])));
-// debug("ARG[%d] = %s", depth, NULL == arg ? "(NULL)" : (NULL != arg->string ? arg->string : descriptions[arg->type].name));
-//                     for (child = parent->firstChild; NULL != child; child = child->nextSibling) {
-//                         apply |= descriptions[child->type].matcher(child, value);
-//                     }
-                    if (((size_t) -1) != arg->offset) {
-                        // TODO: typing (bool, uint32_t et autres si nécessaire)
-                        *((const char **) (arguments + arg->offset)) = argv[depth];
-                    }
-                }
-                if (/*apply && */NULL != arg) {
-                    graph_node_t *child;
-
-// debug("ARG = %s", NULL != arg->string ? arg->string : descriptions[arg->type].name);
-                    for (child = arg->firstChild; NULL != child; child = child->nextSibling) {
-                        if (NULL != child->complete) {
-                            child->complete((void *) arguments, NULL == argv[cursorc] ? "" : argv[cursorc], cursoro, client_data->possibilities, child->data);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    switch (dptrarray_length(client_data->possibilities)) {
-        case 0:
-            res = CC_ERROR;
-            break;
-        case 1:
-            if (-1 == el_insertstr(el, dptrarray_at_unsafe(client_data->possibilities, 0, const char) + cursoro)) {
-                res = CC_ERROR;
-            } else {
-                res = CC_REFRESH;
-            }
-#if TODO
-            if (FALSE) { // TODO: add space if more arguments are expected
-                if (-1 == el_insertstr(el, " ")) {
-                    res = CC_ERROR;
-                } else {
-                    res = CC_REFRESH;
-                }
-            }
-#endif
-            break;
-        default:
-        {
-            Iterator it;
-
-            puts("");
-            dptrarray_sort(client_data->possibilities, strcmpp);
-            dptrarray_to_iterator(&it, client_data->possibilities);
-            for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-                fputc('\t', stdout);
-                fputs(iterator_current(&it, NULL), stdout);
-                fputc('\n', stdout);
-            }
-            iterator_close(&it);
-            res = CC_REDISPLAY;
-            break;
-        }
-    }
-
-    return res;
 }
 
 static size_t my_vsnprintf(void *args, char *dst, size_t dst_size, const char *fmt, va_list ap)
@@ -603,6 +475,134 @@ static size_t my_vsnprintf(void *args, char *dst, size_t dst_size, const char *f
     return dst_len;
 }
 
+static int string_array_to_index(argument_t *arg, const char *value)
+{
+    const char * const *v;
+    const char * const *values;
+
+    assert(ARG_TYPE_CHOICES == arg->type);
+    values = (const char * const *) arg->data;
+    for (v = values; NULL != *v; v++) {
+        if (0 == strcmp(value, *v)) {
+            return values - v;
+        }
+    }
+
+    return -1;
+}
+
+// TODO:
+// - separate completion (2 DPtrArray ?) to distinguish commands to values (eg: domain<tab> will propose "bar.tld", "foo.tld", "list", "xxx.tld")
+// - fill underlaying hashtable on completion to have consistent completion? (eg: domain<tab> will only propose "list" if we haven't yet run "domain list")
+// - indicate the command is complete? (eg: domain list<tab>)
+unsigned char graph_complete(EditLine *el, int UNUSED(ch))
+{
+    const char **argv;
+    const LineInfo *li;
+    editline_data_t *client_data;
+    int argc, res, cursorc, cursoro;
+
+    res = CC_ERROR;
+    li = el_line(el);
+    if (0 != el_get(el, EL_CLIENTDATA, &client_data)) {
+        return res;
+    }
+    tok_reset(client_data->tokenizer);
+    dptrarray_clear(client_data->possibilities);
+    if (-1 == tok_line(client_data->tokenizer, li, &argc, &argv, &cursorc, &cursoro)) { // TODO: handle cases tok_line returns value > 0
+        return res;
+    } else {
+        argument_t *arg;
+        char arguments[8192];
+
+        bzero(arguments, ARRAY_SIZE(arguments));
+        if (0 == cursorc) {
+            Iterator it;
+
+            hashtable_to_iterator(&it, client_data->graph->roots);
+            for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+                argument_t *arg;
+
+                arg = iterator_current(&it, NULL);
+                assert(ARG_TYPE_LITERAL == arg->type);
+                if (0 == strncmp(arg->string, argv[0], cursoro)) {
+                    dptrarray_push(client_data->possibilities, (void *) arg->string);
+                }
+            }
+            iterator_close(&it);
+        } else {
+            if (hashtable_get(client_data->graph->roots, argv[0], (void **) &arg)) {
+                int depth;
+                graph_node_t *child;
+
+                for (depth = 1; depth < cursorc && NULL != arg; depth++) {
+                    if (NULL == (arg = graph_node_find(arg, NULL == argv[depth] ? "" : argv[depth]))) {
+                        // too much parameters
+                        break;
+                    }
+                    if (((size_t) -1) != arg->offset) {
+                        if (ARG_TYPE_LITERAL == arg->type) {
+                            *((bool *) (arguments + arg->offset)) = TRUE;
+                        } else if (ARG_TYPE_CHOICES == arg->type) {
+                            *((int *) (arguments + arg->offset)) = string_array_to_index(arg, argv[depth]);
+                        } else {
+                            *((const char **) (arguments + arg->offset)) = argv[depth];
+                        }
+                    }
+                }
+                if (NULL != arg) {
+                    graph_node_t *child;
+
+                    for (child = arg->firstChild; NULL != child; child = child->nextSibling) {
+                        if (NULL != child->complete) {
+                            child->complete((void *) arguments, NULL == argv[cursorc] ? "" : argv[cursorc], cursoro, client_data->possibilities, child->data);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    switch (dptrarray_length(client_data->possibilities)) {
+        case 0:
+            res = CC_ERROR;
+            break;
+        case 1:
+            if (-1 == el_insertstr(el, dptrarray_at_unsafe(client_data->possibilities, 0, const char) + cursoro)) {
+                res = CC_ERROR;
+            } else {
+                res = CC_REFRESH;
+            }
+#if TODO
+            if (FALSE) { // TODO: add space if more arguments are expected
+                if (-1 == el_insertstr(el, " ")) {
+                    res = CC_ERROR;
+                } else {
+                    res = CC_REFRESH;
+                }
+            }
+#endif
+            break;
+        default:
+        {
+            Iterator it;
+
+            puts("");
+            dptrarray_sort(client_data->possibilities, strcmpp);
+            dptrarray_to_iterator(&it, client_data->possibilities);
+            for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+                fputc('\t', stdout);
+                fputs(iterator_current(&it, NULL), stdout);
+                fputc('\n', stdout);
+            }
+            iterator_close(&it);
+            res = CC_REDISPLAY;
+            break;
+        }
+    }
+
+    return res;
+}
+
 command_status_t graph_run_command(graph_t *g, int args_count, const char **args, error_t **error)
 {
     char arguments[8192];
@@ -623,14 +623,19 @@ command_status_t graph_run_command(graph_t *g, int args_count, const char **args
         for (depth = 1; depth < args_count && NULL != arg; depth++) {
             prev_arg = arg;
             if (NULL == (arg = graph_node_find(arg, args[depth]))) {
-                error_set(error, NOTICE, "too many arguments");
+                error_set(error, NOTICE, "too many arguments"); // also a literal or a choice does not match what is planned (eg: domain foo.tld dnssec on - "on" instead of status/enable/disable)
                 traverse_graph_node(prev_arg, 0);
                 handle = NULL;
                 return COMMAND_USAGE;
             }
             if (((size_t) -1) != arg->offset) {
-                // TODO: typing (bool, uint32_t et autres si nécessaire)
-                *((const char **) (arguments + arg->offset)) = args[depth];
+                if (ARG_TYPE_LITERAL == arg->type) {
+                    *((bool *) (arguments + arg->offset)) = TRUE;
+                } else if (ARG_TYPE_CHOICES == arg->type) {
+                    *((int *) (arguments + arg->offset)) = string_array_to_index(arg, args[depth]);
+                } else {
+                    *((const char **) (arguments + arg->offset)) = args[depth];
+                }
             }
             if (NULL != arg && NULL != arg->handle) {
                 handle = arg->handle;
