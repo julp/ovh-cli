@@ -284,14 +284,14 @@ static command_status_t dedicated_boot_list(void *arg, error_t **error)
 
             b = iterator_current(&it, NULL);
             printf(
-#if 0
+#ifdef PRINT_OVH_ID
                 "  - %s (%s) (id: %" PRIu32 "): %s\n",
 #else
                 "  - %s (%s): %s\n",
 #endif
                 b->kernel,
                 boot_types[b->type],
-#if 0
+#ifdef PRINT_OVH_ID
                 b->id,
 #endif
                 b->description
