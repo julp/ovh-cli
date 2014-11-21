@@ -22,6 +22,7 @@
 
 ## Install
 
+[Create your application](https://eu.api.ovh.com/createApp/), then:
 ```
 git clone ...
 cmake . \
@@ -61,5 +62,3 @@ make
 * me
 * help
 * quit
-
-NOTE (TODO): ~/.ovh will be world readable (chmod 0600 ~/.ovh)

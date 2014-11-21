@@ -236,9 +236,11 @@ void account_register_module_callbacks(const char *name, DtorFunc dtor, void (*o
 
 static bool account_save(error_t **error)
 {
+    int ret;
     Iterator it;
     xmlDocPtr doc;
     xmlNodePtr root;
+    mode_t old_umask;
 
 #define SET_PROP(node, name, value) \
     do { \
@@ -290,7 +292,10 @@ static bool account_save(error_t **error)
         }
     }
     iterator_close(&it);
-    if (-1 == xmlSaveFormatFile(acd->path, doc, 1)) {
+    old_umask = umask(077);
+    ret = xmlSaveFormatFile(acd->path, doc, 1);
+    umask(old_umask);
+    if (-1 == ret) {
         xmlFreeDoc(doc);
         error_set(error, WARN, "Could not save file into '%s'", acd->path);
         return FALSE;
