@@ -49,6 +49,7 @@ bool value_equal(const void *, const void *);
 hash_t value_hash(const void *);
 void *hashtable_first(HashTable *);
 
+void hashtable_puts_keys(HashTable *);
 void hashtable_to_iterator(Iterator *, HashTable *);
 
 # ifdef DEBUG

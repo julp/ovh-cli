@@ -647,3 +647,14 @@ void hashtable_print(HashTable *this)
     printf("\n");
 }
 #endif /* DEBUG */
+
+void hashtable_puts_keys(HashTable *this)
+{
+    HashNode *n;
+
+    assert(NULL != this);
+
+    for (n = this->gHead; NULL != n; n = n->gNext) {
+        puts((const char *) n->key);
+    }
+}

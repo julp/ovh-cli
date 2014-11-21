@@ -59,6 +59,9 @@ make
                 * delete [type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT>]
 * dedicated
     * list
+    * \<server name>
+        * reboot
+        * boot list
 * me
 * help
 * quit

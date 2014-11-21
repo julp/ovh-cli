@@ -142,6 +142,7 @@ static bool domain_ctor(void)
     return TRUE;
 }
 
+#if 0
 static record_type_t xmlGetPropAsRecordType(xmlNodePtr node, const char *name)
 {
     size_t i;
@@ -161,6 +162,7 @@ static record_type_t xmlGetPropAsRecordType(xmlNodePtr node, const char *name)
 
     return ret;
 }
+#endif
 
 static int parse_record(HashTable *records, xmlDocPtr doc)
 {
@@ -175,7 +177,11 @@ static int parse_record(HashTable *records, xmlDocPtr doc)
     r->ttl = xmlGetPropAsInt(root, "ttl");
     r->name = xmlGetPropAsString(root, "subDomain");
     r->target = xmlGetPropAsString(root, "target");
+#if 0
     r->type = xmlGetPropAsRecordType(root, "fieldType");
+#else
+    r->type = xmlGetPropAsCollectionIndex(root, "fieldType", domain_record_types, RECORD_TYPE_ANY);
+#endif
     hashtable_quick_put_ex(records, 0, r->id, NULL, r, NULL);
     xmlFreeDoc(doc);
 
@@ -227,18 +233,7 @@ static command_status_t domain_list(void *UNUSED(arg), error_t **error)
         return ret;
     }
     // display
-    {
-        Iterator it;
-
-        hashtable_to_iterator(&it, ds->domains);
-        for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-            const char *domain;
-
-            iterator_current(&it, (void **) &domain);
-            puts(domain);
-        }
-        iterator_close(&it);
-    }
+    hashtable_puts_keys(ds->domains);
 
     return COMMAND_SUCCESS;
 }
@@ -474,7 +469,7 @@ static command_status_t record_delete(void *arg, error_t **error)
             switch (matches) {
                 case 1:
                 {
-                    if (!confirm("Confirm deletion of '%s.%s'", match->name, args->domain)) {
+                    if (!confirm(_("Confirm deletion of '%s.%s'"), match->name, args->domain)) {
                         return COMMAND_SUCCESS; // yeah, success because *we* canceled it
                     }
                     break;
@@ -688,6 +683,16 @@ static void domain_regcomm(graph_t *g)
     graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_delete, NULL);
 //     graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_update, NULL);
 }
+
+#if 0
+void domain_register_rules(json_value_t rules)
+{
+    JSON_ADD_RULE(rules, "GET", "/domain/zone/*");
+    JSON_ADD_RULE(rules, "PUT", "/domain/zone/*");
+    JSON_ADD_RULE(rules, "POST", "/domain/zone/*");
+    JSON_ADD_RULE(rules, "DELETE", "/domain/zone/*");
+}
+#endif
 
 DECLARE_MODULE(domain) = {
     MODULE_NAME,

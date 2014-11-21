@@ -48,6 +48,16 @@ static void me_regcomm(graph_t *g)
     graph_create_full_path(g, lit_me, NULL);
 }
 
+#if 0
+void me_register_rules(json_value_t rules)
+{
+    JSON_ADD_RULE(rules, "GET", "/me/*");
+    JSON_ADD_RULE(rules, "PUT", "/me/*");
+    JSON_ADD_RULE(rules, "POST", "/me/*");
+    JSON_ADD_RULE(rules, "DELETE", "/me/*");
+}
+#endif
+
 DECLARE_MODULE(me) = {
     "me",
     me_regcomm,

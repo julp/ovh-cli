@@ -56,3 +56,23 @@ uint32_t xmlGetPropAsInt(xmlNodePtr node, const char *name)
 
     return (uint32_t) ret;
 }
+
+int xmlGetPropAsCollectionIndex(xmlNodePtr node, const char *name, const char * const *values, int fallback)
+{
+    int ret;
+    xmlChar *value;
+    const char * const *v;
+
+    ret = fallback;
+    if (NULL != (value = xmlGetProp(node, BAD_CAST name))) {
+        for (v = values; NULL != *v; v++) {
+            if (0 == strcmp((const char *) value, *v)) {
+                ret = v - values;
+                break;
+            }
+        }
+        xmlFree(value);
+    }
+
+    return ret;
+}
