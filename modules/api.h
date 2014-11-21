@@ -23,6 +23,7 @@ void request_add_header(request_t *, const char *);
 void request_dtor(request_t *);
 request_t *request_get(uint32_t, const char *, ...) PRINTF(2, 3);
 request_t *request_delete(uint32_t, const char *, ...) PRINTF(2, 3);
+request_t *request_put(uint32_t, const char *, const char *, ...) PRINTF(3, 4);
 request_t *request_post(uint32_t, const char *, const char *, ...) PRINTF(3, 4);
 
 bool request_execute(request_t *, int, void **, error_t **);

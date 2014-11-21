@@ -2,6 +2,7 @@
 #include <inttypes.h>
 
 #include "common.h"
+#include "json.h"
 #include "util.h"
 #include "modules/api.h"
 #include "modules/libxml.h"
@@ -86,7 +87,7 @@ static server_t *server_new(void)
 
     s = mem_new(*s);
     s->boots_uptodate = FALSE;
-    s->boots = hashtable_new(NULL, value_equal, NULL, NULL, boot_destroy);
+    s->boots = hashtable_ascii_cs_new((DupFunc) strdup, free, boot_destroy);
 
     return s;
 }
@@ -123,6 +124,8 @@ static bool dedicated_ctor(void)
 }
 
 typedef struct {
+    int boot_type;
+    char *boot_name;
     char *server_name;
 } dedicated_argument_t;
 
@@ -213,7 +216,7 @@ static int parse_boot(HashTable *boots, xmlDocPtr doc)
     b->kernel = xmlGetPropAsString(root, "kernel");
     b->description = xmlGetPropAsString(root, "description");
     b->type = xmlGetPropAsCollectionIndex(root, "bootType", boot_types, -1);
-    hashtable_quick_put_ex(boots, 0, b->id, NULL, b, NULL);
+    hashtable_put(boots, (void *) b->kernel, b, NULL);
     xmlFreeDoc(doc);
 
     return TRUE;
@@ -265,7 +268,6 @@ static int fetch_server_boots(const char *server_name, server_t **s, error_t **e
     return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-// <opt bootId="%d" bootType="%s" description="%s" kernel="%s" />
 static command_status_t dedicated_boot_list(void *arg, error_t **error)
 {
     server_t *s;
@@ -301,6 +303,63 @@ static command_status_t dedicated_boot_list(void *arg, error_t **error)
     }
 
     return ret;
+}
+
+static command_status_t dedicated_boot_get(void *arg, error_t **error)
+{
+    // GET /dedicated/server/{serviceName}
+    // xmlGetPropAsInt(root, "bootId")
+}
+
+static command_status_t dedicated_boot_set(void *arg, error_t **error)
+{
+    server_t *s;
+    bool success;
+    dedicated_argument_t *args;
+
+    args = (dedicated_argument_t *) arg;
+    assert(NULL != args->server_name);
+    assert(NULL != args->boot_name);
+    if (success = (COMMAND_SUCCESS == fetch_server_boots(args->server_name, &s, error))) {
+        boot_t *b;
+
+        if (success = hashtable_get(s->boots, args->boot_name, (void **) &b)) {
+            String *buffer;
+            request_t *req;
+
+            // data
+            {
+                json_value_t root;
+                json_document_t *doc;
+
+                buffer = string_new();
+                doc = json_document_new();
+                root = json_object();
+                json_object_set_property(root, "bootId", json_integer(b->id));
+                json_document_set_root(doc, root);
+                json_document_serialize(
+                    doc,
+                    buffer,
+#ifdef DEBUG
+                    JSON_OPT_PRETTY_PRINT
+#else
+                    0
+#endif /* DEBUG */
+                );
+                json_document_destroy(doc);
+            }
+            // request
+            req = request_put(REQUEST_FLAG_SIGN, buffer->ptr, API_BASE_URL "/dedicated/server/%s", args->server_name);
+            request_add_header(req, "Content-type: application/json");
+            success = request_execute(req, RESPONSE_IGNORE, NULL, error);
+            request_dtor(req);
+            string_destroy(buffer);
+        } else {
+            error_set(error, NOTICE, "Any boot named '%s' was found for server '%s'", args->boot_name, args->server_name);
+        }
+    }
+
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
 static bool complete_servers(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *data)
@@ -343,7 +402,7 @@ static bool complete_boots(void *parsed_arguments, const char *current_argument,
 
 static void dedicated_regcomm(graph_t *g)
 {
-    argument_t *arg_server;
+    argument_t *arg_server, *arg_boot;
     argument_t *lit_dedicated, *lit_dedi_reboot, *lit_dedi_list;
     argument_t *lit_boot, *lit_boot_list;
 
@@ -352,16 +411,18 @@ static void dedicated_regcomm(graph_t *g)
     lit_dedi_list = argument_create_literal("list", dedicated_list);
     lit_dedi_reboot = argument_create_literal("reboot", dedicated_reboot);
     // dedicated <server> boot ...
-    lit_boot = argument_create_literal("boot", NULL);
+    lit_boot = argument_create_literal("boot", /*NULL*/dedicated_boot_set);
     lit_boot_list = argument_create_literal("list", dedicated_boot_list);
 
     arg_server = argument_create_string(offsetof(dedicated_argument_t, server_name), "<server>", complete_servers, NULL);
+    arg_boot = argument_create_string(offsetof(dedicated_argument_t, boot_name), "<boot>", complete_boots, NULL);
 
     // dedicated ...
     graph_create_full_path(g, lit_dedicated, lit_dedi_list, NULL);
     graph_create_full_path(g, lit_dedicated, arg_server, lit_dedi_reboot, NULL);
     // dedicated <server> boot ...
     graph_create_full_path(g, lit_dedicated, arg_server, lit_boot, lit_boot_list, NULL);
+    graph_create_full_path(g, lit_dedicated, arg_server, lit_boot, arg_boot, NULL);
 }
 
 #if 0

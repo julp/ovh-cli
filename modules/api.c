@@ -211,6 +211,26 @@ request_t *request_post(uint32_t flags, const char *data, const char *url, ...) 
     return req;
 }
 
+request_t *request_put(uint32_t flags, const char *data, const char *url, ...) /* PRINTF(3, 4) */
+{
+    va_list args;
+    request_t *req;
+
+    va_start(args, url);
+    req = request_ctor(flags, HTTP_PUT, url, args);
+    va_end(args);
+    if (NULL != data && '\0' != *data) {
+        req->pdata = req->data = data;
+        if (HAS_FLAG(flags, REQUEST_FLAG_COPY)) {
+            // NOTE: we don't use CURLOPT_COPYPOSTFIELDS because we need this string later for hashing/signature
+            req->pdata = strdup(data);
+        }
+        curl_easy_setopt(req->ch, CURLOPT_POSTFIELDS, req->pdata);
+    }
+
+    return req;
+}
+
 request_t *request_delete(uint32_t flags, const char *url, ...) /* PRINTF(2, 3) */
 {
     va_list args;
@@ -403,6 +423,9 @@ const char *request_consumer_key(const char *account, const char *password, time
             JSON_ADD_RULE(rules, "GET", "/*");
             JSON_ADD_RULE(rules, "POST", "/domain/zone/*");
             JSON_ADD_RULE(rules, "DELETE", "/domain/zone/*");
+            JSON_ADD_RULE(rules, "PUT", "/dedicated/server/*");
+            JSON_ADD_RULE(rules, "POST", "/dedicated/server/*");
+            JSON_ADD_RULE(rules, "DELETE", "/dedicated/server/*");
             json_document_serialize(
                 doc,
                 buffer,

@@ -186,13 +186,26 @@ static void graph_node_insert_child(graph_t *g, graph_node_t *parent, graph_node
     // parent->lastChild = queue
     // X->nextSibling = suivant
     // X->previousSibling = précédent
-    for (current = parent->firstChild; NULL != current && child->type > current->type; current = current->nextSibling)
+    for (current = parent->firstChild; NULL != current && (child->type > current->type/* || strcmp(child->string, current->string) > 0*/) ; current = current->nextSibling)
+#ifdef GRAPH_DEBUG
+    {
+        debug("%s", current->string);
+    }
+debug("%s", child->string);
+#else
         ;
+#endif /* GRAPH_DEBUG */
     if (current == child) {
         return;
     }
     if (NULL == current) {
+#ifdef GRAPH_DEBUG
+debug("%s", child->string);
+#endif /* GRAPH_DEBUG */
         child->previousSibling = parent->lastChild;
+//         if (NULL != parent->lastChild) {
+//             parent->lastChild->nextSibling = child;
+//         }
         parent->lastChild = child;
         child->nextSibling = NULL;
         if (NULL != child->previousSibling) {
@@ -203,6 +216,9 @@ static void graph_node_insert_child(graph_t *g, graph_node_t *parent, graph_node
         }
     } else {
         // if (ARG_TYPE_END == current->type): current by a new "END" node
+#ifdef GRAPH_DEBUG
+debug("%s / %s", child->string, current->string);
+#endif /* GRAPH_DEBUG */
         child->nextSibling = current;
         child->previousSibling = current->previousSibling;
         if (NULL != current->previousSibling) {
@@ -484,7 +500,7 @@ static int string_array_to_index(argument_t *arg, const char *value)
     values = (const char * const *) arg->data;
     for (v = values; NULL != *v; v++) {
         if (0 == strcmp(value, *v)) {
-            return values - v;
+            return v - values;
         }
     }
 
