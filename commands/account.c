@@ -549,6 +549,7 @@ static command_status_t account_add(void *arg, error_t **error)
     if (NULL != args->expiration) {
         if (args->expires_in) {
             if (!parse_duration(args->expiration, &expires_at)) {
+                error_set(error, WARN, _("Command aborted: unable to parse duration '%s'"), args->expiration);
                 return COMMAND_USAGE;
             }
             expires_at += time(NULL);
@@ -556,8 +557,8 @@ static command_status_t account_add(void *arg, error_t **error)
             char *endptr;
             struct tm ltm = { 0 };
 
-            endptr = strptime(args->expiration, "%c", &ltm);
-            if (NULL == endptr || '\0' != *endptr) {
+            if (NULL == (endptr = strptime(args->expiration, "%c", &ltm))) {
+                error_set(error, WARN, _("Command aborted: unable to parse expiration date '%s'"), args->expiration);
                 return COMMAND_USAGE;
             }
             expires_at = mktime(&ltm);
