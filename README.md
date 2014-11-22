@@ -37,31 +37,34 @@ make
 ## Commands
 
 * account
-    * list
+    * list => list all known OVH accounts
     * \<nickhandle>
-        * add \<password or use empty string - "" - to not record it> (\<consumer key> expires in|at \<expiration date or delay>)
+        * add \<password or use empty string - "" - to not record it> (\<consumer key> expires in|at \<expiration date or delay>) => register a new account
         * delete
         * default
         * switch
 * domain
-    * list
-    * \<domain name>
-        * export
-        * refresh
+    * list => display all domains owned by the current account
+    * \<domain name> ("zone" may be more appropriate)
+        * export => export *domain*/zone in DNS format
+        * refresh => refresh *domain* (generation of a new zone ID?)
         * dnssec
-            * status
-            * enable
-            * disable
-        * record
-            * list
+            * status => print if DNSSEC is enabled/disabled for *domain*
+            * enable => enable DNSSEC for *domain*
+            * disable => disable DNSSEC for *domain*
+        * record ("subdomain" may be more appropriate) (TODO: find a more convenient way to manage empty subdomain name - SPF, NS, ... ?)
+            * list => display all subdomains of *domain*
             * \<record name>
-                * add \<target> type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT>
-                * delete [type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT>]
+                * add \<target> type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT> => add *subdomain* to *domain*
+                * delete => delete *subdomain* of *domain* (TODO: non unique subdomain names are all deleted)
 * dedicated
-    * list
+    * list => list all servers associated to the current account
     * \<server name>
-        * reboot
-        * boot list
-* me
+        * reboot => **hard** reboot of *server*
+        * boot
+            * list => list all available boots for *server*
+            * show => display current boot for *server*
+            * \<boot name> => set boot for next (re)boots of *server*
+* me => display personal informations associated to the current account (name, address, etc)
 * help
 * quit
