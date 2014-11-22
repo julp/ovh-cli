@@ -11,7 +11,6 @@ typedef enum {
     ARG_TYPE_NUMBER,
     ARG_TYPE_CHOICES, // comme le type de record dns
     ARG_TYPE_STRING // free string (eventually with help of completion)
-//     ARG_TYPE_END
 } argument_type_t;
 
 // méthode toString pour intégrer un élément quelconque (record_t *, server_t *, ...) à la ligne de commande (ie le résultat de la complétion) ?
@@ -178,15 +177,32 @@ void graph_destroy(graph_t *g)
     free(g);
 }
 
-static void graph_node_insert_child(graph_t *g, graph_node_t *parent, graph_node_t *child)
+static int graph_node_compare(graph_node_t *a, graph_node_t *b)
+{
+    if (a == b) {
+        return 0;
+    } else if (NULL == a || NULL == b) {
+        return (NULL != a) - (NULL != b);
+    } else {
+        int diff;
+
+        if (0 == (diff = a->type - b->type)) {
+            return strcmp(a->string, b->string);
+        } else {
+            return diff;
+        }
+    }
+}
+
+// #define GRAPH_DEBUG 1
+static void graph_node_insert_child(UGREP_FILE_LINE_FUNC_DC graph_t *g, graph_node_t *parent, graph_node_t *child)
 {
     graph_node_t *current, *previous;
 
-    // parent->firstChild = tête
-    // parent->lastChild = queue
-    // X->nextSibling = suivant
-    // X->previousSibling = précédent
-    for (current = parent->firstChild; NULL != current && (child->type > current->type/* || strcmp(child->string, current->string) > 0*/) ; current = current->nextSibling)
+#ifdef GRAPH_DEBUG
+debug("%s %s %d", ubasename(__ugrep_file), __ugrep_func, __ugrep_line);
+#endif /* GRAPH_DEBUG */
+    for (current = parent->firstChild; NULL != current && graph_node_compare(child, current) > 0; current = current->nextSibling)
 #ifdef GRAPH_DEBUG
     {
         debug("%s", current->string);
@@ -195,17 +211,21 @@ debug("%s", child->string);
 #else
         ;
 #endif /* GRAPH_DEBUG */
-    if (current == child) {
+    if (0 == graph_node_compare(child, current)) {
         return;
     }
+    // il aurait aussi fallu que si le noeud qu'on insère est "end" et qu'on sait qu'il a au moins déjà un frère, le "clôner"
     if (NULL == current) {
 #ifdef GRAPH_DEBUG
 debug("%s", child->string);
 #endif /* GRAPH_DEBUG */
+        /*if (parent->lastChild == g->end) {
+            graph_node_t *tmp;
+
+            tmp = parent->lastChild;
+            CREATE_ARG(parent->lastChild, ARG_TYPE_END, "(END)");
+        }*/
         child->previousSibling = parent->lastChild;
-//         if (NULL != parent->lastChild) {
-//             parent->lastChild->nextSibling = child;
-//         }
         parent->lastChild = child;
         child->nextSibling = NULL;
         if (NULL != child->previousSibling) {
@@ -215,7 +235,13 @@ debug("%s", child->string);
             parent->firstChild = child;
         }
     } else {
-        // if (ARG_TYPE_END == current->type): current by a new "END" node
+        /*if (current == g->end) {
+            graph_node_t *tmp;
+
+            tmp = current;
+            CREATE_ARG(current, ARG_TYPE_END, "(END)");
+//             current->nextSibling = tmp->nextSibling;
+        }*/
 #ifdef GRAPH_DEBUG
 debug("%s / %s", child->string, current->string);
 #endif /* GRAPH_DEBUG */
@@ -231,10 +257,11 @@ debug("%s / %s", child->string, current->string);
 }
 
 // créer un chemin complet
-void graph_create_full_path(graph_t *g, graph_node_t *start, ...) /* SENTINEL */
+void _graph_create_full_path(UGREP_FILE_LINE_FUNC_DC graph_t *g, graph_node_t *start, ...) /* SENTINEL */
 {
     va_list nodes;
     graph_node_t *node, *parent;
+    graph_node_t *end;
 
     assert(NULL != g);
     assert(NULL != start);
@@ -244,16 +271,17 @@ void graph_create_full_path(graph_t *g, graph_node_t *start, ...) /* SENTINEL */
     hashtable_put(g->roots, (void *) start->string, start, NULL);
     va_start(nodes, start);
     while (NULL != (node = va_arg(nodes, graph_node_t *))) {
-        graph_node_insert_child(g, parent, node);
+        graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, node);
         parent = node;
     }
     va_end(nodes);
-    graph_node_insert_child(g, parent, g->end);
+    CREATE_ARG(end, ARG_TYPE_END, "(END)");
+    graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, /*g->*/end);
 }
 
-// créer un chemin entre 2 sommets (end = NULL peut être NULL)
+// créer un chemin entre 2 sommets (end peut être NULL)
 // vu que le point de départ doit exister, ça ne peut être une "racine"
-void graph_create_path(graph_t *g, graph_node_t *start, graph_node_t *end, ...) /* SENTINEL */
+void _graph_create_path(UGREP_FILE_LINE_FUNC_DC graph_t *g, graph_node_t *start, graph_node_t *end, ...) /* SENTINEL */
 {
     va_list nodes;
     graph_node_t *node, *parent;
@@ -261,16 +289,18 @@ void graph_create_path(graph_t *g, graph_node_t *start, graph_node_t *end, ...) 
     assert(NULL != g);
     assert(NULL != start);
 
+    parent = start;
     va_start(nodes, end);
     while (NULL != (node = va_arg(nodes, graph_node_t *))) {
-        graph_node_insert_child(g, parent, node);
+        graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, node);
         parent = node;
     }
     va_end(nodes);
     if (NULL == end) {
-        graph_node_insert_child(g, parent, g->end);
+        CREATE_ARG(end, ARG_TYPE_END, "(END)");
+        graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, /*g->*/end);
     } else {
-        graph_node_insert_child(g, parent, end);
+        graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, end);
     }
 }
 
@@ -280,24 +310,29 @@ void graph_create_all_path(graph_node_t *start, graph_node_t *end, ...) /* SENTI
     //
 }
 
-static void traverse_graph_node(graph_node_t *node, int depth)
+static void traverse_graph_node(graph_node_t *node, int depth, bool indent)
 {
+    bool has_end;
     size_t children_count;
     graph_node_t *current;
 
+    has_end = FALSE;
     children_count = 0;
     for (current = node->firstChild; NULL != current; current = current->nextSibling) {
-        if (ARG_TYPE_END != current->type) {
-            ++children_count;
-        }
+        ++children_count;
+        has_end |= ARG_TYPE_END == current->type;
     }
-    printf("%*c%s", depth * 4, ' ', node->string);
-    if (1 != children_count) {
+    if (indent) {
+        printf("%*c", depth * 4, ' ');
+    }
+    putchar(' ');
+    fputs(node->string, stdout);
+    if (children_count > 1 || has_end) {
         putchar('\n');
     }
     for (current = node->firstChild; NULL != current; current = current->nextSibling) {
         if (ARG_TYPE_END != current->type) {
-            traverse_graph_node(current, 1 == children_count ? 0 : depth + 1); // ne va pas fonctionner ? Introduire un booléen, indent, en paramètre de façon à garder le depth pour les descendants de niveau > 1 ?
+            traverse_graph_node(current, 1 == children_count ? depth : depth + 1, 1 != children_count);
         }
     }
 }
@@ -640,7 +675,7 @@ command_status_t graph_run_command(graph_t *g, int args_count, const char **args
             prev_arg = arg;
             if (NULL == (arg = graph_node_find(arg, args[depth]))) {
                 error_set(error, NOTICE, "too many arguments"); // also a literal or a choice does not match what is planned (eg: domain foo.tld dnssec on - "on" instead of status/enable/disable)
-                traverse_graph_node(prev_arg, 0);
+                traverse_graph_node(prev_arg, 0, TRUE);
                 handle = NULL;
                 return COMMAND_USAGE;
             }
@@ -659,7 +694,7 @@ command_status_t graph_run_command(graph_t *g, int args_count, const char **args
         }
         if (NULL == handle || !graph_node_end_in_children(arg)) {
             error_set(error, NOTICE, "unknown command");
-            traverse_graph_node(arg, 0);
+            traverse_graph_node(arg, 0, TRUE);
         } else {
             ret = handle((void *) arguments, error);
         }
@@ -680,7 +715,7 @@ void graph_display(graph_t *g)
         argument_t *arg;
 
         arg = iterator_current(&it, NULL);
-        traverse_graph_node(arg, 0);
+        traverse_graph_node(arg, 0, TRUE);
     }
     iterator_close(&it);
 }
