@@ -222,7 +222,7 @@ static int parse_boot(HashTable *boots, xmlDocPtr doc)
     return TRUE;
 }
 
-static int fetch_server_boots(const char *server_name, server_t **s, error_t **error)
+static command_status_t fetch_server_boots(const char *server_name, server_t **s, error_t **error)
 {
     server_set_t *ss;
     bool request_success;
@@ -280,7 +280,7 @@ static command_status_t dedicated_boot_list(void *arg, error_t **error)
     if (COMMAND_SUCCESS == (ret = fetch_server_boots(args->server_name, &s, error))) {
         // display
         hashtable_to_iterator(&it, s->boots);
-        printf("Available boots for '%s':\n", args->server_name);
+        printf(_("Available boots for '%s':\n"), args->server_name);
         for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
             boot_t *b;
 
@@ -305,10 +305,55 @@ static command_status_t dedicated_boot_list(void *arg, error_t **error)
     return ret;
 }
 
+static xmlDocPtr fetch_server_details(const char *server_name, error_t **error)
+{
+    xmlDocPtr doc;
+    request_t *req;
+    bool request_success;
+
+    req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s", server_name);
+    request_add_header(req, "Accept: text/xml"); // TODO: OVH API seems to be buggy: when asking for XML response, response is empty ?!?
+    request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
+    request_dtor(req);
+
+    return request_success ? doc : NULL;
+}
+
 static command_status_t dedicated_boot_get(void *arg, error_t **error)
 {
-    // GET /dedicated/server/{serviceName}
-    // xmlGetPropAsInt(root, "bootId")
+    server_t *s;
+    bool success;
+    dedicated_argument_t *args;
+
+    args = (dedicated_argument_t *) arg;
+    assert(NULL != args->server_name);
+    if (success = (COMMAND_SUCCESS == fetch_server_boots(args->server_name, &s, error))) {
+        xmlDocPtr doc;
+
+        if (success = (NULL != (doc = fetch_server_details(args->server_name, error)))) {
+            xmlNodePtr root;
+
+            if (success = (NULL != (root = xmlDocGetRootElement(doc)))) {
+                boot_t *b;
+                uint32_t id;
+                Iterator it;
+
+                id = xmlGetPropAsInt(root, "bootId");
+                hashtable_to_iterator(&it, s->boots);
+                for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+                    b = iterator_current(&it, NULL);
+                    if (id == b->id) {
+                        break;
+                    }
+                }
+                iterator_close(&it);
+                printf(_("Current boot for %s is:  %s (%s): %s\n"), args->server_name, b->kernel, boot_types[b->type], b->description);
+            }
+            xmlFreeDoc(doc);
+        }
+    }
+
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
 static command_status_t dedicated_boot_set(void *arg, error_t **error)
@@ -354,8 +399,9 @@ static command_status_t dedicated_boot_set(void *arg, error_t **error)
             success = request_execute(req, RESPONSE_IGNORE, NULL, error);
             request_dtor(req);
             string_destroy(buffer);
+            error_set(error, INFO, _("This new boot will only be effective on the next (re)boot of '%s'"), args->server_name);
         } else {
-            error_set(error, NOTICE, "Any boot named '%s' was found for server '%s'", args->boot_name, args->server_name);
+            error_set(error, NOTICE, _("Any boot named '%s' was found for server '%s'"), args->boot_name, args->server_name);
         }
     }
 
@@ -404,7 +450,7 @@ static void dedicated_regcomm(graph_t *g)
 {
     argument_t *arg_server, *arg_boot;
     argument_t *lit_dedicated, *lit_dedi_reboot, *lit_dedi_list;
-    argument_t *lit_boot, *lit_boot_list;
+    argument_t *lit_boot, *lit_boot_list, *lit_boot_show;
 
     // dedicated ...
     lit_dedicated = argument_create_literal("dedicated", NULL);
@@ -412,6 +458,7 @@ static void dedicated_regcomm(graph_t *g)
     lit_dedi_reboot = argument_create_literal("reboot", dedicated_reboot);
     // dedicated <server> boot ...
     lit_boot = argument_create_literal("boot", /*NULL*/dedicated_boot_set);
+    lit_boot_show = argument_create_literal("show", dedicated_boot_get);
     lit_boot_list = argument_create_literal("list", dedicated_boot_list);
 
     arg_server = argument_create_string(offsetof(dedicated_argument_t, server_name), "<server>", complete_servers, NULL);
@@ -422,6 +469,7 @@ static void dedicated_regcomm(graph_t *g)
     graph_create_full_path(g, lit_dedicated, arg_server, lit_dedi_reboot, NULL);
     // dedicated <server> boot ...
     graph_create_full_path(g, lit_dedicated, arg_server, lit_boot, lit_boot_list, NULL);
+    graph_create_full_path(g, lit_dedicated, arg_server, lit_boot, lit_boot_show, NULL);
     graph_create_full_path(g, lit_dedicated, arg_server, lit_boot, arg_boot, NULL);
 }
 
