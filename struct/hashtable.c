@@ -410,6 +410,7 @@ static void hashtable_clear_real(HashTable *this)
         }
         free(tmp);
     }
+    memset(this->nodes, 0, this->capacity * sizeof(*this->nodes));
 }
 
 void hashtable_clear(HashTable *this)
