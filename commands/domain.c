@@ -67,6 +67,7 @@ typedef struct {
 
 typedef struct {
     bool on_off;
+    bool nocache;
     char *domain;
     char *record; // also called subdomain
     char *value; // also called target
@@ -142,28 +143,6 @@ static bool domain_ctor(void)
     return TRUE;
 }
 
-#if 0
-static record_type_t xmlGetPropAsRecordType(xmlNodePtr node, const char *name)
-{
-    size_t i;
-    xmlChar *value;
-    record_type_t ret;
-
-    ret = 0;
-    if (NULL != (value = xmlGetProp(node, BAD_CAST name))) {
-        for (i = 0; i < ARRAY_SIZE(record_type_map); i++) {
-            if (0 == strcmp((const char *) value, record_type_map[i].short_name)) {
-                ret = i;
-                break;
-            }
-        }
-        xmlFree(value);
-    }
-
-    return ret;
-}
-#endif
-
 static int parse_record(HashTable *records, xmlDocPtr doc)
 {
     record_t *r;
@@ -177,11 +156,7 @@ static int parse_record(HashTable *records, xmlDocPtr doc)
     r->ttl = xmlGetPropAsInt(root, "ttl");
     r->name = xmlGetPropAsString(root, "subDomain");
     r->target = xmlGetPropAsString(root, "target");
-#if 0
-    r->type = xmlGetPropAsRecordType(root, "fieldType");
-#else
     r->type = xmlGetPropAsCollectionIndex(root, "fieldType", domain_record_types, RECORD_TYPE_ANY);
-#endif
     hashtable_quick_put_ex(records, 0, r->id, NULL, r, NULL);
     xmlFreeDoc(doc);
 
@@ -222,14 +197,16 @@ static command_status_t fetch_domains(domain_set_t *ds, bool force, error_t **er
     return COMMAND_SUCCESS;
 }
 
-static command_status_t domain_list(void *UNUSED(arg), error_t **error)
+static command_status_t domain_list(void *arg, error_t **error)
 {
     domain_set_t *ds;
     command_status_t ret;
+    domain_record_argument_t *args;
 
+    args = (domain_record_argument_t *) arg;
     FETCH_ACCOUNT_DOMAINS(ds);
     // populate
-    if (COMMAND_SUCCESS != (ret = fetch_domains(ds, FALSE /*args->nocache*/, error))) {
+    if (COMMAND_SUCCESS != (ret = fetch_domains(ds, args->nocache, error))) {
         return ret;
     }
     // display
@@ -644,10 +621,12 @@ static void domain_regcomm(graph_t *g)
         *arg_value, // called target by OVH
         *arg_dnssec_on_off
     ;
+    argument_t *lit_nocache;
     argument_t *lit_dnssec, *lit_dnssec_status;
     argument_t *lit_domain, *lit_domain_list, *lit_domain_refresh, *lit_domain_export;
     argument_t *lit_record, *lit_record_list, *lit_record_add, *lit_record_delete, *lit_record_update, *lit_record_type;
 
+    lit_nocache = argument_create_relevant_literal(offsetof(domain_record_argument_t, nocache), "nocache", NULL);
     // domain ...
     lit_domain = argument_create_literal("domain", NULL);
     lit_domain_list = argument_create_literal("list", domain_list);
@@ -672,6 +651,7 @@ static void domain_regcomm(graph_t *g)
 
     // domain ...
     graph_create_full_path(g, lit_domain, lit_domain_list, NULL);
+    graph_create_path(g, lit_domain_list, NULL, lit_nocache, NULL);
     graph_create_full_path(g, lit_domain, arg_domain, lit_domain_export, NULL);
     graph_create_full_path(g, lit_domain, arg_domain, lit_domain_refresh, NULL);
     // domain X dnssec ...
