@@ -1,3 +1,7 @@
+* Don't have any browser to manage your domains, servers and so on?
+* Want to automate/script some tasks?
+* Want to quickly make some administrative jobs on a domain/server?
+
 ## Disclaimer
 
 * **Never ever** install this tool on servers (dedicated as VPS) you rent to OVH
@@ -16,13 +20,15 @@
 * openssl
 * libcurl
 * libxml2
-* libedit
+* libedit (autocompletion)
 * libiconv (not used yet)
 * gettext (optional)
 
 ## Install
 
-[Create your application](https://eu.api.ovh.com/createApp/), then:
+[Create your application](https://eu.api.ovh.com/createApp/)
+
+Fork/compile/install ovh-cli
 ```
 git clone ...
 cmake . \
@@ -33,6 +39,14 @@ make
 (sudo) make install
 ```
 (for now, these parameters have to be set at compile time)
+
+Register your account(s):
+```
+# with your password instead of a valid consumer key
+ovh account <nickhandle> password <password>
+# with a valid and unexpirable consumer key instead of a password
+ovh account <nickhandle> password "" <consumer key>
+```
 
 ## Commands
 
