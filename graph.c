@@ -55,9 +55,9 @@ graph_t *graph_new(void)
     graph_t *g;
 
     g = mem_new(*g);
-    CREATE_ARG(g->end, ARG_TYPE_END, "(END)");
-    g->roots = hashtable_ascii_cs_new(NULL, NULL, NULL);
-    g->nodes = hashtable_new(value_hash, value_equal, NULL, free, NULL);
+//     CREATE_ARG(g->end, ARG_TYPE_END, "(END)");
+    g->roots = hashtable_ascii_cs_new(NULL, NULL, free);
+    g->nodes = hashtable_new(value_hash, value_equal, NULL, NULL, free);
 
     return g;
 }
@@ -197,7 +197,7 @@ static int graph_node_compare(graph_node_t *a, graph_node_t *b)
 // #define GRAPH_DEBUG 1
 static void graph_node_insert_child(UGREP_FILE_LINE_FUNC_DC graph_t *g, graph_node_t *parent, graph_node_t *child)
 {
-    graph_node_t *current, *previous;
+    graph_node_t *current;
 
 #ifdef GRAPH_DEBUG
 debug("%s %s %d", ubasename(__ugrep_file), __ugrep_func, __ugrep_line);
@@ -212,8 +212,12 @@ debug("%s", child->string);
         ;
 #endif /* GRAPH_DEBUG */
     if (0 == graph_node_compare(child, current)) {
+        if (child->type == ARG_TYPE_END) {
+            free(child);
+        }
         return;
     }
+    hashtable_put_ex(g->nodes, HT_PUT_ON_DUP_KEY_PRESERVE, (void *) child, child, NULL);
     // il aurait aussi fallu que si le noeud qu'on insère est "end" et qu'on sait qu'il a au moins déjà un frère, le "clôner"
     if (NULL == current) {
 #ifdef GRAPH_DEBUG
@@ -260,15 +264,14 @@ debug("%s / %s", child->string, current->string);
 void _graph_create_full_path(UGREP_FILE_LINE_FUNC_DC graph_t *g, graph_node_t *start, ...) /* SENTINEL */
 {
     va_list nodes;
-    graph_node_t *node, *parent;
-    graph_node_t *end;
+    graph_node_t *end, *node, *parent;
 
     assert(NULL != g);
     assert(NULL != start);
     assert(ARG_TYPE_LITERAL == start->type);
 
     parent = start;
-    hashtable_put(g->roots, (void *) start->string, start, NULL);
+    hashtable_put_ex(g->roots, HT_PUT_ON_DUP_KEY_PRESERVE, (void *) start->string, start, NULL);
     va_start(nodes, start);
     while (NULL != (node = va_arg(nodes, graph_node_t *))) {
         graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, node);
@@ -298,10 +301,11 @@ void _graph_create_path(UGREP_FILE_LINE_FUNC_DC graph_t *g, graph_node_t *start,
     va_end(nodes);
     if (NULL == end) {
         CREATE_ARG(end, ARG_TYPE_END, "(END)");
-        graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, /*g->*/end);
-    } else {
-        graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, end);
+//         graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, /*g->*/end);
+//     } else {
+//         graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, end);
     }
+    graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, end);
 }
 
 // créer tous les chemins/permutations possibles entre start et end (1 - 2 - 3, 1 - 3 - 2, 2 - 1 - 3, 2 - 3 - 1, 3 - 1 - 2, 3 - 2 - 1)
@@ -336,8 +340,6 @@ static void traverse_graph_node(graph_node_t *node, int depth, bool indent)
         }
     }
 }
-
-extern int str_split(const char *string, char ***args);
 
 /* <TODO: DRY (share this with main.c)> */
 typedef struct {

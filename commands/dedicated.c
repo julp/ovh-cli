@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "json.h"
+#include "date.h"
 #include "util.h"
 #include "modules/api.h"
 #include "modules/libxml.h"
@@ -138,7 +139,7 @@ static command_status_t fetch_servers(server_set_t *ss, bool force, error_t **er
         bool request_success;
 
         req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server");
-        request_add_header(req, "Accept: text/xml");
+        REQUEST_XML_RESPONSE_WANTED(req);
         request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
         request_dtor(req);
         if (request_success) {
@@ -179,6 +180,51 @@ static command_status_t dedicated_list(void *UNUSED(arg), error_t **error)
     return COMMAND_SUCCESS;
 }
 
+static command_status_t dedicated_check(void *UNUSED(arg), error_t **error)
+{
+    bool success;
+    server_set_t *ss;
+
+    FETCH_ACCOUNT_SERVERS(ss);
+    // populate
+    if (success = (COMMAND_SUCCESS == fetch_servers(ss, FALSE, error))) {
+        time_t now;
+        Iterator it;
+
+        now = time(NULL);
+        hashtable_to_iterator(&it, ss->servers);
+        for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
+            xmlDocPtr doc;
+            request_t *req;
+            const char *server_name;
+
+            iterator_current(&it, (void **) &server_name);
+            // request
+            req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s/serviceInfos", server_name);
+            REQUEST_XML_RESPONSE_WANTED(req);
+            success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
+            request_dtor(req);
+            // response
+            if (FALSE) {
+                xmlNodePtr root;
+                time_t server_expiration;
+
+                if (success = date_parse("", &server_expiration, error)) {
+                    int diff_days;
+
+                    diff_days = date_diff_in_days(now, server_expiration);
+                    if (diff_days > 0 && diff_days < 30/*00*/) {
+                        printf("%s expires in %d days\n", server_name, diff_days);
+                    }
+                }
+            }
+            xmlFreeDoc(doc);
+        }
+    }
+
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
 static command_status_t dedicated_reboot(void *arg, error_t **error)
 {
     xmlDocPtr doc;
@@ -192,7 +238,7 @@ static command_status_t dedicated_reboot(void *arg, error_t **error)
     // TODO: check server exists?
     if (confirm(_("Confirm hard reboot of %s"), args->server_name)) {
         req = request_post(REQUEST_FLAG_SIGN, NULL, API_BASE_URL "/dedicated/server/%s/reboot", args->server_name);
-        request_add_header(req, "Accept: text/xml");
+        REQUEST_XML_RESPONSE_WANTED(req);
         request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
         request_dtor(req);
         if (request_success) {
@@ -239,7 +285,7 @@ static command_status_t fetch_server_boots(const char *server_name, server_t **s
             hashtable_put(ss->servers, (void *) server_name, *s = server_new(), NULL);
         }
         req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s/boot", server_name);
-        request_add_header(req, "Accept: text/xml");
+        REQUEST_XML_RESPONSE_WANTED(req);
         request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
         request_dtor(req);
         // result
@@ -253,7 +299,7 @@ static command_status_t fetch_server_boots(const char *server_name, server_t **s
 
                 content = xmlNodeGetContent(n);
                 req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s/boot/%s", server_name, (const char *) content);
-                request_add_header(req, "Accept: text/xml");
+                REQUEST_XML_RESPONSE_WANTED(req);
                 request_success &= request_execute(req, RESPONSE_XML, (void **) &doc, error); // request_success is assumed to be TRUE before the first iteration
                 request_dtor(req);
                 // result
@@ -312,7 +358,7 @@ static xmlDocPtr fetch_server_details(const char *server_name, error_t **error)
     bool request_success;
 
     req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s", server_name);
-    request_add_header(req, "Accept: text/xml"); // TODO: OVH API seems to be buggy: when asking for XML response, response is empty ?!?
+    REQUEST_XML_RESPONSE_WANTED(req); // TODO: OVH API seems to be buggy: when asking for XML response, response is empty ?!?
     request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
     request_dtor(req);
 
@@ -449,12 +495,13 @@ static bool complete_boots(void *parsed_arguments, const char *current_argument,
 static void dedicated_regcomm(graph_t *g)
 {
     argument_t *arg_server, *arg_boot;
-    argument_t *lit_dedicated, *lit_dedi_reboot, *lit_dedi_list;
     argument_t *lit_boot, *lit_boot_list, *lit_boot_show;
+    argument_t *lit_dedicated, *lit_dedi_reboot, *lit_dedi_list, *lit_dedi_check;
 
     // dedicated ...
     lit_dedicated = argument_create_literal("dedicated", NULL);
     lit_dedi_list = argument_create_literal("list", dedicated_list);
+    lit_dedi_check = argument_create_literal("check", dedicated_check);
     lit_dedi_reboot = argument_create_literal("reboot", dedicated_reboot);
     // dedicated <server> boot ...
     lit_boot = argument_create_literal("boot", /*NULL*/dedicated_boot_set);
@@ -466,6 +513,7 @@ static void dedicated_regcomm(graph_t *g)
 
     // dedicated ...
     graph_create_full_path(g, lit_dedicated, lit_dedi_list, NULL);
+    graph_create_full_path(g, lit_dedicated, lit_dedi_check, NULL);
     graph_create_full_path(g, lit_dedicated, arg_server, lit_dedi_reboot, NULL);
     // dedicated <server> boot ...
     graph_create_full_path(g, lit_dedicated, arg_server, lit_boot, lit_boot_list, NULL);

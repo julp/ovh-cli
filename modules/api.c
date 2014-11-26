@@ -440,7 +440,7 @@ const char *request_consumer_key(const char *account, const char *password, time
 #undef JSON_ADD_RULE
         }
         req = request_post(REQUEST_FLAG_NONE, buffer->ptr, API_BASE_URL "/auth/credential");
-        request_add_header(req, "Accept: text/xml");
+        REQUEST_XML_RESPONSE_WANTED(req);
         request_add_header(req, "Content-type: application/json");
         request_add_header(req, "X-Ovh-Application: " APPLICATION_KEY);
         request_execute(req, RESPONSE_XML, (void **) &doc, error); // TODO: check returned value

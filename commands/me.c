@@ -23,7 +23,7 @@ static command_status_t me(void *UNUSED(arg), error_t **error)
     xmlNodePtr root;
 
     req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/me");
-    request_add_header(req, "Accept: text/xml");
+    REQUEST_XML_RESPONSE_WANTED(req);
     request_execute(req, RESPONSE_XML, (void **) &doc, error);
     request_dtor(req);
     if (NULL == (root = xmlDocGetRootElement(doc))) {

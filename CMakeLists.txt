@@ -54,7 +54,7 @@ add_executable(ovh main.c
     modules/openssl.c modules/curl.c modules/libxml.c
     modules/api.c modules/conv.c
     modules/base.c
-    graph.c json.c error.c util.c
+    graph.c json.c error.c util.c date.c
     struct/iterator.c struct/hashtable.c struct/dptrarray.c struct/xtring.c
     commands/account.c commands/domain.c commands/me.c commands/dedicated.c
     ${MISC_SOURCES}

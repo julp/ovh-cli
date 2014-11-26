@@ -172,7 +172,7 @@ static command_status_t fetch_domains(domain_set_t *ds, bool force, error_t **er
         bool request_success;
 
         req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain");
-        request_add_header(req, "Accept: text/xml");
+        REQUEST_XML_RESPONSE_WANTED(req);
         request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
         request_dtor(req);
         if (request_success) {
@@ -215,6 +215,51 @@ static command_status_t domain_list(void *arg, error_t **error)
     return COMMAND_SUCCESS;
 }
 
+static command_status_t domain_check(void *UNUSED(arg), error_t **error)
+{
+    bool success;
+    domain_set_t *ds;
+
+    FETCH_ACCOUNT_DOMAINS(ds);
+    // populate
+    if (success = (COMMAND_SUCCESS == fetch_domains(ds, FALSE, error))) {
+        time_t now;
+        Iterator it;
+
+        now = time(NULL);
+        hashtable_to_iterator(&it, ds->domains);
+        for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
+            xmlDocPtr doc;
+            request_t *req;
+            const char *domain_name;
+
+            iterator_current(&it, (void **) &domain_name);
+            // request
+            req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/serviceInfos", domain_name);
+            REQUEST_XML_RESPONSE_WANTED(req);
+            success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
+            request_dtor(req);
+            // response
+            if (FALSE) {
+                xmlNodePtr root;
+                time_t domain_expiration;
+
+                if (success = date_parse("", &domain_expiration, error)) {
+                    int diff_days;
+
+                    diff_days = date_diff_in_days(now, domain_expiration);
+                    if (diff_days > 0 && diff_days < 30/*00*/) {
+                        printf("%s expires in %d days\n", domain_name, diff_days);
+                    }
+                }
+            }
+            xmlFreeDoc(doc);
+        }
+    }
+
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
 static command_status_t domain_export(void *arg, error_t **error)
 {
     xmlDocPtr doc;
@@ -227,7 +272,7 @@ static command_status_t domain_export(void *arg, error_t **error)
     assert(NULL != args->domain);
 
     req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/export", args->domain);
-    request_add_header(req, "Accept: text/xml"); // we ask XML instead of JSON else we have to parse/unescape string
+    REQUEST_XML_RESPONSE_WANTED(req); // we ask XML instead of JSON else we have to parse/unescape string
     if (request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error)) {
         if (NULL != (root = xmlDocGetRootElement(doc))) {
             xmlChar *content;
@@ -277,7 +322,7 @@ static int get_domain_records(const char *domain, domain_t **d, error_t **error)
             hashtable_put(ds->domains, (void *) domain, *d = domain_new(), NULL);
         }
         req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/record", domain);
-        request_add_header(req, "Accept: text/xml");
+        REQUEST_XML_RESPONSE_WANTED(req);
         request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
         request_dtor(req);
         // result
@@ -291,7 +336,7 @@ static int get_domain_records(const char *domain, domain_t **d, error_t **error)
 
                 content = xmlNodeGetContent(n);
                 req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/record/%s", domain, (const char *) content);
-                request_add_header(req, "Accept: text/xml");
+                REQUEST_XML_RESPONSE_WANTED(req);
                 request_success &= request_execute(req, RESPONSE_XML, (void **) &doc, error); // request_success is assumed to be TRUE before the first iteration
                 request_dtor(req);
                 // result
@@ -384,7 +429,7 @@ static command_status_t record_add(void *arg, error_t **error)
             request_t *req;
 
             req = request_post(REQUEST_FLAG_SIGN, buffer->ptr, API_BASE_URL "/domain/zone/%s/record", args->domain);
-            request_add_header(req, "Accept: text/xml");
+            REQUEST_XML_RESPONSE_WANTED(req);
             request_add_header(req, "Content-type: application/json");
             request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
             request_dtor(req);
@@ -568,7 +613,7 @@ static command_status_t dnssec_status(void *arg, error_t **error)
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
     req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
-    request_add_header(req, "Accept: text/xml");
+    REQUEST_XML_RESPONSE_WANTED(req);
     if (request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error)) {
         if (NULL != (root = xmlDocGetRootElement(doc))) {
             xmlChar *content;
@@ -623,13 +668,14 @@ static void domain_regcomm(graph_t *g)
     ;
     argument_t *lit_nocache;
     argument_t *lit_dnssec, *lit_dnssec_status;
-    argument_t *lit_domain, *lit_domain_list, *lit_domain_refresh, *lit_domain_export;
+    argument_t *lit_domain, *lit_domain_list, *lit_domain_check, *lit_domain_refresh, *lit_domain_export;
     argument_t *lit_record, *lit_record_list, *lit_record_add, *lit_record_delete, *lit_record_update, *lit_record_type;
 
     lit_nocache = argument_create_relevant_literal(offsetof(domain_record_argument_t, nocache), "nocache", NULL);
     // domain ...
     lit_domain = argument_create_literal("domain", NULL);
     lit_domain_list = argument_create_literal("list", domain_list);
+    lit_domain_check = argument_create_literal("check", domain_check);
     lit_domain_export = argument_create_literal("export", domain_export);
     lit_domain_refresh = argument_create_literal("refresh", domain_refresh);
     // domain X dnssec ...
@@ -651,6 +697,7 @@ static void domain_regcomm(graph_t *g)
 
     // domain ...
     graph_create_full_path(g, lit_domain, lit_domain_list, NULL);
+    graph_create_full_path(g, lit_domain, lit_domain_check, NULL);
     graph_create_path(g, lit_domain_list, NULL, lit_nocache, NULL);
     graph_create_full_path(g, lit_domain, arg_domain, lit_domain_export, NULL);
     graph_create_full_path(g, lit_domain, arg_domain, lit_domain_refresh, NULL);
