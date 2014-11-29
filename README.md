@@ -54,9 +54,9 @@ ovh account <nickhandle> password "" <consumer key>
     * list => list all known OVH accounts
     * \<nickhandle>
         * add \<password or use empty string - "" - to not record it> (\<consumer key> expires in|at \<expiration date or delay>) => register a new account
-        * delete
-        * default
-        * switch
+        * delete => delete *account*
+        * default => set default account
+        * switch => change current *account*
 * domain
     * list => display all domains owned by the current account
     * \<domain name> ("zone" may be more appropriate)
