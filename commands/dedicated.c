@@ -194,31 +194,54 @@ static command_status_t dedicated_check(void *UNUSED(arg), error_t **error)
         now = time(NULL);
         hashtable_to_iterator(&it, ss->servers);
         for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
+#ifdef XML_RESPONSE
             xmlDocPtr doc;
+#else
+            json_document_t *doc;
+#endif
             request_t *req;
             const char *server_name;
 
             iterator_current(&it, (void **) &server_name);
             // request
             req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s/serviceInfos", server_name);
+#ifdef XML_RESPONSE
             REQUEST_XML_RESPONSE_WANTED(req);
             success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
+#else
+            request_add_header(req, "Content-Type: application/json");
+            success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+#endif
             request_dtor(req);
             // response
-            if (FALSE) {
+            if (success) {
+#ifdef XML_RESPONSE
                 xmlNodePtr root;
+#else
+                json_value_t root, expiration;
+#endif
                 time_t server_expiration;
 
-                if (success = date_parse("", &server_expiration, error)) {
-                    int diff_days;
+#ifdef XML_RESPONSE
+#else
+                root = json_document_get_root(doc);
+                if (json_object_get_property(root, "expiration", &expiration)) {
+                    if (success = date_parse(json_get_string(expiration), &server_expiration, error)) {
+#endif
+                        int diff_days;
 
-                    diff_days = date_diff_in_days(now, server_expiration);
-                    if (diff_days > 0 && diff_days < 30/*00*/) {
-                        printf("%s expires in %d days\n", server_name, diff_days);
+                        diff_days = date_diff_in_days(server_expiration, now);
+                        if (diff_days > 0 && diff_days < 3000) {
+                            printf("%s expires in %d days\n", server_name, diff_days);
+                        }
                     }
                 }
+#ifdef XML_RESPONSE
+                xmlFreeDoc(doc);
+#else
+                json_document_destroy(doc);
+#endif
             }
-            xmlFreeDoc(doc);
         }
     }
 

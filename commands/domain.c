@@ -229,31 +229,54 @@ static command_status_t domain_check(void *UNUSED(arg), error_t **error)
         now = time(NULL);
         hashtable_to_iterator(&it, ds->domains);
         for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
+#ifdef XML_RESPONSE
             xmlDocPtr doc;
+#else
+            json_document_t *doc;
+#endif
             request_t *req;
             const char *domain_name;
 
             iterator_current(&it, (void **) &domain_name);
             // request
             req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/serviceInfos", domain_name);
+#ifdef XML_RESPONSE
             REQUEST_XML_RESPONSE_WANTED(req);
             success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
+#else
+            request_add_header(req, "Content-Type: application/json");
+            success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+#endif
             request_dtor(req);
             // response
-            if (FALSE) {
+            if (success) {
+#ifdef XML_RESPONSE
                 xmlNodePtr root;
+#else
+                json_value_t root, expiration;
+#endif
                 time_t domain_expiration;
 
-                if (success = date_parse("", &domain_expiration, error)) {
-                    int diff_days;
+#ifdef XML_RESPONSE
+#else
+                root = json_document_get_root(doc);
+                if (json_object_get_property(root, "expiration", &expiration)) {
+                    if (success = date_parse(json_get_string(expiration), &domain_expiration, error)) {
+#endif
+                        int diff_days;
 
-                    diff_days = date_diff_in_days(now, domain_expiration);
-                    if (diff_days > 0 && diff_days < 30/*00*/) {
-                        printf("%s expires in %d days\n", domain_name, diff_days);
+                        diff_days = date_diff_in_days(domain_expiration, now);
+                        if (diff_days > 0 && diff_days < 3000) {
+                            printf("%s expires in %d days\n", domain_name, diff_days);
+                        }
                     }
                 }
+#ifdef XML_RESPONSE
+                xmlFreeDoc(doc);
+#else
+                json_document_destroy(doc);
+#endif
             }
-            xmlFreeDoc(doc);
         }
     }
 
@@ -709,6 +732,8 @@ static void domain_regcomm(graph_t *g)
     graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_add, arg_value, lit_record_type, arg_type, NULL);
     graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_delete, NULL);
 //     graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_update, NULL);
+//     graph_create_all_path(g, lit_record_list, NULL, 1, lit_nocache, 2, lit_record_type, arg_type, 0);
+//     graph_create_all_path(g, lit_record_list, NULL, 1, argument_create_literal("1", NULL), 1, argument_create_literal("2", NULL), 1, argument_create_literal("3", NULL), 0);
 }
 
 #if 0

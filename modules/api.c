@@ -259,6 +259,7 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
     long http_status;
     char *content_type;
 
+    *output = NULL;
     if (HAS_FLAG(req->flags, REQUEST_FLAG_SIGN)) {
         if (!request_sign(req, error)) {
             return FALSE;
@@ -276,8 +277,8 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
         curl_easy_setopt(req->ch, CURLOPT_HTTPPOST, req->formpost);
     }
     if (CURLE_OK != (res = curl_easy_perform(req->ch))) {
-        fprintf(stderr, "Request failed: %s\n", curl_easy_strerror(res));
-        return 0;
+        error_set(error, WARN, "HTTP request failed: %s", curl_easy_strerror(res));
+        return FALSE;
     }
     curl_easy_getinfo(req->ch, CURLINFO_CONTENT_TYPE, &content_type);
     curl_easy_getinfo(req->ch, CURLINFO_RESPONSE_CODE, &http_status);
@@ -330,6 +331,8 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
             if (NULL != error && NULL == *error) { // an error can be set and any was already set
                 error_set(error, WARN, "failed to parse following xml: %s", req->buffer->ptr);
             }
+        } else if (NULL != content_type && (0 == strcmp(content_type, "application/json"))) {
+            // TODO
         } else {
             error_set(error, WARN, "HTTP request to '%s' failed with status %ld", req->url, http_status);
         }
@@ -337,11 +340,16 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
     } else {
         switch (output_type) {
             case RESPONSE_IGNORE:
-                /* NOP */
+                *output = (void *) 1;
                 break;
             case RESPONSE_TEXT:
             {
-                *((const char **) output) = req->buffer->ptr;
+                *output = req->buffer->ptr;
+                break;
+            }
+            case RESPONSE_JSON:
+            {
+                *output = json_document_parse(req->buffer->ptr, error);
                 break;
             }
             case RESPONSE_HTML:
@@ -351,8 +359,11 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
                 ctxt = htmlCreateMemoryParserCtxt(req->buffer->ptr, req->buffer->len);
                 assert(NULL != ctxt);
 //                 htmlCtxtUseOptions(ctxt, options);
-                htmlParseDocument(ctxt);
-                *((xmlDocPtr *) output) = ctxt->myDoc;
+                if (0 == htmlParseDocument(ctxt)) {
+                    *output = ctxt->myDoc;
+                } else {
+                    error_set(error, WARN, "failed to parse HTML document");
+                }
                 htmlFreeParserCtxt(ctxt);
                 break;
             }
@@ -368,19 +379,20 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
                 if (xmlParseDocument(ctxt) < 1) { // segfaults ?!?
                     return NULL;
                 }
-                doc = ctxt->myDoc;
+                *output = ctxt->myDoc;
                 xmlFreeParserCtxt(ctxt);
 #else
-                *((xmlDocPtr *) output) = xmlParseMemory(req->buffer->ptr, req->buffer->len);
+                *output = xmlParseMemory(req->buffer->ptr, req->buffer->len);
 #endif
                 break;
             }
             default:
                 assert(FALSE);
+                break;
         }
     }
 
-    return TRUE;
+    return NULL != *output;
 }
 
 #define STRINGIFY(x) #x

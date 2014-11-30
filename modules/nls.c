@@ -6,6 +6,7 @@
 bool nls_ctor(void)
 {
     setlocale(LC_ALL, "");
+    setlocale(LC_NUMERIC, "C"); // for JSON parsing
     bindtextdomain(PACKAGE, LOCALEDIR);
     textdomain(PACKAGE);
 
