@@ -132,6 +132,26 @@ typedef enum {
 #  define GRAY(str)   str
 # endif /* DEBUG */
 
+#ifdef DEBUG
+# ifdef _MSC_VER
+#  define CCALL __cdecl
+#  pragma section(".CRT$XCU",read)
+#  define INITIALIZER_DECL(f) \
+    void __cdecl f(void); \
+    __declspec(allocate(".CRT$XCU")) void (__cdecl*f##_)(void) = f
+# elif defined(__GNUC__)
+#  define CCALL
+#  define INITIALIZER_DECL(f) \
+    void f(void) __attribute__((constructor))
+# endif /* INITIALIZER_DECL */
+#else
+# define INITIALIZER_DECL(f) \
+    void f(void)
+#endif /* DEBUG */
+
+#define INITIALIZER_P(f) \
+    void CCALL f(void)
+
 # include "error.h"
 # include "graph.h"
 
