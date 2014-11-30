@@ -144,13 +144,14 @@ typedef enum {
 #  define INITIALIZER_DECL(f) \
     void f(void) __attribute__((constructor))
 # endif /* INITIALIZER_DECL */
+# define INITIALIZER_P(f) \
+    void CCALL f(void)
 #else
 # define INITIALIZER_DECL(f) \
+    /* NOP */
+# define INITIALIZER_P(f) \
     void f(void)
 #endif /* DEBUG */
-
-#define INITIALIZER_P(f) \
-    void CCALL f(void)
 
 # include "error.h"
 # include "graph.h"
