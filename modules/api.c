@@ -259,7 +259,6 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
     long http_status;
     char *content_type;
 
-    *output = NULL;
     if (HAS_FLAG(req->flags, REQUEST_FLAG_SIGN)) {
         if (!request_sign(req, error)) {
             return FALSE;
@@ -340,8 +339,7 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
     } else {
         switch (output_type) {
             case RESPONSE_IGNORE:
-                *output = (void *) 1;
-                break;
+                return TRUE;
             case RESPONSE_TEXT:
             {
                 *output = req->buffer->ptr;
