@@ -270,6 +270,7 @@ json_value_t json_document_get_root(json_document_t *doc)
 void json_document_set_root(json_document_t *doc, json_value_t new_root)
 {
     assert(NULL != doc);
+    assert(JSON_TYPE_ARRAY == json_get_type(new_root) || JSON_TYPE_OBJECT == json_get_type(new_root));
 
     if (0 != doc->root) {
         json_value_destroy(doc->root);
