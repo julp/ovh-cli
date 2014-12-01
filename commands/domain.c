@@ -239,7 +239,7 @@ static command_status_t domain_check(void *UNUSED(arg), error_t **error)
 
             iterator_current(&it, (void **) &domain_name);
             // request
-            req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/serviceInfos", domain_name);
+            req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/%s/serviceInfos", domain_name);
 #ifdef XML_RESPONSE
             REQUEST_XML_RESPONSE_WANTED(req);
             success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
