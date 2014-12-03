@@ -224,7 +224,7 @@ static command_status_t domain_check(void *UNUSED(arg), error_t **error)
 
     FETCH_ACCOUNT_DOMAINS(ds);
     // populate
-    if (success = (COMMAND_SUCCESS == fetch_domains(ds, FALSE, error))) {
+    if ((success = (COMMAND_SUCCESS == fetch_domains(ds, FALSE, error)))) {
         time_t now;
         Iterator it;
 
@@ -298,7 +298,7 @@ static command_status_t domain_export(void *arg, error_t **error)
 
     req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/export", args->domain);
     REQUEST_XML_RESPONSE_WANTED(req); // we ask XML instead of JSON else we have to parse/unescape string
-    if (request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error)) {
+    if ((request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error))) {
         if (NULL != (root = xmlDocGetRootElement(doc))) {
             xmlChar *content;
 
@@ -330,7 +330,7 @@ static command_status_t domain_refresh(void *arg, error_t **error)
     return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static int get_domain_records(const char *domain, domain_t **d, error_t **error)
+static bool get_domain_records(const char *domain, domain_t **d, error_t **error)
 {
     domain_set_t *ds;
     bool request_success;
@@ -353,7 +353,7 @@ static int get_domain_records(const char *domain, domain_t **d, error_t **error)
         // result
         if (request_success) {
             if (NULL == (root = xmlDocGetRootElement(doc))) {
-                return 0;
+                return FALSE;
             }
             for (n = root->children; request_success && n != NULL; n = n->next) {
                 xmlDocPtr doc;
@@ -489,7 +489,7 @@ static command_status_t record_delete(void *arg, error_t **error)
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
     assert(NULL != args->record);
-    if (request_success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, error))) {
+    if ((request_success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, error)))) {
 #if 0
         // what was the goal? If true, it is more the domain which does not exist!
         if (!hashtable_get(domains, (void *) argv[0], (void **) &d)) {
@@ -609,7 +609,7 @@ static bool complete_records(void *parsed_arguments, const char *current_argumen
 
     args = (domain_record_argument_t *) parsed_arguments;
     assert(NULL != args->domain);
-    if (request_success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, NULL))) {
+    if ((request_success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, NULL)))) {
         Iterator it;
 
         hashtable_to_iterator(&it, d->records);
@@ -639,7 +639,7 @@ static command_status_t dnssec_status(void *arg, error_t **error)
     assert(NULL != args->domain);
     req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
     REQUEST_XML_RESPONSE_WANTED(req);
-    if (request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error)) {
+    if ((request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error))) {
         if (NULL != (root = xmlDocGetRootElement(doc))) {
             xmlChar *content;
 
