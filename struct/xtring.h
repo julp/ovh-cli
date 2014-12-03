@@ -14,6 +14,7 @@ String *string_adopt_string(char *);
 String *string_adopt_string_len(char *, size_t);
 void string_append_char(String *, char);
 void string_append_formatted(String *, const char *, ...) PRINTF(2, 3);
+void string_append_json_string(String *, const char *);
 void string_append_n_times(String *, const char *, size_t, size_t);
 void string_append_string(String *, const char *);
 void string_append_string_len(String *, const char *, int32_t);
