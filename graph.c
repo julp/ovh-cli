@@ -308,10 +308,83 @@ void _graph_create_path(UGREP_FILE_LINE_FUNC_DC graph_t *g, graph_node_t *start,
     graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, end);
 }
 
-// créer tous les chemins/permutations possibles entre start et end (1 - 2 - 3, 1 - 3 - 2, 2 - 1 - 3, 2 - 3 - 1, 3 - 1 - 2, 3 - 2 - 1)
-void graph_create_all_path(graph_node_t *start, graph_node_t *end, ...) /* SENTINEL */
+/*size_t fact(size_t n)
 {
-    //
+    size_t f;
+
+    f = 1;
+    while(0 != n) {
+        f *= n--;
+    }
+
+    return f;
+}*/
+
+#define MAX_ALTERNATE_PATHS 12
+// créer tous les chemins/permutations possibles entre start et end (1 - 2 - 3, 1 - 3 - 2, 2 - 1 - 3, 2 - 3 - 1, 3 - 1 - 2, 3 - 2 - 1)
+void _graph_create_all_path(UGREP_FILE_LINE_FUNC_DC graph_t *g, graph_node_t *start, graph_node_t *end, ...) /* SENTINEL */
+{
+    va_list ap;
+    int i, group_count, subpaths_count;
+    graph_node_t *parent, *node, *nodes[MAX_ALTERNATE_PATHS];
+
+    assert(NULL != start);
+
+    va_start(ap, end);
+    subpaths_count = 0;
+    while (0 != (group_count = va_arg(ap, int))) {
+        assert(subpaths_count < MAX_ALTERNATE_PATHS);
+        nodes[subpaths_count++] = parent = va_arg(ap, graph_node_t *);
+        assert(NULL != parent);
+        // link nodes of subgroup between them if not yet done
+        for (i = 2; i <= group_count; i++) {
+            node = va_arg(ap, graph_node_t *);
+            assert(NULL != node);
+            graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, node);
+            parent = node;
+        }
+        if (NULL == end) {
+            CREATE_ARG(end, ARG_TYPE_END, "(END)");
+        }
+        graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, end);
+    }
+    va_end(ap);
+    if (subpaths_count > 0) {
+        graph_node_t *tmp;
+        size_t j, k, a[MAX_ALTERNATE_PATHS], b[MAX_ALTERNATE_PATHS], c[MAX_ALTERNATE_PATHS + 1];
+
+        bzero(c, sizeof(c));
+        for (i = 0; i < MAX_ALTERNATE_PATHS; i++) {
+            a[i] = b[i] = i;
+        }
+        while (TRUE) {
+            parent = start;
+            for (i = 0; i < subpaths_count; i++) {
+                printf("%s ", nodes[i]->string);
+                graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, nodes[i]);
+            }
+            printf("\n");
+            k = 1;
+            while (c[k] == k) {
+                c[k] = 0;
+                k = k + 1;
+            }
+            if (k == subpaths_count) {
+                break;
+            } else {
+                c[k] = c[k] + 1;
+            }
+            tmp = nodes[a[0]];
+            nodes[a[0]] = nodes[a[b[k]]];
+            nodes[a[b[k]]] = tmp;
+            j = 1;
+            k = k - 1;
+            while (j < k) {
+                j = j + 1;
+                k = k - 1;
+            }
+        }
+    }
 }
 
 static void traverse_graph_node(graph_node_t *node, int depth, bool indent)
@@ -368,6 +441,8 @@ bool complete_from_hashtable_keys(void *arguments, const char *argument, size_t 
         }
     }
     iterator_close(&it);
+
+    return TRUE;
 }
 
 typedef struct {
@@ -437,6 +512,7 @@ static bool graph_node_end_in_children(graph_node_t *node)
     return FALSE;
 }
 
+#include <math.h>
 static size_t my_vsnprintf(void *args, char *dst, size_t dst_size, const char *fmt, va_list ap)
 {
     char *w;
@@ -494,7 +570,6 @@ static size_t my_vsnprintf(void *args, char *dst, size_t dst_size, const char *f
                 }
                 case 'u':
                 {
-#include <math.h>
                     uint32_t num;
                     size_t num_len;
 
@@ -546,7 +621,6 @@ static int string_array_to_index(argument_t *arg, const char *value)
 
 // TODO:
 // - separate completion (2 DPtrArray ?) to distinguish commands to values (eg: domain<tab> will propose "bar.tld", "foo.tld", "list", "xxx.tld")
-// - fill underlaying hashtable on completion to have consistent completion? (eg: domain<tab> will only propose "list" if we haven't yet run "domain list")
 // - indicate the command is complete? (eg: domain list<tab>)
 unsigned char graph_complete(EditLine *el, int UNUSED(ch))
 {
