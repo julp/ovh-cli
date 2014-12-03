@@ -249,12 +249,12 @@ static int account_load(error_t **error)
             a->consumer_key = NULL;
             a->modules_data = hashtable_ascii_cs_new(NULL, NULL, NULL); // no dup/dtor for keys as they are "static" strings ; no dtor for values, we need to do it ourselves
             if (NULL != xmlHasProp(n, BAD_CAST "consumer_key")) {
-                xmlChar *expires_at;
+                char *expires_at;
 
                 a->consumer_key = xmlGetPropAsString(n, "consumer_key");
                 expires_at = xmlGetPropAsString(n, "expires_at");
                 a->expires_at = (time_t) atol(expires_at);
-                xmlFree(expires_at);
+                free(expires_at);
             }
             hashtable_put(acd->accounts, a->account, a, NULL);
             if (xmlHasProp(n, BAD_CAST "default")) {
