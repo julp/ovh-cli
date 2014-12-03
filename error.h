@@ -67,4 +67,6 @@ error_t *error_new(UGREP_FILE_LINE_FUNC_DC int, const char *, ...) WARN_UNUSED_R
 error_t *error_vnew(UGREP_FILE_LINE_FUNC_DC int, const char *, va_list) WARN_UNUSED_RESULT;
 void _error_set(UGREP_FILE_LINE_FUNC_DC error_t **, int, const char *, ...);
 
+void report(int, const char *, ...);
+
 #endif /* !ERROR_H */
