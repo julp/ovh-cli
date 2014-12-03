@@ -5,8 +5,16 @@ project(ovh-cli C)
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 
 include(CheckIncludeFile)
+include(CheckSymbolExists)
+include(CheckFunctionExists)
+
 check_include_file("stdint.h" HAVE_STDINT_H)
 check_include_file("inttypes.h" HAVE_INTTYPES_H)
+check_function_exists("strcasecmp" HAVE_STRCASECMP)
+# if(NOT HAVE_STRCASECMP)
+#     check_symbol_exists("strcasecmp" "strings.h" HAVE_STRINGS_H)
+# endif(NOT HAVE_STRCASECMP)
+check_function_exists("strncasecmp" HAVE_STRNCASECMP)
 
 find_package(CURL REQUIRED)
 find_package(LibXml2 REQUIRED)
@@ -14,8 +22,10 @@ find_package(OpenSSL REQUIRED)
 # set(EDITLINE_DEBUG TRUE)
 find_package(EditLine REQUIRED)
 find_package(Gettext QUIET)
+find_package(FindIntl QUIET)
 
 include_directories(
+    ${Intl_INCLUDE_DIRS}
     ${CURL_INCLUDE_DIRS}
     ${LIBXML2_INCLUDE_DIR}
     ${OPENSSL_INCLUDE_DIR}
@@ -35,14 +45,27 @@ if(NOT API_BASE_URL)
     set(API_BASE_URL "https://eu.api.ovh.com/1.0")
 endif(NOT API_BASE_URL)
 
-if(GETTEXT_FOUND)
+if(Intl_FOUND)
     set(WITH_NLS true)
     set(LOCALEDIR "${CMAKE_INSTALL_PREFIX}/share/locale/")
     add_subdirectory(i18n)
     list(APPEND MISC_SOURCES "modules/nls.c")
-endif(GETTEXT_FOUND)
+endif(Intl_FOUND)
 
 option(DEBUG "Enable/disable debugging" OFF)
+
+set(
+    BUILTIN_MODULES
+    modules/openssl.c modules/curl.c modules/libxml.c modules/api.c modules/conv.c modules/base.c
+    commands/account.c
+)
+
+set(EXTRA_MODULES domain me dedicated)
+
+set(EXTRA_MODULES_ENABLED )
+foreach(MODULE ${EXTRA_MODULES})
+    list(APPEND EXTRA_MODULES_ENABLED "commands/${MODULE}.c")
+endforeach(MODULE)
 
 configure_file(
     "config.h.in"
@@ -50,13 +73,8 @@ configure_file(
     @ONLY
 )
 
-add_executable(ovh main.c
-    modules/openssl.c modules/curl.c modules/libxml.c
-    modules/api.c modules/conv.c
-    modules/base.c
-    graph.c json.c error.c util.c date.c
+add_executable(ovh main.c graph.c json.c error.c util.c date.c
     struct/iterator.c struct/hashtable.c struct/dptrarray.c struct/xtring.c
-    commands/account.c commands/domain.c commands/me.c commands/dedicated.c
-    ${MISC_SOURCES}
+    ${BUILTIN_MODULES} ${EXTRA_MODULES_ENABLED} ${MISC_SOURCES}
 )
-target_link_libraries(ovh ${LIBXML2_LIBRARIES} ${CURL_LIBRARIES} ${OPENSSL_LIBRARIES} ${EDITLINE_LIBRARIES})
+target_link_libraries(ovh ${Intl_LIBRARIES} ${CURL_LIBRARIES} ${LIBXML2_LIBRARIES} ${OPENSSL_LIBRARIES} ${EDITLINE_LIBRARIES})
