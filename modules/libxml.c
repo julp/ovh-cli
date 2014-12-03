@@ -51,7 +51,7 @@ uint32_t xmlGetPropAsInt(xmlNodePtr node, const char *name)
 
     ret = 0;
     if (NULL != (value = xmlGetProp(node, BAD_CAST name))) {
-        ret = strtoull(value, NULL, 10);
+        ret = strtoull((char *) value, NULL, 10);
         xmlFree(value);
     }
 
