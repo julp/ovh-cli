@@ -7,6 +7,7 @@
 #include "util.h"
 #include "modules/api.h"
 #include "modules/libxml.h"
+#include "commands/account.h"
 #include "struct/hashtable.h"
 
 #define MODULE_NAME "domain"
