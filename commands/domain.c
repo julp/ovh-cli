@@ -15,7 +15,7 @@
 #define FETCH_ACCOUNT_DOMAINS(/*domain_set **/ ds) \
     do { \
         ds = NULL; \
-        account_current_get_data(MODULE_NAME, &ds); \
+        account_current_get_data(MODULE_NAME, (void **) &ds); \
         assert(NULL != ds); \
     } while (0);
 
@@ -263,7 +263,7 @@ static command_status_t domain_check(void *UNUSED(arg), error_t **error)
 #else
                 root = json_document_get_root(doc);
                 if (json_object_get_property(root, "expiration", &expiration)) {
-                    if (success = date_parse(json_get_string(expiration), &domain_expiration, error)) {
+                    if ((success = date_parse(json_get_string(expiration), &domain_expiration, error))) {
 #endif
                         int diff_days;
 
@@ -468,7 +468,7 @@ static command_status_t record_add(void *arg, error_t **error)
 
         d = NULL;
         ds = NULL;
-        account_current_get_data(MODULE_NAME, &ds);
+        account_current_get_data(MODULE_NAME, (void **) &ds);
         assert(NULL != ds);
         if (!hashtable_get(ds->domains, (void *) args->domain, (void **) &d)) {
             hashtable_put(ds->domains, (void *) args->domain, d = domain_new(), NULL);

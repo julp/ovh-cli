@@ -14,7 +14,7 @@
 #define FETCH_ACCOUNT_SERVERS(/*server_set **/ ss) \
     do { \
         ss = NULL; \
-        account_current_get_data(MODULE_NAME, &ss); \
+        account_current_get_data(MODULE_NAME, (void **) &ss); \
         assert(NULL != ss); \
     } while (0);
 
@@ -171,7 +171,7 @@ static command_status_t dedicated_list(void *UNUSED(arg), error_t **error)
 
     FETCH_ACCOUNT_SERVERS(ss);
     // populate
-    if (COMMAND_SUCCESS != (ret = fetch_servers(ss, FALSE /*args->nocache*/, error))) {
+    if ((COMMAND_SUCCESS != (ret = fetch_servers(ss, FALSE /*args->nocache*/, error)))) {
         return ret;
     }
     // display
@@ -187,7 +187,7 @@ static command_status_t dedicated_check(void *UNUSED(arg), error_t **error)
 
     FETCH_ACCOUNT_SERVERS(ss);
     // populate
-    if (success = (COMMAND_SUCCESS == fetch_servers(ss, FALSE, error))) {
+    if ((success = (COMMAND_SUCCESS == fetch_servers(ss, FALSE, error)))) {
         time_t now;
         Iterator it;
 
@@ -396,13 +396,13 @@ static command_status_t dedicated_boot_get(void *arg, error_t **error)
 
     args = (dedicated_argument_t *) arg;
     assert(NULL != args->server_name);
-    if (success = (COMMAND_SUCCESS == fetch_server_boots(args->server_name, &s, error))) {
+    if ((success = (COMMAND_SUCCESS == fetch_server_boots(args->server_name, &s, error)))) {
         xmlDocPtr doc;
 
-        if (success = (NULL != (doc = fetch_server_details(args->server_name, error)))) {
+        if ((success = (NULL != (doc = fetch_server_details(args->server_name, error))))) {
             xmlNodePtr root;
 
-            if (success = (NULL != (root = xmlDocGetRootElement(doc)))) {
+            if ((success = (NULL != (root = xmlDocGetRootElement(doc))))) {
                 boot_t *b;
                 uint32_t id;
                 Iterator it;
@@ -434,10 +434,10 @@ static command_status_t dedicated_boot_set(void *arg, error_t **error)
     args = (dedicated_argument_t *) arg;
     assert(NULL != args->server_name);
     assert(NULL != args->boot_name);
-    if (success = (COMMAND_SUCCESS == fetch_server_boots(args->server_name, &s, error))) {
+    if ((success = (COMMAND_SUCCESS == fetch_server_boots(args->server_name, &s, error)))) {
         boot_t *b;
 
-        if (success = hashtable_get(s->boots, args->boot_name, (void **) &b)) {
+        if ((success = hashtable_get(s->boots, args->boot_name, (void **) &b))) {
             String *buffer;
             request_t *req;
 
@@ -497,7 +497,7 @@ static bool complete_boots(void *parsed_arguments, const char *current_argument,
 
     args = (dedicated_argument_t *) parsed_arguments;
     assert(NULL != args->server_name);
-    if (request_success = (COMMAND_SUCCESS == fetch_server_boots(args->server_name, &s, NULL))) {
+    if ((request_success = (COMMAND_SUCCESS == fetch_server_boots(args->server_name, &s, NULL)))) {
         Iterator it;
 
         hashtable_to_iterator(&it, s->boots);
