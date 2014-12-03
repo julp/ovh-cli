@@ -419,7 +419,6 @@ static command_status_t record_add(void *arg, error_t **error)
     domain_record_argument_t *args;
 
     args = (domain_record_argument_t *) arg;
-    assert(-1 != args->type); // TODO: not really relevant
     assert(NULL != args->domain);
     assert(NULL != args->record);
     {

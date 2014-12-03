@@ -7,6 +7,7 @@
 #include "util.h"
 #include "modules/api.h"
 #include "modules/libxml.h"
+#include "commands/account.h"
 #include "struct/hashtable.h"
 
 #define MODULE_NAME "dedicated"
@@ -226,7 +227,7 @@ static command_status_t dedicated_check(void *UNUSED(arg), error_t **error)
 #else
                 root = json_document_get_root(doc);
                 if (json_object_get_property(root, "expiration", &expiration)) {
-                    if (success = date_parse(json_get_string(expiration), &server_expiration, error)) {
+                    if ((success = date_parse(json_get_string(expiration), &server_expiration, error))) {
 #endif
                         int diff_days;
 

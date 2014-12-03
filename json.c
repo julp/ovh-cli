@@ -73,7 +73,7 @@ static int json_number_write(json_document_t *doc, json_value_t value, String *b
     assert(JSON_TYPE_NUMBER == json_get_type(value));
 
     if (HAS_FLAG(value, JSON_INTEGER_MASK)) {
-        string_append_formatted(buffer, "%" PRIi64, (value >> 1));
+        string_append_formatted(buffer, "%" PRIi64, (int64_t) (value >> 1));
     } else {
         json_node_t *node;
 
@@ -890,6 +890,9 @@ static void json_push(json_parser_t *jp, json_value_t value, json_type_t type)
             break;
         case JSON_TYPE_STRING:
             RESET_BUFFER(jp, val_buffer, vp);
+            break;
+        default:
+            /* NOP */
             break;
     }
 }
