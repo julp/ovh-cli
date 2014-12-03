@@ -98,7 +98,7 @@ static struct json_type_handler_t {
     [ JSON_TYPE_OBJECT ] = { (DtorFunc) hashtable_destroy, json_object_write },
 };
 
-static inline const struct json_type_handler_t *json_get_type_handler(json_value_t v)
+static const struct json_type_handler_t *json_get_type_handler(json_value_t v)
 {
     const struct json_type_handler_t *handler;
 
@@ -120,7 +120,7 @@ static inline const struct json_type_handler_t *json_get_type_handler(json_value
     return handler;
 }
 
-inline json_type_t json_get_type(json_value_t v)
+json_type_t json_get_type(json_value_t v)
 {
     json_type_t type;
 
@@ -580,6 +580,8 @@ enum states {
     STATE_N1, /* nu       */
     STATE_N2, /* nul      */
     STATE_N3, /* null     */
+    STATE_D1, /* '\' for trail surrogate */
+    STATE_D2, /* 'u' for trail surrogate */
     NR_STATES,
     STATE___ = 0xFF
 };
@@ -655,6 +657,9 @@ static const uint8_t state_transition_table[NR_STATES][NR_CLASSES] = {
     [ S(N1) ] = { S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(N2), S(__), S(__), S(__) },
     [ S(N2) ] = { S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(N3), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__) },
     [ S(N3) ] = { S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(NU), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__) },
+/* D1..D2: trail surrogate */
+    [ S(D1) ] = { S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(D2), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__) },
+    [ S(D2) ] = { S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(__), S(U1), S(__), S(__), S(__) },
 };
 
 
@@ -669,6 +674,9 @@ static const uint8_t state_transition_table[NR_STATES][NR_CLASSES] = {
 
 #define INVALID_UNICODE_ESCAPED_SEQUENCE(offset) \
     "invalid unicode escaped sequence found on its " offset " digit"
+
+#define TRAIL_SURROGATE_EXPECTED \
+    "unicode escape sequence expected for trail surrogate"
 
 static const char * const state_error_table[] = {
 /* GO: start */
@@ -720,6 +728,9 @@ static const char * const state_error_table[] = {
     [ S(N1) ] = JSON_NULL_EXPECTED,
     [ S(N2) ] = JSON_NULL_EXPECTED,
     [ S(N3) ] = JSON_NULL_EXPECTED,
+/* D1..D2: trail surrogate */
+    [ S(D1) ] = TRAIL_SURROGATE_EXPECTED,
+    [ S(D2) ] = TRAIL_SURROGATE_EXPECTED,
 };
 
 enum {
@@ -782,6 +793,9 @@ static const uint8_t buffer_policy_table[NR_STATES][NR_CLASSES] = {
     [ S(N1) ] = { N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N },
     [ S(N2) ] = { N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N },
     [ S(N3) ] = { N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N },
+/* D1..D2: trail surrogate */
+    [ S(D1) ] = { N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N },
+    [ S(D2) ] = { N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N },
 };
 #undef N
 #undef C
@@ -808,6 +822,7 @@ typedef struct {
     char *kp, *vp;
     char **buffer;
     char **bp;
+    uint16_t utf16cu;
     int stack[JSON_MAX_DEPTH];
     int output_depth;
     json_type_t types[JSON_MAX_DEPTH]; // save some calls to json_get_type
@@ -903,12 +918,65 @@ static int state_pop(json_parser_t *jp, int mode)
     return TRUE;
 }
 
-// TODO: handle \uXXXX sequences
+static const uint8_t hextable[] = {
+    -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+     0, 1, 2, 3, 4, 5, 6, 7, 8, 9,-1,-1,-1,-1,-1,-1,
+    -1,10,11,12,13,14,15,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+    -1,10,11,12,13,14,15,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+};
+
+#define PUSH_CHAR(jp, character) \
+    do { \
+        **jp->bp = character; \
+        ++*jp->bp; \
+    } while (0);
+
+#define hex(c) (hextable[(uint8_t) c])
+#define U16_IS_LEAD(c)  (0xD800 == ((c) & 0xFFFFFC00))
+#define U16_IS_TRAIL(c) (0xDC00 == ((c) & 0xFFFFFC00))
 static int act_uc(json_parser_t *jp)
 {
-    jp->state = /*(jp->unicode_multi) ? STATE_D1 : */STATE__S;
+    int ret;
+    uint32_t cp;
 
-    return 0;
+    assert(*jp->bp - *jp->buffer >= 4);
+
+    ret = 0;
+    cp = (hex(*jp->bp[-4]) << 12) | (hex(*jp->bp[-3]) << 8) | (hex(*jp->bp[-2]) << 4) | hex(*jp->bp[-1]);
+    *jp->bp -= 4;
+    if (!jp->utf16cu && cp < 0x80) {
+        PUSH_CHAR(jp, (char) cp);
+    } else if (jp->utf16cu) {
+        if (!U16_IS_TRAIL(cp)) {
+            ret = 1;
+            error_set(jp->error, WARN, "TODO");
+        }
+        cp = 0x10000 + ((jp->utf16cu & 0x3FF) << 10) + (cp & 0x3FF);
+        PUSH_CHAR(jp, (char) ((cp >> 18) | 0xF0));
+        PUSH_CHAR(jp, (char) (((cp >> 12) & 0x3F) | 0x80));
+        PUSH_CHAR(jp, (char) (((cp >> 6) & 0x3F) | 0x80));
+        PUSH_CHAR(jp, (char) ((cp & 0x3F) | 0x80));
+        jp->utf16cu = 0;
+    } else if (U16_IS_TRAIL(cp)) {
+        ret = 1;
+        error_set(jp->error, WARN, "TODO");
+    } else if (U16_IS_LEAD(cp)) {
+        jp->utf16cu = cp;
+    } else if (cp < 0x800) {
+        PUSH_CHAR(jp, (char) ((cp >> 6) | 0xC0));
+        PUSH_CHAR(jp, (char) ((cp & 0x3F) | 0x80));
+    } else {
+        PUSH_CHAR(jp, (char) ((cp >> 12) | 0xE0));
+        PUSH_CHAR(jp, (char) (((cp >> 6) & 0x3F) | 0x80));
+        PUSH_CHAR(jp, (char) (((cp >> 0) & 0x3F) | 0x80));
+    }
+    jp->state = (jp->utf16cu) ? STATE_D1 : STATE__S;
+
+    return ret;
 }
 
 /* object begin */
@@ -1067,26 +1135,21 @@ static int do_action(json_parser_t *jp, int next_state)
     return 0;
 }
 
-#define PUSH_CHAR(jp, character) \
-    do { \
-        **jp.bp = character; \
-        ++*jp.bp; \
-    } while (0);
-
 // this macro is just intended to regroup json parser initialisation instructions
 #define INIT_JSON_PARSER(jp, error) \
     do { \
-        jp.top = -1; \
-        jp.offset = 0; \
-        jp.values[0] = 0; \
-        jp.error = error; \
-        jp.state = STATE_GO; \
-        jp.depth = JSON_MAX_DEPTH; \
-        jp.output_depth = -1; \
-        jp.kp = jp.key_buffer = mem_new_n(*jp.key_buffer, end - string + 1); \
-        jp.vp = jp.val_buffer = mem_new_n(*jp.val_buffer, end - string + 1); \
-        SWITCH_BUFFER_TO(jpp, val_buffer, vp); \
-        state_push(&jp, MODE_DONE); \
+        jp->top = -1; \
+        jp->offset = 0; \
+        jp->values[0] = 0; \
+        jp->error = error; \
+        jp->state = STATE_GO; \
+        jp->depth = JSON_MAX_DEPTH; \
+        jp->output_depth = -1; \
+        jp->utf16cu = 0; \
+        jp->kp = jp->key_buffer = mem_new_n(*jp->key_buffer, end - string + 1); \
+        jp->vp = jp->val_buffer = mem_new_n(*jp->val_buffer, end - string + 1); \
+        SWITCH_BUFFER_TO(jp, val_buffer, vp); \
+        state_push(jp, MODE_DONE); \
     } while (0);
 
 #define IS_STATE_ACTION(s) ((s) & 0x80)
@@ -1097,29 +1160,29 @@ json_document_t *json_document_parse(const char *string, error_t **error) /* WAR
     int next_class; /* the next character class */
     uint8_t next_state; /* the next state */
     uint8_t buffer_policy;
-    json_parser_t jp, *jpp;
+    json_parser_t j, *jp;
     json_document_t *doc;
     const char * const end = string + strlen(string);
 
     ret = 0;
     doc = NULL;
-    jpp = &jp;
+    jp = &j;
     INIT_JSON_PARSER(jp, error);
-    for (p = string; /*jp.offset < strlen(string)*/ p < end; jp.offset++, p++) {
-        unsigned char ch = *p/*string[jp.offset]*/;
+    for (p = string; /*jp->offset < strlen(string)*/ p < end; jp->offset++, p++) {
+        unsigned char ch = *p/*string[jp->offset]*/;
 
         next_class = (ch >= 128) ? C_OTHER : character_class[ch];
         if (C_ERROR == next_class) {
             error_set(error, WARN, "illegal character found at offset %" PRIuPTR " (got 0x%02X)", p - string, *p);
             goto err;
         }
-        next_state = state_transition_table[jp.state][next_class];
-        buffer_policy = buffer_policy_table[jp.state][next_class];
+        next_state = state_transition_table[jp->state][next_class];
+        buffer_policy = buffer_policy_table[jp->state][next_class];
         if (STATE___ == next_state) {
-            if ('\0' == *state_error_table[jp.state]) {
-                error_set(error, WARN, "unexpected character at offset %" PRIuPTR " (got 0x%02X)", state_error_table[jp.state], p - string, *p);
+            if ('\0' == *state_error_table[jp->state]) {
+                error_set(error, WARN, "unexpected character at offset %" PRIuPTR " (got 0x%02X)", state_error_table[jp->state], p - string, *p);
             } else {
-                error_set(error, WARN, "%s at offset %" PRIuPTR " (got 0x%02X)", state_error_table[jp.state], p - string, *p);
+                error_set(error, WARN, "%s at offset %" PRIuPTR " (got 0x%02X)", state_error_table[jp->state], p - string, *p);
             }
             goto err;
         }
@@ -1165,9 +1228,9 @@ json_document_t *json_document_parse(const char *string, error_t **error) /* WAR
                 break;
         }
         if (IS_STATE_ACTION(next_state)) {
-            ret = do_action(&jp, next_state);
+            ret = do_action(jp, next_state);
         } else {
-            jp.state = next_state;
+            jp->state = next_state;
         }
         if (0 != ret) {
             // NOTE: error is set by caller
@@ -1176,26 +1239,26 @@ json_document_t *json_document_parse(const char *string, error_t **error) /* WAR
     }
     if (FALSE) {
 err:
-        if (0 != jp.values[0]) {
-            json_value_destroy(jp.values[0]);
+        if (0 != jp->values[0]) {
+            json_value_destroy(jp->values[0]);
         }
     } else {
         int mode;
 
-        mode = jp.stack[jp.top];
-        if (STATE_OK == jp.state && state_pop(&jp, MODE_DONE)) {
+        mode = jp->stack[jp->top];
+        if (STATE_OK == jp->state && state_pop(jp, MODE_DONE)) {
             doc = json_document_new();
-            doc->root = jp.values[0];
+            doc->root = jp->values[0];
         } else {
-// debug("PREMATURE END (state = %d, mode = %d)", jp.state, mode);
+// debug("PREMATURE END (state = %d, mode = %d)", jp->state, mode);
             error_set(error, WARN, "premature end of document");
-            if (0 != jp.values[0]) {
-                json_value_destroy(jp.values[0]);
+            if (0 != jp->values[0]) {
+                json_value_destroy(jp->values[0]);
             }
         }
     }
-    free(jp.key_buffer);
-    free(jp.val_buffer);
+    free(jp->key_buffer);
+    free(jp->val_buffer);
 
     return doc;
 }

@@ -55,7 +55,7 @@ void json_document_set_root(json_document_t *, json_value_t);
 int64_t json_get_integer(json_value_t);
 double json_get_number(json_value_t);
 const char *json_get_string(json_value_t);
-inline json_type_t json_get_type(json_value_t);
+json_type_t json_get_type(json_value_t);
 json_value_t json_integer(int64_t) WARN_UNUSED_RESULT;
 json_value_t json_number(double) WARN_UNUSED_RESULT;
 json_value_t json_object(void) WARN_UNUSED_RESULT;
