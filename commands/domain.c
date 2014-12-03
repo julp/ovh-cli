@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "json.h"
+#include "date.h"
 #include "util.h"
 #include "modules/api.h"
 #include "modules/libxml.h"
