@@ -73,7 +73,7 @@ void request_add_header(request_t *req, const char *header)
 static bool request_sign(request_t *req, error_t **error)
 {
     EVP_MD_CTX ctx;
-    int i, hash_len;
+    unsigned int i, hash_len;
     char header[1024], buffer[1024], *p;
     unsigned char hash[EVP_MAX_MD_SIZE];
     const char * const end = header + ARRAY_SIZE(header);
