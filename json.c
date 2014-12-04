@@ -1252,14 +1252,10 @@ err:
             json_value_destroy(jp->values[0]);
         }
     } else {
-        int mode;
-
-        mode = jp->stack[jp->top];
-        if (STATE_OK == jp->state && /*0 == state_pop(jp, MODE_DONE)*/MODE_DONE == mode) {
+        if (STATE_OK == jp->state && 0 == state_pop(jp, MODE_DONE)) {
             doc = json_document_new();
             doc->root = jp->values[0];
         } else {
-// debug("PREMATURE END (state = %d, mode = %d)", jp->state, mode);
             error_set(error, WARN, "premature end of document");
             if (0 != jp->values[0]) {
                 json_value_destroy(jp->values[0]);
