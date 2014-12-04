@@ -813,7 +813,7 @@ typedef struct {
     int state;
     int top;
     int type;
-    size_t depth;
+    int depth;
     size_t offset;
     error_t **error;
     bool expecting_key;
