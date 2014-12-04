@@ -54,6 +54,7 @@
 
 # define mem_new(type)           malloc((sizeof(type)))
 # define mem_new_n(type, n)      malloc((sizeof(type) * (n)))
+# define mem_new_n0(type, n)     calloc((n), (sizeof(type)))
 # define mem_renew(ptr, type, n) realloc((ptr), (sizeof(type) * (n)))
 
 # include <stdio.h>

@@ -1144,22 +1144,24 @@ static int do_action(json_parser_t *jp, int next_state)
     return ret;
 }
 
-// this macro is just intended to regroup json parser initialisation instructions
-#define INIT_JSON_PARSER(jp, error) \
-    do { \
-        jp->top = -1; \
-        jp->offset = 0; \
-        jp->values[0] = 0; \
-        jp->error = error; \
-        jp->state = STATE_GO; \
-        jp->depth = JSON_MAX_DEPTH; \
-        jp->output_depth = -1; \
-        jp->utf16cu = 0; \
-        jp->kp = jp->key_buffer = mem_new_n(*jp->key_buffer, end - string + 1); \
-        jp->vp = jp->val_buffer = mem_new_n(*jp->val_buffer, end - string + 1); \
-        SWITCH_BUFFER_TO(jp, val_buffer, vp); \
-        state_push(jp, MODE_DONE); \
-    } while (0);
+static void json_parser_init(json_parser_t *jp, size_t length, error_t **error)
+{
+    bzero(jp, sizeof(*jp));
+    jp->top = -1;
+    jp->offset = 0;
+    jp->utf16cu = 0;
+    jp->values[0] = 0;
+    jp->error = error;
+    jp->state = STATE_GO;
+    jp->output_depth = -1;
+    jp->expecting_key = FALSE;
+    jp->depth = JSON_MAX_DEPTH;
+    jp->kp = jp->key_buffer = mem_new_n0(*jp->key_buffer, length + 1);
+    jp->vp = jp->val_buffer = mem_new_n0(*jp->val_buffer, length + 1);
+    *jp->kp = *jp->vp = '\0';
+    SWITCH_BUFFER_TO(jp, val_buffer, vp);
+    state_push(jp, MODE_DONE);
+}
 
 #define IS_STATE_ACTION(s) ((s) & 0x80)
 json_document_t *json_document_parse(const char *string, error_t **error) /* WARN_UNUSED_RESULT */
@@ -1173,10 +1175,10 @@ json_document_t *json_document_parse(const char *string, error_t **error) /* WAR
     json_document_t *doc;
     const char * const end = string + strlen(string);
 
+    jp = &j;
     ret = 0;
     doc = NULL;
-    jp = &j;
-    INIT_JSON_PARSER(jp, error);
+    json_parser_init(jp, end - string, error);
     for (p = string; /*jp->offset < strlen(string)*/ p < end; jp->offset++, p++) {
         unsigned char ch = *p/*string[jp->offset]*/;
 
