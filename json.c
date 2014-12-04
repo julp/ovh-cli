@@ -1321,4 +1321,6 @@ INITIALIZER_P(json_test)
     UT("[\"123\\uD835\\uDE3C456\"]", TRUE);
     UT("[\"a\\u123\"]", FALSE);
     UT("[\"a\\u1D63D\"]", TRUE);
+    UT("[\"\x01\"]", FALSE);
+    UT("[\"\\u001D\"]", TRUE);
 }

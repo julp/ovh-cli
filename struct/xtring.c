@@ -510,24 +510,19 @@ void string_append_n_times(String *str, const char *suffix, size_t suffix_len, s
     str->ptr[str->len] = '\0';
 }
 
-static const char json_escape_table[] = {
-    /*      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, A, B, C, D, E, F */
-    /* 0 */ 0, 0, 0, 0, 0, 0, 0, 0, 'b', 't', 'n', 0, 'f', 'r', 0, 0,
-    /* 1 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* 2 */ 0, 0, '"', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '/',
-    /* 3 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* 4 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* 5 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '\\', 0, 0, 0,
-    /* 6 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* 7 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* 8 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* 9 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* A */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* B */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* C */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* D */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* E */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    /* F */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+#define ESC_DECL(s) \
+    { STR_LEN(s), s }
+
+static struct json_escape_t {
+    size_t sequence_len;
+    const char * const sequence;
+} json_escape_table[] = {
+    /* 00 - 07 */ ESC_DECL("\\u0000"), ESC_DECL("\\u0001"), ESC_DECL("\\u0002"), ESC_DECL("\\u0003"), ESC_DECL("\\u0004"), ESC_DECL("\\u0005"), ESC_DECL("\\u0006"), ESC_DECL("\\u0007"),
+    /* 08 - 0F */ ESC_DECL("\\b"),     ESC_DECL("\\t"),     ESC_DECL("\\n"),     ESC_DECL("\\u000B"), ESC_DECL("\\f"),     ESC_DECL("\\r"),     ESC_DECL("\\u000E"), ESC_DECL("\\u000F"),
+    /* 10 - 17 */ ESC_DECL("\\u0010"), ESC_DECL("\\u0011"), ESC_DECL("\\u0012"), ESC_DECL("\\u0013"), ESC_DECL("\\u0014"), ESC_DECL("\\u0015"), ESC_DECL("\\u0016"), ESC_DECL("\\u0017"),
+    /* 18 - 1F */ ESC_DECL("\\u0018"), ESC_DECL("\\u0019"), ESC_DECL("\\u001A"), ESC_DECL("\\u001B"), ESC_DECL("\\u001C"), ESC_DECL("\\u001D"), ESC_DECL("\\u001E"), ESC_DECL("\\u001F"),
+    /* 10 - 27 */ ESC_DECL(" "),       ESC_DECL("!"),       ESC_DECL("\\\""),    ESC_DECL("#"),       ESC_DECL("$"),       ESC_DECL("%"),       ESC_DECL("&"),       ESC_DECL("'"),
+    /* 18 - 2F */ ESC_DECL("("),       ESC_DECL(")"),       ESC_DECL("*"),       ESC_DECL("+"),       ESC_DECL(","),       ESC_DECL("-"),       ESC_DECL("."),       ESC_DECL("\\/")
 };
 
 void string_append_json_string(String *str, const char *string)
@@ -537,17 +532,20 @@ void string_append_json_string(String *str, const char *string)
 
     required_len = 2; /* for " */
     for (p = string; '\0' != *p; p++) {
-        ++required_len;
-        required_len += 0 != json_escape_table[(unsigned char) *p];
+        if (((unsigned char) *p) < ARRAY_SIZE(json_escape_table)) {
+            required_len += json_escape_table[(unsigned char) *p].sequence_len;
+        } else {
+            ++required_len;
+        }
     }
     _string_maybe_expand_of(str, required_len);
     str->ptr[str->len++] = '"';
     for (p = string; '\0' != *p; p++) {
-        char replacement;
+        if (((unsigned char) *p) < ARRAY_SIZE(json_escape_table)) {
+            struct json_escape_t e = json_escape_table[(unsigned char) *p];
 
-        if ((replacement = json_escape_table[(unsigned char) *p])) {
-            str->ptr[str->len++] = '\\';
-            str->ptr[str->len++] = replacement;
+            memcpy(str->ptr + str->len, e.sequence, e.sequence_len);
+            str->len += e.sequence_len;
         } else {
             str->ptr[str->len++] = *p;
         }
