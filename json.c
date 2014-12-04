@@ -316,7 +316,7 @@ int64_t json_get_integer(json_value_t value)
 
 json_value_t json_integer(int64_t value) /* WARN_UNUSED_RESULT */
 {
-    if (HAS_FLAG(value, (UINT64_C(1) << (sizeof(uintptr_t) * 8 - 1)))) {
+    if (value >= (UINT64_C(1) << (sizeof(uintptr_t) * 8 - 1))) {
         return json_number((double) value);
     } else {
         return ((((json_value_t) value) << 1) | JSON_INTEGER_MASK);
@@ -902,23 +902,26 @@ static int state_push(json_parser_t *jp, int mode)
     ++jp->top;
     if (jp->top >= jp->depth) {
         error_set(jp->error, WARN, "JSON maximum depth of %d was exceeded", jp->depth);
-        return FALSE;
+        return 1;
     }
     jp->stack[jp->top] = mode;
 
-    return TRUE;
+    return 0;
 }
 
 static int state_pop(json_parser_t *jp, int mode)
 {
-    if (jp->top < 0 || mode != jp->stack[jp->top]) {
-        // TODO:
-        error_set(jp->error, WARN, "POP");
-        return FALSE;
+    if (jp->top < 0) {
+        error_set(jp->error, WARN, "no remaining state to pop on the stack");
+        return 1;
+    }
+    if (mode != jp->stack[jp->top]) {
+        error_set(jp->error, WARN, "unexpected mode pop of stack");
+        return 1;
     }
     --jp->top;
 
-    return TRUE;
+    return 0;
 }
 
 static const uint8_t hextable[] = {
@@ -949,14 +952,14 @@ static int act_uc(json_parser_t *jp)
     assert(*jp->bp - *jp->buffer >= 4);
 
     ret = 0;
-    cp = (hex(*jp->bp[-4]) << 12) | (hex(*jp->bp[-3]) << 8) | (hex(*jp->bp[-2]) << 4) | hex(*jp->bp[-1]);
+    cp = (hex(*(*jp->bp - 4)) << 12) | (hex(*(*jp->bp - 3)) << 8) | (hex(*(*jp->bp - 2)) << 4) | hex(*(*jp->bp - 1));
     *jp->bp -= 4;
     if (!jp->utf16cu && cp < 0x80) {
         PUSH_CHAR(jp, (char) cp);
     } else if (jp->utf16cu) {
         if (!U16_IS_TRAIL(cp)) {
             ret = 1;
-            error_set(jp->error, WARN, "TODO");
+            error_set(jp->error, WARN, "%s at offset %zu", TRAIL_SURROGATE_EXPECTED, jp->offset - 5);
         }
         cp = 0x10000 + ((jp->utf16cu & 0x3FF) << 10) + (cp & 0x3FF);
         PUSH_CHAR(jp, (char) ((cp >> 18) | 0xF0));
@@ -966,7 +969,7 @@ static int act_uc(json_parser_t *jp)
         jp->utf16cu = 0;
     } else if (U16_IS_TRAIL(cp)) {
         ret = 1;
-        error_set(jp->error, WARN, "TODO");
+        error_set(jp->error, WARN, "unicode escape sequence expected for a lead surrogate before trail one at offset %zu", jp->offset - 5);
     } else if (U16_IS_LEAD(cp)) {
         jp->utf16cu = cp;
     } else if (cp < 0x800) {
@@ -1038,6 +1041,7 @@ static int act_se(json_parser_t *jp)
 static int act_sp(json_parser_t *jp)
 {
     if (0 == jp->top) {
+        error_set(jp->error, WARN, "Comma found out of structure");
         return 1;
     }
     if (MODE_OBJECT == jp->stack[jp->top]) {
@@ -1081,8 +1085,10 @@ static const struct action_descr actions_map[] = {
 
 static int do_action(json_parser_t *jp, int next_state)
 {
+    int ret;
     const struct action_descr *descr = &actions_map[next_state & ~0x80];
 
+    ret = 0;
     if (descr->call) {
         if (descr->dobuffer) {
             switch (jp->type) {
@@ -1120,7 +1126,7 @@ static int do_action(json_parser_t *jp, int next_state)
                     // WARNING: strtod is locale dependant (C/en_US = '.', fr_FR = ',')
                     v = strtod(jp->val_buffer, NULL);
                     if (ERANGE == errno) {
-                        return 1;
+                        json_push(jp, json_string(jp->val_buffer), JSON_TYPE_STRING);
                     } else {
                         json_push(jp, json_number(v), JSON_TYPE_NUMBER);
                     }
@@ -1128,14 +1134,14 @@ static int do_action(json_parser_t *jp, int next_state)
                 }
             }
         }
-        descr->call(jp);
+        ret = descr->call(jp);
     }
     if (descr->state) {
         jp->state = descr->state;
     }
     jp->type = descr->type;
 
-    return 0;
+    return ret;
 }
 
 // this macro is just intended to regroup json parser initialisation instructions
@@ -1249,7 +1255,7 @@ err:
         int mode;
 
         mode = jp->stack[jp->top];
-        if (STATE_OK == jp->state && state_pop(jp, MODE_DONE)) {
+        if (STATE_OK == jp->state && /*0 == state_pop(jp, MODE_DONE)*/MODE_DONE == mode) {
             doc = json_document_new();
             doc->root = jp->values[0];
         } else {
@@ -1311,4 +1317,11 @@ INITIALIZER_P(json_test)
     UT("[][]", FALSE);
     UT("{\"foo\":{}}}", FALSE);
     UT("{\"foo\":{\"bar\":", TRUE);
+    UT("[\"\\uD835\"]", FALSE);
+    UT("[\"\\uDE3C\"]", FALSE);
+    UT("[\"\\uD835;\\uDE3C\"]", FALSE);
+    UT("[\"\\uDE3C\\uD835\"]", TRUE);
+    UT("[\"123\\uD835\\uDE3C456\"]", TRUE);
+    UT("[\"a\\u123\"]", FALSE);
+    UT("[\"a\\u1D63D\"]", TRUE);
 }
