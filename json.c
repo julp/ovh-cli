@@ -1158,7 +1158,6 @@ static void json_parser_init(json_parser_t *jp, size_t length, error_t **error)
     jp->depth = JSON_MAX_DEPTH;
     jp->kp = jp->key_buffer = mem_new_n0(*jp->key_buffer, length + 1);
     jp->vp = jp->val_buffer = mem_new_n0(*jp->val_buffer, length + 1);
-    *jp->kp = *jp->vp = '\0';
     SWITCH_BUFFER_TO(jp, val_buffer, vp);
     state_push(jp, MODE_DONE);
 }
