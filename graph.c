@@ -427,7 +427,7 @@ static int strcmpp(const void *p1, const void *p2)
     return strcmp(*(char * const *) p1, *(char * const *) p2);
 }
 
-bool complete_from_hashtable_keys(void *arguments, const char *argument, size_t argument_len, DPtrArray *possibilities, void *data)
+bool complete_from_hashtable_keys(void *UNUSED(parsed_arguments), const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *data)
 {
     Iterator it;
 
@@ -436,7 +436,7 @@ bool complete_from_hashtable_keys(void *arguments, const char *argument, size_t 
         void *k;
 
         iterator_current(&it, &k);
-        if (0 == strncmp(argument, (const char *) k, argument_len)) {
+        if (0 == strncmp(current_argument, (const char *) k, current_argument_len)) {
             dptrarray_push(possibilities, k);
         }
     }
@@ -468,12 +468,12 @@ static bool argument_choices_match(argument_t *arg, const char *value)
     return FALSE;
 }
 
-static bool argument_string_match(argument_t *arg, const char *value)
+static bool argument_string_match(argument_t *UNUSED(arg), const char *UNUSED(value))
 {
     return TRUE;
 }
 
-static bool argument_end_match(argument_t *arg, const char *value)
+static bool argument_end_match(argument_t *UNUSED(arg), const char *UNUSED(value))
 {
     return FALSE;
 }
@@ -578,7 +578,6 @@ static size_t my_vsnprintf(void *args, char *dst, size_t dst_size, const char *f
                     dst_len += num_len;
                     if (dst_size > dst_len) {
                         size_t i;
-                        uint32_t m;
 
                         i = num_len;
                         do {
@@ -660,7 +659,6 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
         } else {
             if (hashtable_get(client_data->graph->roots, argv[0], (void **) &arg)) {
                 int depth;
-                graph_node_t *child;
 
                 for (depth = 1; depth < cursorc && NULL != arg; depth++) {
                     if (NULL == (arg = graph_node_find(arg, NULL == argv[depth] ? "" : argv[depth]))) {
@@ -744,7 +742,6 @@ command_status_t graph_run_command(graph_t *g, int args_count, const char **args
     if (hashtable_get(g->roots, args[0], (void **) &arg)) {
         int depth;
         handle_t handle;
-        graph_node_t *child;
 
         handle = arg->handle;
         for (depth = 1; depth < args_count && NULL != arg; depth++) {
