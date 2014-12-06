@@ -292,7 +292,6 @@ int main(int argc, char **argv)
         el_end(el);
         puts("");
     } else {
-        int i;
         char **utf8_argv;
 
         --argc;
