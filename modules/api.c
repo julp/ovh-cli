@@ -45,6 +45,12 @@ static struct {
     [ HTTP_DELETE ] = { "DELETE", STR_LEN("DELETE"), 0 }
 };
 
+typedef struct {
+    bool on_off;
+} api_argument_t;
+
+static bool log = FALSE;
+
 bool api_ctor(void)
 {
     md = EVP_sha1();
@@ -131,7 +137,6 @@ static bool request_sign(request_t *req, error_t **error)
 
 static request_t *request_ctor(uint32_t flags, http_method_t method, const char *url, va_list args)
 {
-    CURLcode res;
     request_t *req;
     va_list cpyargs;
 
@@ -281,7 +286,7 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
     }
     curl_easy_getinfo(req->ch, CURLINFO_CONTENT_TYPE, &content_type);
     curl_easy_getinfo(req->ch, CURLINFO_RESPONSE_CODE, &http_status);
-    if (TRUE) { // TODO: command option and/or variable environment?
+    if (log) {
         FILE *fp;
 
         if (NULL != (fp = fopen("http.log", "a"))) {
@@ -330,8 +335,18 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
             if (NULL != error && NULL == *error) { // an error can be set and any was already set
                 error_set(error, WARN, "failed to parse following xml: %s", req->buffer->ptr);
             }
-        } else if (NULL != content_type && (0 == strcmp(content_type, "application/json"))) {
-            // TODO
+        } else if (NULL != content_type && (0 == strncmp(content_type, "application/json", STR_LEN("application/json")))) { // strncmp to ignore "; charset=utf-8" part
+            json_document_t *doc;
+
+            if (NULL != (doc = json_document_parse(req->buffer->ptr, error))) {
+                json_value_t root, reason;
+
+                root = json_document_get_root(doc);
+                if (json_object_get_property(root, "message", &reason)) {
+                    error_set(error, NOTICE, json_get_string(reason));
+                }
+                json_document_destroy(doc);
+            }
         } else {
             error_set(error, WARN, "HTTP request to '%s' failed with status %ld", req->url, http_status);
         }
@@ -411,7 +426,7 @@ const char *request_consumer_key(const char *account, const char *password, time
 
         {
             json_document_t *doc;
-            json_value_t root, rules, method;
+            json_value_t root, rules;
 
 #define JSON_ADD_RULE(parent, method, value) \
     do { \
@@ -544,9 +559,29 @@ const char *request_consumer_key(const char *account, const char *password, time
     return consumerKey;
 }
 
+static command_status_t log_on_off(void *raw_args, error_t **UNUSED(error))
+{
+    api_argument_t *args;
+
+    args = (api_argument_t *) raw_args;
+    log = args->on_off;
+
+    return COMMAND_SUCCESS;
+}
+
+void api_regcomm(graph_t *g)
+{
+    argument_t *lit_log, *arg_log_on_off;
+
+    lit_log = argument_create_literal("log", NULL);
+    arg_log_on_off = argument_create_choices_off_on(offsetof(api_argument_t, on_off), log_on_off);
+
+    graph_create_full_path(g, lit_log, arg_log_on_off, NULL);
+}
+
 DECLARE_MODULE(api) = {
     "api",
-    NULL,
+    api_regcomm,
     api_ctor,
     NULL,
     NULL
