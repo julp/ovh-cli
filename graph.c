@@ -195,7 +195,7 @@ static int graph_node_compare(graph_node_t *a, graph_node_t *b)
 }
 
 // #define GRAPH_DEBUG 1
-static void graph_node_insert_child(UGREP_FILE_LINE_FUNC_DC graph_t *g, graph_node_t *parent, graph_node_t *child)
+static void graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, graph_node_t *parent, graph_node_t *child)
 {
     graph_node_t *current;
 
@@ -261,7 +261,7 @@ debug("%s / %s", child->string, current->string);
 }
 
 // créer un chemin complet
-void _graph_create_full_path(UGREP_FILE_LINE_FUNC_DC graph_t *g, graph_node_t *start, ...) /* SENTINEL */
+void /*_*/graph_create_full_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, graph_node_t *start, ...) /* SENTINEL */
 {
     va_list nodes;
     graph_node_t *end, *node, *parent;
@@ -274,17 +274,17 @@ void _graph_create_full_path(UGREP_FILE_LINE_FUNC_DC graph_t *g, graph_node_t *s
     hashtable_put_ex(g->roots, HT_PUT_ON_DUP_KEY_PRESERVE, (void *) start->string, start, NULL);
     va_start(nodes, start);
     while (NULL != (node = va_arg(nodes, graph_node_t *))) {
-        graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, node);
+        graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, parent, node);
         parent = node;
     }
     va_end(nodes);
     CREATE_ARG(end, ARG_TYPE_END, "(END)");
-    graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, /*g->*/end);
+    graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, parent, /*g->*/end);
 }
 
 // créer un chemin entre 2 sommets (end peut être NULL)
 // vu que le point de départ doit exister, ça ne peut être une "racine"
-void _graph_create_path(UGREP_FILE_LINE_FUNC_DC graph_t *g, graph_node_t *start, graph_node_t *end, ...) /* SENTINEL */
+void /*_*/graph_create_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, graph_node_t *start, graph_node_t *end, ...) /* SENTINEL */
 {
     va_list nodes;
     graph_node_t *node, *parent;
@@ -295,7 +295,7 @@ void _graph_create_path(UGREP_FILE_LINE_FUNC_DC graph_t *g, graph_node_t *start,
     parent = start;
     va_start(nodes, end);
     while (NULL != (node = va_arg(nodes, graph_node_t *))) {
-        graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, node);
+        graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, parent, node);
         parent = node;
     }
     va_end(nodes);
@@ -305,7 +305,7 @@ void _graph_create_path(UGREP_FILE_LINE_FUNC_DC graph_t *g, graph_node_t *start,
 //     } else {
 //         graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, end);
     }
-    graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, end);
+    graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, parent, end);
 }
 
 /*size_t fact(size_t n)
@@ -322,7 +322,7 @@ void _graph_create_path(UGREP_FILE_LINE_FUNC_DC graph_t *g, graph_node_t *start,
 
 #define MAX_ALTERNATE_PATHS 12
 // créer tous les chemins/permutations possibles entre start et end (1 - 2 - 3, 1 - 3 - 2, 2 - 1 - 3, 2 - 3 - 1, 3 - 1 - 2, 3 - 2 - 1)
-void _graph_create_all_path(UGREP_FILE_LINE_FUNC_DC graph_t *g, graph_node_t *start, graph_node_t *end, ...) /* SENTINEL */
+void /*_*/graph_create_all_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, graph_node_t *start, graph_node_t *end, ...) /* SENTINEL */
 {
     va_list ap;
     int i, group_count, subpaths_count;
@@ -340,13 +340,13 @@ void _graph_create_all_path(UGREP_FILE_LINE_FUNC_DC graph_t *g, graph_node_t *st
         for (i = 2; i <= group_count; i++) {
             node = va_arg(ap, graph_node_t *);
             assert(NULL != node);
-            graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, node);
+            graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, parent, node);
             parent = node;
         }
         if (NULL == end) {
             CREATE_ARG(end, ARG_TYPE_END, "(END)");
         }
-        graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, end);
+        graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, parent, end);
     }
     va_end(ap);
     if (subpaths_count > 0) {
@@ -361,7 +361,7 @@ void _graph_create_all_path(UGREP_FILE_LINE_FUNC_DC graph_t *g, graph_node_t *st
             parent = start;
             for (i = 0; i < subpaths_count; i++) {
                 printf("%s ", nodes[i]->string);
-                graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, nodes[i]);
+                graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, parent, nodes[i]);
             }
             printf("\n");
             k = 1;
