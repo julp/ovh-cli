@@ -252,9 +252,14 @@ static int account_load(error_t **error)
                 char *expires_at;
 
                 a->consumer_key = xmlGetPropAsString(n, "consumer_key");
-                expires_at = xmlGetPropAsString(n, "expires_at");
-                a->expires_at = (time_t) atol(expires_at);
-                free(expires_at);
+                if ('\0' == *a->consumer_key) {
+                    free(a->consumer_key);
+                    a->consumer_key = NULL;
+                } else {
+                    expires_at = xmlGetPropAsString(n, "expires_at");
+                    a->expires_at = (time_t) atol(expires_at);
+                    free(expires_at);
+                }
             }
             hashtable_put(acd->accounts, a->account, a, NULL);
             if (xmlHasProp(n, BAD_CAST "default")) {
@@ -363,7 +368,11 @@ static bool account_early_init(void)
 
 static bool account_late_init(void)
 {
-    account_load(NULL);
+    error_t *error;
+
+    error = NULL;
+    account_load(&error);
+    print_error(error);
 
     return TRUE;
 }
