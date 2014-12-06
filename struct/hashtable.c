@@ -429,6 +429,7 @@ void hashtable_destroy(HashTable *this)
     free(this);
 }
 
+#if 0
 static HashNode *hashtable_delete_node(HashTable *this, HashNode *n)
 {
     HashNode *ret;
@@ -556,6 +557,7 @@ void hashtable_foreach_reverse_with_args(HashTable *this, ForeachFunc ff, int ar
 {
     //
 }*/
+#endif
 
 void *hashtable_first(HashTable *this)
 {

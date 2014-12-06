@@ -28,11 +28,6 @@ bool hashtable_quick_contains(HashTable *, hash_t, const void *);
 bool hashtable_delete(HashTable *, const void *, bool);
 bool hashtable_quick_delete(HashTable *, hash_t, const void *, bool);
 void hashtable_destroy(HashTable *);
-void hashtable_foreach(HashTable *, ForeachFunc);
-void hashtable_foreach_reverse(HashTable *, ForeachFunc);
-void hashtable_foreach_reverse_with_arg(HashTable *, ForeachFunc, void *);
-void hashtable_foreach_reverse_with_args(HashTable *, ForeachFunc, int, ...);
-void hashtable_foreach_with_arg(HashTable *, ForeachFunc, void *);
 bool hashtable_get(HashTable *, const void *, void **);
 bool hashtable_quick_get(HashTable *, hash_t, const void *, void **);
 hash_t hashtable_hash(HashTable *, const void *);
@@ -48,6 +43,16 @@ size_t hashtable_size(HashTable *);
 bool value_equal(const void *, const void *);
 hash_t value_hash(const void *);
 void *hashtable_first(HashTable *);
+
+#if 0
+typedef int (*ForeachFunc)();
+
+void hashtable_foreach(HashTable *, ForeachFunc);
+void hashtable_foreach_reverse(HashTable *, ForeachFunc);
+void hashtable_foreach_reverse_with_arg(HashTable *, ForeachFunc, void *);
+void hashtable_foreach_reverse_with_args(HashTable *, ForeachFunc, int, ...);
+void hashtable_foreach_with_arg(HashTable *, ForeachFunc, void *);
+#endif
 
 void hashtable_puts_keys(HashTable *);
 void hashtable_to_iterator(Iterator *, HashTable *);
