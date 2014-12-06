@@ -21,7 +21,7 @@
 * libcurl
 * libxml2
 * libedit (autocompletion)
-* libiconv (not used yet)
+* libiconv
 * gettext (optional)
 
 ## Install
@@ -50,6 +50,7 @@ ovh account <nickhandle> password "" <consumer key>
 
 ## Commands
 
+* log on/off => enable/disable HTTP logging (file http.log in current directory)
 * account
     * list => list all known OVH accounts
     * \<nickhandle>

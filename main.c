@@ -4,6 +4,7 @@
 #include "common.h"
 #include <histedit.h>
 #include "modules/api.h"
+#include "modules/conv.h"
 #include "commands/account.h"
 #include "struct/dptrarray.h"
 
@@ -217,6 +218,8 @@ static const char *prompt(EditLine *UNUSED(e))
 
 extern unsigned char graph_complete(EditLine *, int);
 
+#define WITH_CONV 1
+// LANG="fr_FR.ISO-8859-1" ./ovh domain $'\xE9' record list
 int main(int argc, char **argv)
 {
     int ret;
@@ -271,12 +274,27 @@ int main(int argc, char **argv)
             char **args;
             int args_len;
             HistEvent ev;
+#ifdef WITH_CONV
+            char *utf8_line;
+#endif
 
             error = NULL; // reinitialize it
-            args_len = str_split(line, &args);
-            graph_run_command(g, args_len, (const char **) args, &error);
+#ifdef WITH_CONV
+            if (convert_string_local_to_utf8(line, count, &utf8_line, NULL, &error)) {
+                args_len = str_split(utf8_line, &args);
+                printf("utf8_line = >%s<\n", utf8_line);
+#else
+            {
+                args_len = str_split(line, &args);
+#endif
+                graph_run_command(g, args_len, (const char **) args, &error);
+            }
             print_error(error);
+#ifdef WITH_CONV
+            convert_string_free(line, &utf8_line);
+#endif
             free(args[0]);
+            free(args);
             history(hist, &ev, H_ENTER, line);
         }
         history_end(hist);
@@ -285,10 +303,43 @@ int main(int argc, char **argv)
         el_end(el);
         puts("");
     } else {
+#ifdef WITH_CONV
+        int i;
+        bool ok;
+        char **utf8_argv;
+        size_t len;
+#endif
+
         --argc;
         ++argv;
+#ifdef WITH_CONV
+# if 0
+        utf8_argv = mem_new_n(*utf8_argv, argc);
+        for (i = 0, ok = TRUE; ok && i < argc; i++) {
+            ok &= convert_string_local_to_utf8(argv[i], strlen(argv[i]), &utf8_argv[i], &len, &error);
+        }
+# else
+        convert_array_local_to_utf8(argc, argv, &utf8_argv, &error);
+        for (i = 0; i < argc; i++) {
+            if (NULL != utf8_argv[i]) {
+                printf("%d : >%s<\n", i, utf8_argv[i]);
+            }
+        }
+# endif
+        ret = graph_run_command(g, argc, (const char **) utf8_argv, &error) ? EXIT_SUCCESS : EXIT_FAILURE;
+#else
         ret = graph_run_command(g, argc, (const char **) argv, &error) ? EXIT_SUCCESS : EXIT_FAILURE;
+#endif
         print_error(error);
+#ifdef WITH_CONV
+# if 0
+        while (--i >= 0) {
+            convert_string_free(argv[i], &utf8_argv[i]);
+        }
+# else
+        convert_array_free(argc, argv, utf8_argv);
+# endif
+#endif
     }
     graph_destroy(g);
 
