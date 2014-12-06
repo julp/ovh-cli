@@ -478,7 +478,7 @@ static command_status_t dedicated_boot_set(void *arg, error_t **error)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static bool complete_servers(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *data)
+static bool complete_servers(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *UNUSED(data))
 {
     server_set_t *ss;
 
@@ -490,7 +490,7 @@ static bool complete_servers(void *parsed_arguments, const char *current_argumen
     return complete_from_hashtable_keys(parsed_arguments, current_argument, current_argument_len, possibilities, ss->servers);
 }
 
-static bool complete_boots(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *data)
+static bool complete_boots(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *UNUSED(data))
 {
     server_t *s;
     bool request_success;

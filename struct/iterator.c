@@ -1,7 +1,7 @@
 #include "common.h"
 #include "iterator.h"
 
-static const Iterator NULL_ITERATOR = { NULL, NULL, NULL, NULL, NULL, NULL, NULL };
+static const Iterator NULL_ITERATOR = { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
 
 void iterator_init(
     Iterator *this,

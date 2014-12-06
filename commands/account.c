@@ -315,13 +315,11 @@ static void account_account_dtor(void *data)
 static bool account_early_init(void)
 {
     char *home;
-    char buffer[MAXPATHLEN];
 
     acd = mem_new(*acd);
     acd->autosel = acd->current = NULL;
     acd->accounts = hashtable_ascii_cs_new(NULL, NULL /* no dtor for key as it is also part of the value */, account_account_dtor);
     acd->modules_callbacks = hashtable_ascii_cs_new(NULL, NULL /* no dtor for key as it is also part of the value */, free);
-    buffer[0] = '\0';
     if (NULL == (home = getenv("HOME"))) {
 # ifdef _MSC_VER
 #  ifndef CSIDL_PROFILE

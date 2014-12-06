@@ -588,7 +588,7 @@ static command_status_t record_update(void *arg, error_t **error)
     return TRUE;
 }
 
-static bool complete_domains(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *data)
+static bool complete_domains(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *UNUSED(data))
 {
     domain_set_t *ds;
 
@@ -600,7 +600,7 @@ static bool complete_domains(void *parsed_arguments, const char *current_argumen
     return complete_from_hashtable_keys(parsed_arguments, current_argument, current_argument_len, possibilities, ds->domains);
 }
 
-static bool complete_records(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *data)
+static bool complete_records(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *UNUSED(data))
 {
     domain_t *d;
     bool request_success;
