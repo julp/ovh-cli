@@ -110,7 +110,6 @@ typedef int (*CmpFunc)(const void *, const void *);
 typedef bool (*EqualFunc)(const void *, const void *);
 typedef void (*DtorFunc)(void *);
 typedef void *(*DupFunc)(const void *);
-typedef int (*ForeachFunc)();
 
 # define DECLARE_MODULE(foo) \
     module_t foo##_module
