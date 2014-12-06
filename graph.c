@@ -325,7 +325,7 @@ void /*_*/graph_create_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, graph_node_t
 void /*_*/graph_create_all_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, graph_node_t *start, graph_node_t *end, ...) /* SENTINEL */
 {
     va_list ap;
-    int i, group_count, subpaths_count;
+    size_t i, group_count, subpaths_count;
     graph_node_t *parent, *node, *nodes[MAX_ALTERNATE_PATHS];
 
     assert(NULL != start);
