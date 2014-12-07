@@ -485,17 +485,17 @@ const char *request_consumer_key(const char *account, const char *password, time
         request_dtor(req);
         string_destroy(buffer);
     }
-    *expires_at = time(NULL) + DEFAULT_CONSUMER_KEY_EXPIRATION;
     if (NULL == password || '\0' == *password) {
         error_set(
             error,
             NOTICE,
             "you have not registered your password so you have to confirm the current consumer key %s yourself by validating it at: %s\n" \
-            "Once done, if you choose to set a validity different to 1 day, don't forget to run: ovh account %s update expires in \"<duration>\"",
+            "Once done, if you choose to set a limited validity, don't forget to run: ovh account %s update expires in \"<duration>\"",
             consumerKey,
             validationUrl,
             account
         );
+        *expires_at = 0;
     } else {
         char *token;
         char *account_field_name;
@@ -563,6 +563,7 @@ const char *request_consumer_key(const char *account, const char *password, time
         free(token);
         free(account_field_name);
         free(password_field_name);
+        *expires_at = time(NULL) + DEFAULT_CONSUMER_KEY_EXPIRATION;
     }
     free(validationUrl);
 
