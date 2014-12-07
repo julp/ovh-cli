@@ -200,12 +200,14 @@ void convert_array_free(int argc, char **original_argv, char **maybe_converted_a
 {
     int i;
 
-    for (i = 0; i < argc; i++) {
-        if (NULL != maybe_converted_argv[i] && original_argv[i] != maybe_converted_argv[i]) {
-            free(maybe_converted_argv[i]);
+    if (maybe_converted_argv != original_argv) {
+        for (i = 0; i < argc; i++) {
+            if (NULL != maybe_converted_argv[i] && original_argv[i] != maybe_converted_argv[i]) {
+                free(maybe_converted_argv[i]);
+            }
         }
+        free(maybe_converted_argv);
     }
-    free(maybe_converted_argv);
 }
 
 bool convert_string_local_to_utf8(const char *src, size_t src_len, char **dst, size_t *dst_len, error_t **error)
@@ -219,12 +221,16 @@ bool convert_array_local_to_utf8(int argc, char **in_argv, char ***out_argv, err
     bool ok;
 
     ok = TRUE;
-    *out_argv = mem_new_n(**out_argv, argc);
-    for (i = 0; i < argc; i++) {
-        (*out_argv)[i] = NULL;
-    }
-    for (i = 0; ok && i < argc; i++) {
-        ok &= iconv_string(input_encoding, "UTF-8", in_argv[i], strlen(in_argv[i]), &(*out_argv)[i], NULL, error);
+    if (0 == strcmp(input_encoding, "UTF-8")) {
+        *out_argv = in_argv;
+    } else {
+        *out_argv = mem_new_n(**out_argv, argc);
+        for (i = 0; i < argc; i++) {
+            (*out_argv)[i] = NULL;
+        }
+        for (i = 0; ok && i < argc; i++) {
+            ok &= iconv_string(input_encoding, "UTF-8", in_argv[i], strlen(in_argv[i]), &(*out_argv)[i], NULL, error);
+        }
     }
 
     return ok;
