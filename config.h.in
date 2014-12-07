@@ -5,8 +5,9 @@
 #define APPLICATION_KEY "@APPLICATION_KEY@"
 #define APPLICATION_SECRET "@APPLICATION_SECRET@"
 #define API_BASE_URL "@API_BASE_URL@"
-#cmakedefine WITH_NLS
 #cmakedefine DEBUG
+#cmakedefine HAVE_STRTOD_L
+#cmakedefine WITH_NLS
 #cmakedefine WITH_EDITLINE
 #define LOCALEDIR "@LOCALEDIR@"
 

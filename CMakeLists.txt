@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 2.8.8)
 
 project(ovh-cli C)
 
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -Wall -Wextra -std=gnu99 -Wwrite-strings -Wstrict-prototypes -Wuninitialized -Wunreachable-code -Wno-comment -Wnonnull")
+
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 
 include(CheckIncludeFile)
@@ -15,6 +17,7 @@ check_function_exists("strcasecmp" HAVE_STRCASECMP)
 #     check_symbol_exists("strcasecmp" "strings.h" HAVE_STRINGS_H)
 # endif(NOT HAVE_STRCASECMP)
 check_function_exists("strncasecmp" HAVE_STRNCASECMP)
+check_function_exists("strtod_l" HAVE_STRTOD_L)
 
 find_package(CURL REQUIRED)
 find_package(LibXml2 REQUIRED)
@@ -73,7 +76,7 @@ configure_file(
     @ONLY
 )
 
-add_executable(ovh main.c graph.c json.c error.c util.c date.c
+add_executable(ovh main.c graph.c json.c error.c util.c date.c table.c
     struct/iterator.c struct/hashtable.c struct/dptrarray.c struct/xtring.c
     ${BUILTIN_MODULES} ${EXTRA_MODULES_ENABLED} ${MISC_SOURCES}
 )

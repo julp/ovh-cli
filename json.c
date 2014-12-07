@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <limits.h>
@@ -18,10 +19,7 @@
  * - strings have to be UTF-8 encoded
  **/
 
-enum {
-    JSON_INTEGER_MASK = 1, /* ... XXXX XX01  */
-    JSON_UNUSED_MASK  = 2  /* ... XXXX XX10  */
-};
+#define JSON_INTEGER_MASK 1
 
 #define JSON_IDENT_STRING "    "
 #define JSON_NULL_AS_STRING "null"
@@ -73,7 +71,7 @@ static int json_number_write(json_document_t *doc, json_value_t value, String *b
     assert(JSON_TYPE_NUMBER == json_get_type(value));
 
     if (HAS_FLAG(value, JSON_INTEGER_MASK)) {
-        string_append_formatted(buffer, "%" PRIi64, (int64_t) (value >> 1));
+        string_append_formatted(buffer, "%" PRIi64, (int64_t) (((int64_t) value) >> 1));
     } else {
         json_node_t *node;
 
@@ -308,18 +306,23 @@ int64_t json_get_integer(json_value_t value)
     assert(HAS_FLAG(value, JSON_INTEGER_MASK) || JSON_TYPE_NUMBER == json_get_type(value));
 
     if (HAS_FLAG(value, JSON_INTEGER_MASK)) {
-        return (((json_value_t) value) >> 1);
+        return value >> 1;
     } else {
         return (int64_t) json_get_number(value);
     }
 }
 
+#define JSON_MAX_SIGNED ((int64_t) ((UINT64_C(1) << (sizeof(uintptr_t) * 8 - 2)) - 1))
+#define JSON_MIN_SIGNED ((int64_t) (-(UINT64_C(1) << (sizeof(uintptr_t) * 8 - 2))))
+
 json_value_t json_integer(int64_t value) /* WARN_UNUSED_RESULT */
 {
-    if (value >= (UINT64_C(1) << (sizeof(uintptr_t) * 8 - 1))) {
-        return json_number((double) value);
-    } else {
+    // https://github.com/ruby/ruby/blob/trunk/include/ruby/ruby.h
+    // https://raw.githubusercontent.com/ruby/ruby/trunk/include/ruby/ruby.h
+    if (value <= JSON_MAX_SIGNED && value >= JSON_MIN_SIGNED) {
         return ((((json_value_t) value) << 1) | JSON_INTEGER_MASK);
+    } else {
+        return json_number((double) value);
     }
 }
 
@@ -1083,6 +1086,11 @@ static const struct action_descr actions_map[] = {
     [STATE_SP & ~0x80] = { act_sp, JSON_PARSE_TYPE_NONE,  0,        1 },
 };
 
+#ifdef HAVE_STRTOD_L
+# define _GNU_SOURCE
+# include <locale.h>
+#endif /* HAVE_STRTOD_L */
+
 static int do_action(json_parser_t *jp, int next_state)
 {
     int ret;
@@ -1123,8 +1131,16 @@ static int do_action(json_parser_t *jp, int next_state)
                 {
                     double v;
 
+#ifdef HAVE_STRTOD_L
+                    locale_t c_locale;
+
+                    c_locale = newlocale (LC_NUMERIC_MASK, "C", NULL);
+                    v = strtod_l(jp->val_buffer, NULL, c_locale);
+                    freelocale (c_locale);
+#else
                     // WARNING: strtod is locale dependant (C/en_US = '.', fr_FR = ',')
                     v = strtod(jp->val_buffer, NULL);
+#endif /* HAVE_STRTOD_L */
                     if (ERANGE == errno) {
                         json_push(jp, json_string(jp->val_buffer), JSON_TYPE_STRING);
                     } else {
@@ -1289,7 +1305,7 @@ err:
         } \
     } while (0);
 
-INITIALIZER_DECL(json_test);
+// INITIALIZER_DECL(json_test);
 INITIALIZER_P(json_test)
 {
     UT("true", FALSE);
@@ -1323,4 +1339,26 @@ INITIALIZER_P(json_test)
     UT("[\"a\\u1D63D\"]", TRUE);
     UT("[\"\x01\"]", FALSE);
     UT("[\"\\u001D\"]", TRUE);
+#if 64 == __WORDSIZE
+    UT("[-4611686018427387905]", TRUE); /* JSON_MIN_SIGNED - 1 => double */
+    UT("[-4611686018427387904]", TRUE); /* JSON_MIN_SIGNED     => int64_t */
+    UT("[-4611686018427387903]", TRUE); /* JSON_MIN_SIGNED + 1 => int64_t */
+    UT("[4611686018427387902]", TRUE);  /* JSON_MAX_SIGNED - 1 => int64_t */
+    UT("[4611686018427387903]", TRUE);  /* JSON_MAX_SIGNED     => int64_t */
+    UT("[4611686018427387904]", TRUE);  /* JSON_MAX_SIGNED + 1 => double */
+    UT("[4611686018427387905]", TRUE);  /* JSON_MAX_SIGNED + 2 => double */
+    // irrelevant as long long <=> int64_t
+# if 0
+    UT("[-9223372036854775808]", TRUE); /* INT64_MIN - 1 */
+    UT("[-9223372036854775807]", TRUE); /* INT64_MIN     */
+    UT("[-9223372036854775806]", TRUE); /* INT64_MIN + 1 */
+    UT("[-9223372036854775805]", TRUE); /* INT64_MIN + 2 */
+    UT("[9223372036854775807]", TRUE);  /* INT64_MAX - 1 */
+    UT("[9223372036854775808]", TRUE);  /* INT64_MAX     */
+# endif
+#elif 32 == __WORDSIZE
+    // TODO
+#else
+# error undefined/unexpected __WORDSIZE
+#endif
 }
