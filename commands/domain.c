@@ -408,7 +408,8 @@ static command_status_t record_list(void *arg, error_t **error)
 #ifdef PRINT_OVH_ID
                 r->id,
 #endif /* PRINT_OVH_ID */
-                r->name, record_type_map[r->type].short_name, r->ttl, r->target);
+                r->name, record_type_map[r->type].short_name, r->ttl, r->target
+            );
         }
         iterator_close(&it);
         table_display(t, TABLE_FLAG_NONE);
