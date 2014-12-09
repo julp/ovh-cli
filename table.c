@@ -20,8 +20,8 @@ struct table_t {
 };
 
 typedef struct {
+    bool f;
     size_t l;
-    size_t b;
     uintptr_t v;
 } value_t;
 
@@ -136,18 +136,24 @@ void table_store(table_t *t, ...)
         switch (t->columns[i].type) {
             case TABLE_TYPE_STRING:
             {
-                size_t s_len;
-                const char *s;
+                char *s_local;
                 error_t *error;
+                size_t s_local_len; // unit: "characters", not bytes
+                const char *s_utf8;
 
-                error = NULL;
-                s = va_arg(ap, const char *);
-                cplen(s, &s_len, &error);
-                print_error(error);
-                r->values[i].v = (uintptr_t) s; // TODO: conversion UTF-8 => local
-                r->values[i].l = s_len;
-                if (s_len > t->columns[i].max_len) {
-                    t->columns[i].max_len = s_len;
+                // TODO: real error handling! Let caller handle this by adding a error_t **error in argument?
+error = NULL;
+                s_utf8 = va_arg(ap, const char *);
+                convert_string_utf8_to_local(s_utf8, strlen(s_utf8), &s_local, NULL, &error);
+print_error(error);
+error = NULL;
+                cplen(s_local, &s_local_len, &error);
+print_error(error);
+                r->values[i].f = s_local != s_utf8;
+                r->values[i].v = (uintptr_t) s_local; // TODO: conversion UTF-8 => local
+                r->values[i].l = s_local_len;
+                if (s_local_len > t->columns[i].max_len) {
+                    t->columns[i].max_len = s_local_len;
                 }
                 break;
             }
@@ -198,7 +204,9 @@ static size_t string_break(size_t max_len, const char *string, size_t string_len
     size_t i, breaks_count;
 
     i = 0;
-    breaks_count = (string_len / max_len) + 1; // NOTE: string_len unit is character
+    // NOTE: string_len unit is character
+    breaks_count = (string_len / max_len) + 1;
+//     breaks_count = ceil(string_len / max_len);
     *breaks = mem_new_n(**breaks, breaks_count);
     if (breaks_count > 1) {
         const char *p;
@@ -231,12 +239,9 @@ void table_display(table_t *t, uint32_t flags)
     size_t i;
     Iterator it;
     int width;
-//     wchar_t s[] = L"\xF0\x9D\x9F\x8E";
 
     assert(NULL != t);
-// debug("wcwidth = %d", wcwidth(s[0]));
 
-    // wcswidth / wcwidth
 //     if (dptrarray_size(t->rows) > 0) {
     width = console_width();
     if (width > 0) {
@@ -340,6 +345,11 @@ void table_display(table_t *t, uint32_t flags)
                     }
                 }
                 free(breaks[i]);
+                // <TODO: better place in row_destroy>
+                if (r->values[i].f) {
+                    free((void *) r->values[i].v);
+                }
+                // </TODO>
             }
         }
     }
@@ -401,8 +411,10 @@ static const char long_string[] = \
     /* 311..320 */ STRING \
     /* 321..330 */ STRING;
 
-INITIALIZER_DECL(table_test);
-INITIALIZER_P(table_test)
+// can't use constructor, output_encoding (modules/conv.c is not yet set)
+// INITIALIZER_DECL(table_test);
+// INITIALIZER_P(table_test)
+void table_test(void)
 {
     table_t *t;
 
@@ -411,6 +423,7 @@ INITIALIZER_P(table_test)
     table_store(t, 2, "ghi", "jkl", long_string);
     table_store(t, 3, "mno", long_string, "pqr");
     table_store(t, 4, "stu", long_string, long_string);
+    table_store(t, 5, "é", "é", "é");
     table_display(t, TABLE_FLAG_NONE);
     table_destroy(t);
 }
