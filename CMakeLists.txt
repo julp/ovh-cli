@@ -6,9 +6,44 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -Wall -Wextra -std=gnu99 -Wwrite-strings 
 
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 
+find_package(CURL REQUIRED)
+find_package(LibXml2 REQUIRED)
+find_package(OpenSSL REQUIRED)
+# set(EDITLINE_DEBUG TRUE)
+find_package(EditLine REQUIRED)
+find_package(Gettext QUIET)
+find_package(FindIntl QUIET)
+
+find_path(ICONV_INCLUDE_DIR iconv.h)
+find_library(ICONV_LIBRARIES NAMES iconv libiconv c)
+if(NOT ICONV_LIBRARIES)
+    message(FATAL_ERROR "iconv not found")
+endif(NOT ICONV_LIBRARIES)
+include(CheckCSourceCompiles)
+
+set(CMAKE_REQUIRED_FLAGS "-Werror")
+check_c_source_compiles("
+#include <iconv.h>
+int main(void) {
+    iconv_t conv = 0;
+    const char *in = 0;
+    size_t ilen = 0;
+    char *out = 0;
+    size_t olen = 0;
+    iconv(conv, &in, &ilen, &out, &olen);
+    return 0;
+}
+" ICONV_SECOND_ARGUMENT_IS_CONST)
+if(ICONV_SECOND_ARGUMENT_IS_CONST)
+    set(ICONV_CONST "const")
+else(ICONV_SECOND_ARGUMENT_IS_CONST)
+    set(ICONV_CONST "")
+endif(ICONV_SECOND_ARGUMENT_IS_CONST)
+
 include(CheckIncludeFile)
 include(CheckSymbolExists)
 include(CheckFunctionExists)
+include(CheckLibraryExists)
 
 check_include_file("stdint.h" HAVE_STDINT_H)
 check_include_file("inttypes.h" HAVE_INTTYPES_H)
@@ -18,18 +53,12 @@ check_function_exists("strcasecmp" HAVE_STRCASECMP)
 # endif(NOT HAVE_STRCASECMP)
 check_function_exists("strncasecmp" HAVE_STRNCASECMP)
 check_function_exists("strtod_l" HAVE_STRTOD_L)
-
-find_package(CURL REQUIRED)
-find_package(LibXml2 REQUIRED)
-find_package(OpenSSL REQUIRED)
-# set(EDITLINE_DEBUG TRUE)
-find_package(EditLine REQUIRED)
-find_package(Gettext QUIET)
-find_package(FindIntl QUIET)
+check_library_exists("iconv" "iconvctl" ${ICONV_LIBRARIES} HAVE_ICONVCTL)
 
 include_directories(
     ${Intl_INCLUDE_DIRS}
     ${CURL_INCLUDE_DIRS}
+    ${ICONV_INCLUDE_DIR}
     ${LIBXML2_INCLUDE_DIR}
     ${OPENSSL_INCLUDE_DIR}
     ${EDITLINE_INCLUDE_DIRS}
@@ -80,4 +109,4 @@ add_executable(ovh main.c graph.c json.c error.c util.c date.c table.c
     struct/iterator.c struct/hashtable.c struct/dptrarray.c struct/xtring.c
     ${BUILTIN_MODULES} ${EXTRA_MODULES_ENABLED} ${MISC_SOURCES}
 )
-target_link_libraries(ovh ${Intl_LIBRARIES} ${CURL_LIBRARIES} ${LIBXML2_LIBRARIES} ${OPENSSL_LIBRARIES} ${EDITLINE_LIBRARIES})
+target_link_libraries(ovh ${Intl_LIBRARIES} ${CURL_LIBRARIES} ${ICONV_LIBRARIES} ${LIBXML2_LIBRARIES} ${OPENSSL_LIBRARIES} ${EDITLINE_LIBRARIES})

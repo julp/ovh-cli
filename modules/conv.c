@@ -116,6 +116,14 @@ static bool iconv_string(const char *from, const char *to, const char *in, size_
             return FALSE;
         }
     }
+#ifdef HAVE_ICONVCTL
+    {
+        int one;
+
+        one = 1;
+        iconvctl(cd, ICONV_SET_ILSEQ_INVALID, &one);
+    }
+#endif /* HAVE_ICONVCTL */
     out_size = 1; /* out_size: capacity allocated to *out */
     *out = mem_new_n(**out, out_size + 1); /* + 1 for \0 */
     in_p = (char *) in;
@@ -124,7 +132,7 @@ static bool iconv_string(const char *from, const char *to, const char *in, size_
     out_left = out_size; /* out_left: free space left in *out */
     while (in_left > 0) {
 // printf("iconv(%d, %d)\n", out_size, out_left);
-        result = iconv(cd, (const char **) &in_p, &in_left, &out_p, &out_left);
+        result = iconv(cd, (ICONV_CONST char **) &in_p, &in_left, &out_p, &out_left);
         *out_len_p = out_p - *out;
         out_left = out_size - *out_len_p;
         if (INVALID_SIZE_T == result) {

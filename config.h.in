@@ -10,5 +10,6 @@
 #cmakedefine WITH_NLS
 #cmakedefine WITH_EDITLINE
 #define LOCALEDIR "@LOCALEDIR@"
+#define ICONV_CONST @ICONV_CONST@
 
 #endif /* !CONFIG_H */
