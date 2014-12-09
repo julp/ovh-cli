@@ -5,6 +5,7 @@
 #include "json.h"
 #include "date.h"
 #include "util.h"
+#include "table.h"
 #include "modules/api.h"
 #include "modules/libxml.h"
 #include "commands/account.h"
@@ -388,23 +389,30 @@ static command_status_t record_list(void *arg, error_t **error)
     assert(NULL != args->domain);
     if (COMMAND_SUCCESS == (ret = get_domain_records(args->domain, &d, error))) {
         // display
+        table_t *t;
+
+        t = table_new(
+#ifdef PRINT_OVH_ID
+            5, "id", TABLE_TYPE_INT,
+#else
+            4,
+#endif /* PRINT_OVH_ID */
+            "subdomain", TABLE_TYPE_STRING, "type", TABLE_TYPE_STRING, "ttl", TABLE_TYPE_INT, "target", TABLE_TYPE_STRING
+        );
         hashtable_to_iterator(&it, d->records);
         for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
             record_t *r;
 
             r = iterator_current(&it, NULL);
-            printf(
-                "%s %s%s%s => %s (ttl: %" PRIu32 ", id: %" PRIu32 ")\n",
-                record_type_map[r->type].short_name,
-                r->name,
-                NULL == r->name || '\0' == *r->name ? "" : ".",
-                args->domain,
-                r->target,
-                r->ttl,
-                r->id
-            );
+            table_store(t,
+#ifdef PRINT_OVH_ID
+                r->id,
+#endif /* PRINT_OVH_ID */
+                r->name, record_type_map[r->type].short_name, r->ttl, r->target);
         }
         iterator_close(&it);
+        table_display(t, TABLE_FLAG_NONE);
+        table_destroy(t);
     }
 
     return ret;

@@ -96,8 +96,6 @@ table_t *table_new(size_t columns_count, ...)
     table_t *t;
     va_list ap;
 
-    assert(columns_count > 0);
-
     t = mem_new(*t);
     t->columns_count = columns_count;
     t->columns = mem_new_n(*t->columns, columns_count);
@@ -195,40 +193,37 @@ typedef struct {
     const char *part;
 } break_t;
 
-static size_t string_break(size_t max_len, const char *string, size_t string_len, const char ***parts)
+static size_t string_break(size_t max_len, const char *string, size_t string_len, break_t **breaks)
 {
-    size_t i, parts_count;
+    size_t i, breaks_count;
 
     i = 0;
-    parts_count = (string_len / max_len) + 1;
-    *parts = mem_new_n(**parts, parts_count + 1);
-    if (parts_count > 1) {
-        size_t index;
-        char *p;
-        size_t start, end;
+    breaks_count = (string_len / max_len) + 1; // NOTE: string_len unit is character
+    *breaks = mem_new_n(**breaks, breaks_count);
+    if (breaks_count > 1) {
+        const char *p;
+        size_t start, end; // byte index
 
-        index = 0;
-        start = end = 0;
         p = string;
-        while (i < parts_count) {
-//             (*parts)[i++] = strndup(string + index, max_len);
-//             index += max_len;
+        start = end = 0;
+        while (i < breaks_count) {
             size_t cp_len, cp_count;
 
+            (*breaks)[i].charlen = 0;
             for (cp_count = 0; cp_count < max_len && (cp_len = mblen(p, MB_CUR_MAX)) > 0; cp_count++) {
                 p += cp_len;
                 end += cp_len;
+                ++(*breaks)[i].charlen;
             }
-            // TODO: conserver le nombre de points de code de chaque partie ?
-            (*parts)[i++] = strndup(string + start, end - start);
+            (*breaks)[i++].part = strndup(string + start, end - start);
             start = end;
         }
     } else {
-        (*parts)[i++] = string; // don't free parts[0] if string == parts[0] (or 1 == parts_count)
+        (*breaks)[i].charlen = string_len;
+        (*breaks)[i++].part = string; // don't free breaks[0].part if string == breaks[0].part (or 1 == breaks_count)
     }
-    (*parts)[i] = NULL;
 
-    return parts_count;
+    return breaks_count;
 }
 
 void table_display(table_t *t, uint32_t flags)
@@ -280,23 +275,23 @@ void table_display(table_t *t, uint32_t flags)
     dptrarray_to_iterator(&it, t->rows);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         row_t *r;
-        int j, lines_needed;
+        size_t j, lines_needed;
 #define MAX_COLUMNS 12
-        char **value_parts[MAX_COLUMNS]; // si alloué dynamiquement, le remonter dans la fonction
-        size_t value_parts_count[MAX_COLUMNS];
+        break_t *breaks[MAX_COLUMNS]; // si alloué dynamiquement, le remonter dans la fonction
+        size_t breaks_count[MAX_COLUMNS];
 
         lines_needed = 1;
         r = iterator_current(&it, NULL);
-        bzero(&value_parts_count, sizeof(value_parts_count));
+        bzero(&breaks_count, sizeof(breaks_count));
         for (i = 0; i < t->columns_count; i++) {
             /*if (r->values[i].l > t->columns[i].len && (r->values[i].l / t->columns[i].len + 1) > lines_needed) {
                 lines_needed = r->values[i].l / t->columns[i].len + 1;
             }*/
             switch (t->columns[i].type) {
                 case TABLE_TYPE_STRING:
-                    value_parts_count[i] = wordwrap(t->columns[i].len, (const char *) r->values[i].v, r->values[i].l, &value_parts[i]);
-                    if (value_parts_count[i] > lines_needed) {
-                        lines_needed = value_parts_count[i];
+                    breaks_count[i] = string_break(t->columns[i].len, (const char *) r->values[i].v, r->values[i].l, &breaks[i]);
+                    if (breaks_count[i] > lines_needed) {
+                        lines_needed = breaks_count[i];
                     }
                     break;
                 case TABLE_TYPE_INT:
@@ -310,16 +305,20 @@ void table_display(table_t *t, uint32_t flags)
         for (j =  0; j < lines_needed; j++) {
             putchar('|');
             for (i = 0; i < t->columns_count; i++) {
-                if (0 == j || j < value_parts_count[i]) {
+                if (0 == j || j < breaks_count[i]) {
                     switch (t->columns[i].type) {
                         case TABLE_TYPE_STRING:
-//                             printf(" %-*s |", (int) t->columns[i].len, value_parts[i][j]);
-//                             printf(" %s |", value_parts[i][j]);
+                        {
+                            size_t k;
+
                             putchar(' ');
-                            fputs(value_parts[i][j], stdout);
-                            // si la ligne a une longueur inférieure en points de code, compléter avec des espaces
+                            fputs(breaks[i][j].part, stdout);
+                            for (k = breaks[i][j].charlen; k < t->columns[i].len; k++) {
+                                putchar(' ');
+                            }
                             fputs(" |", stdout);
                             break;
+                        }
                         case TABLE_TYPE_INT:
                             printf(" %*d |", (int) t->columns[i].len, (int) r->values[i].v);
                             break;
@@ -333,7 +332,16 @@ void table_display(table_t *t, uint32_t flags)
             }
             putchar('\n');
         }
-        // TODO: free value_parts
+        for (i = 0; i < t->columns_count; i++) {
+            if (TABLE_TYPE_STRING == t->columns[i].type) {
+                if (breaks_count[i] > 1) {
+                    for (j =  0; j < breaks_count[i]; j++) {
+                        free((void *) breaks[i][j].part);
+                    }
+                }
+                free(breaks[i]);
+            }
+        }
     }
     iterator_close(&it);
     // +--- ... ---+
@@ -353,7 +361,9 @@ void table_display(table_t *t, uint32_t flags)
 
 #define UTF8
 #ifdef UTF8
-# define STRING DIGIT_0 DIGIT_1 DIGIT_2 DIGIT_3 DIGIT_4 DIGIT_5 DIGIT_6 DIGIT_7 DIGIT_8 DIGIT_9
+// # define STRING DIGIT_0 DIGIT_1 DIGIT_2 DIGIT_3 DIGIT_4 DIGIT_5 DIGIT_6 DIGIT_7 DIGIT_8 DIGIT_9
+// # define STRING "\xEF\xAC\x80\xEF\xAC\x80\xEF\xAC\x80\xEF\xAC\x80\xEF\xAC\x80\xEF\xAC\x80\xEF\xAC\x80\xEF\xAC\x80\xEF\xAC\x80\xEF\xAC\x80"
+#define STRING "éïàùçè"
 #else
 # define STRING "0123456789"
 #endif
