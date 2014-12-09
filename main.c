@@ -29,6 +29,8 @@ extern module_t domain_module;
 extern module_t dedicated_module;
 extern module_t me_module;
 
+static graph_t *g = NULL;
+
 static const module_t */*builtin_*/modules[] = {
     &openssl_module,
     &curl_module,
@@ -202,6 +204,7 @@ void cleanup(void)
             modules[i]->dtor();
         }
     }
+    graph_destroy(g);
 }
 
 static const char *prompt(EditLine *UNUSED(e))
@@ -223,7 +226,6 @@ int main(int argc, char **argv)
 {
     int ret;
     size_t i;
-    graph_t *g;
     error_t *error;
 
     error = NULL;
@@ -301,7 +303,6 @@ int main(int argc, char **argv)
         print_error(error);
         convert_array_free(argc, argv, utf8_argv);
     }
-    graph_destroy(g);
 
     return ret;
 }
