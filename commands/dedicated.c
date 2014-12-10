@@ -5,6 +5,7 @@
 #include "json.h"
 #include "date.h"
 #include "util.h"
+#include "table.h"
 #include "modules/api.h"
 #include "modules/libxml.h"
 #include "commands/account.h"
@@ -38,6 +39,21 @@ typedef struct {
 typedef struct {
     bool boots_uptodate;
     HashTable *boots;
+    char *datacenter;
+    bool professionalUse;
+    char *supportLevel;
+    char *ip;
+    char *name; // TODO: doublon avec les clés de la hashtable servers ci-dessus
+    char *commercialRange;
+    char *os;
+    char *state;
+    char *reverse;
+    uint32_t serverId;
+    bool monitoring;
+    char *rack;
+    char *rootDevice;
+    uint32_t linkSpeed;
+    uint32_t bootId;
 } server_t;
 
 static const char * const boot_types[] = {
@@ -56,6 +72,14 @@ typedef struct {
     const char *description;
 } boot_t;
 
+#define FREE(s, member) \
+    do { \
+        if (NULL != s->member) { \
+            free(s->member); \
+            s->member = NULL; \
+        } \
+    } while (0);
+
 static void server_destroy(void *data)
 {
     server_t *s;
@@ -64,6 +88,16 @@ static void server_destroy(void *data)
 
     s = (server_t *) data;
     hashtable_destroy(s->boots);
+    FREE(s, datacenter);
+    FREE(s, supportLevel);
+    FREE(s, ip);
+    FREE(s, name);
+    FREE(s, commercialRange);
+    FREE(s, os);
+    FREE(s, state);
+    FREE(s, reverse);
+    FREE(s, rack);
+    FREE(s, rootDevice);
     free(s);
 }
 
@@ -83,11 +117,26 @@ static void boot_destroy(void *data)
     free(b);
 }
 
+#define INIT(s, member) \
+    do { \
+        s->member = NULL; \
+    } while(0);
+
 static server_t *server_new(void)
 {
     server_t *s;
 
     s = mem_new(*s);
+    INIT(s, datacenter);
+    INIT(s, supportLevel);
+    INIT(s, ip);
+    INIT(s, name);
+    INIT(s, commercialRange);
+    INIT(s, os);
+    INIT(s, state);
+    INIT(s, reverse);
+    INIT(s, rack);
+    INIT(s, rootDevice);
     s->boots_uptodate = FALSE;
     s->boots = hashtable_ascii_cs_new((DupFunc) strdup, free, boot_destroy);
 
@@ -150,12 +199,68 @@ static command_status_t fetch_servers(server_set_t *ss, bool force, error_t **er
             }
             hashtable_clear(ss->servers);
             for (n = root->children; n != NULL; n = n->next) {
+                server_t *s;
                 xmlChar *content;
+#ifdef WITH_XML
+                xmlDocPtr doc;
+#else
+                json_document_t *doc;
+#endif
 
                 content = xmlNodeGetContent(n);
-                hashtable_put(ss->servers, content, server_new(), NULL);
+                hashtable_put(ss->servers, content, s = server_new(), NULL);
+                req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s", (char *) content);
+#ifdef WITH_XML
+                REQUEST_XML_RESPONSE_WANTED(req);
+                request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
+#else
+                request_add_header(req, "Content-Type: application/json");
+                request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+#endif
+                request_dtor(req);
+                if (request_success) {
+                    json_value_t root, propvalue;
+
+                    root = json_document_get_root(doc);
+                    json_object_get_property(root, "datacenter", &propvalue);
+                    s->datacenter = strdup(json_get_string(propvalue));
+                    json_object_get_property(root, "professionalUse", &propvalue);
+                    s->professionalUse = json_true == propvalue;
+                    json_object_get_property(root, "supportLevel", &propvalue);
+                    s->supportLevel = strdup(json_get_string(propvalue));
+                    json_object_get_property(root, "ip", &propvalue);
+                    s->ip = strdup(json_get_string(propvalue));
+                    json_object_get_property(root, "name", &propvalue);
+                    s->name = strdup(json_get_string(propvalue));
+                    json_object_get_property(root, "commercialRange", &propvalue);
+                    s->commercialRange = json_null == propvalue ? NULL : strdup(json_get_string(propvalue));
+                    json_object_get_property(root, "os", &propvalue);
+                    s->os = strdup(json_get_string(propvalue));
+                    json_object_get_property(root, "state", &propvalue);
+                    s->state = strdup(json_get_string(propvalue));
+                    json_object_get_property(root, "reverse", &propvalue);
+                    s->reverse = json_null == propvalue ? NULL : strdup(json_get_string(propvalue));
+                    json_object_get_property(root, "serverId", &propvalue);
+                    s->serverId = json_get_integer(propvalue);
+                    json_object_get_property(root, "monitoring", &propvalue);
+                    s->monitoring = json_true == propvalue;
+                    json_object_get_property(root, "rack", &propvalue);
+                    s->rack = strdup(json_get_string(propvalue));
+                    json_object_get_property(root, "rootDevice", &propvalue);
+                    s->rootDevice = json_null == propvalue ? NULL : strdup(json_get_string(propvalue));
+                    json_object_get_property(root, "linkSpeed", &propvalue);
+                    s->linkSpeed = json_null == propvalue ? 0 : json_get_integer(propvalue);
+                    json_object_get_property(root, "bootId", &propvalue);
+                    s->bootId = json_null == propvalue ? 0 : json_get_integer(propvalue);
+#ifdef WITH_XML
+                    xmlFreeDoc(doc);
+#else
+                    json_document_destroy(doc);
+#endif
+                }
                 xmlFree(content);
             }
+            xmlFreeDoc(doc);
             ss->uptodate = TRUE;
         } else {
             return COMMAND_FAILURE;
@@ -165,8 +270,75 @@ static command_status_t fetch_servers(server_set_t *ss, bool force, error_t **er
     return COMMAND_SUCCESS;
 }
 
+static int parse_boot(HashTable *boots, xmlDocPtr doc)
+{
+    boot_t *b;
+    xmlNodePtr root;
+
+    if (NULL == (root = xmlDocGetRootElement(doc))) {
+        return 0;
+    }
+    b = mem_new(*b);
+    b->id = xmlGetPropAsInt(root, "bootId");
+    b->kernel = xmlGetPropAsString(root, "kernel");
+    b->description = xmlGetPropAsString(root, "description");
+    b->type = xmlGetPropAsCollectionIndex(root, "bootType", boot_types, -1);
+    hashtable_put(boots, (void *) b->kernel, b, NULL);
+    xmlFreeDoc(doc);
+
+    return TRUE;
+}
+
+static command_status_t fetch_server_boots(const char *server_name, server_t **s, error_t **error)
+{
+    server_set_t *ss;
+    bool request_success;
+
+    *s = NULL;
+    FETCH_ACCOUNT_SERVERS(ss);
+    request_success = TRUE;
+    if (!hashtable_get(ss->servers, (void *) server_name, (void **) s) || !(*s)->boots_uptodate) {
+        xmlDocPtr doc;
+        request_t *req;
+        xmlNodePtr root, n;
+
+        if (NULL == *s) {
+            hashtable_put(ss->servers, (void *) server_name, *s = server_new(), NULL);
+        }
+        req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s/boot", server_name);
+        REQUEST_XML_RESPONSE_WANTED(req);
+        request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
+        request_dtor(req);
+        // result
+        if (request_success) {
+            if (NULL == (root = xmlDocGetRootElement(doc))) {
+                return 0;
+            }
+            for (n = root->children; request_success && n != NULL; n = n->next) {
+                xmlDocPtr doc;
+                xmlChar *content;
+
+                content = xmlNodeGetContent(n);
+                req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s/boot/%s", server_name, (const char *) content);
+                REQUEST_XML_RESPONSE_WANTED(req);
+                request_success &= request_execute(req, RESPONSE_XML, (void **) &doc, error); // request_success is assumed to be TRUE before the first iteration
+                request_dtor(req);
+                // result
+                parse_boot((*s)->boots, doc);
+                xmlFree(content);
+            }
+            xmlFreeDoc(doc);
+            (*s)->boots_uptodate = TRUE;
+        }
+    }
+
+    return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
 static command_status_t dedicated_list(void *UNUSED(arg), error_t **error)
 {
+    table_t *t;
+    Iterator it;
     server_set_t *ss;
     command_status_t ret;
 
@@ -176,7 +348,64 @@ static command_status_t dedicated_list(void *UNUSED(arg), error_t **error)
         return ret;
     }
     // display
-    hashtable_puts_keys(ss->servers);
+    t = table_new(
+#ifdef PRINT_OVH_ID
+        15, _("serverId"), TABLE_TYPE_INT,
+#else
+        14,
+#endif /* PRINT_OVH_ID */
+        _("name"), TABLE_TYPE_STRING,
+        _("ip"), TABLE_TYPE_STRING,
+        _("os"), TABLE_TYPE_STRING,
+        _("reverse"), TABLE_TYPE_STRING,
+//         _("bootId"), TABLE_TYPE_INT,
+        _("boot"), TABLE_TYPE_STRING,
+        _("datacenter"), TABLE_TYPE_STRING,
+        _("professionalUse"), TABLE_TYPE_BOOLEAN,
+        _("supportLevel"), TABLE_TYPE_STRING,
+        _("commercialRange"), TABLE_TYPE_STRING,
+        _("state"), TABLE_TYPE_STRING,
+        _("monitoring"), TABLE_TYPE_BOOLEAN,
+        _("rack"), TABLE_TYPE_STRING,
+        _("rootDevice"), TABLE_TYPE_STRING,
+        _("linkSpeed"), TABLE_TYPE_INT
+    );
+    hashtable_to_iterator(&it, ss->servers);
+    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        server_t *s;
+        const char *bootname;
+
+        // TODO: s->name is also the current key
+        bootname = "-";
+        s = iterator_current(&it, NULL);
+#if 1
+        fetch_server_boots(s->name, &s, error);
+        {
+            Iterator it;
+
+            hashtable_to_iterator(&it, s->boots);
+            for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+                boot_t *b;
+
+                b = iterator_current(&it, NULL);
+                if (b->id == s->bootId) {
+                    bootname = b->kernel;
+                    break;
+                }
+            }
+            iterator_close(&it);
+        }
+#endif
+        table_store(t,
+#ifdef PRINT_OVH_ID
+            s->serverId,
+#endif /* PRINT_OVH_ID */
+            s->name, s->ip, s->os, s->reverse, bootname/*s->bootId*/, s->datacenter, s->professionalUse, s->supportLevel, s->commercialRange, s->state, s->monitoring, s->rack, s->rootDevice, s->linkSpeed
+        );
+    }
+    iterator_close(&it);
+    table_display(t, TABLE_FLAG_NONE);
+    table_destroy(t);
 
     return COMMAND_SUCCESS;
 }
@@ -267,71 +496,6 @@ static command_status_t dedicated_reboot(void *arg, error_t **error)
         request_dtor(req);
         if (request_success) {
             // parse response to register the task. Display it? ("This request to hard reboot %s is registered as task #%d (see dedicated %s task %d to see its status)")
-        }
-    }
-
-    return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
-}
-
-static int parse_boot(HashTable *boots, xmlDocPtr doc)
-{
-    boot_t *b;
-    xmlNodePtr root;
-
-    if (NULL == (root = xmlDocGetRootElement(doc))) {
-        return 0;
-    }
-    b = mem_new(*b);
-    b->id = xmlGetPropAsInt(root, "bootId");
-    b->kernel = xmlGetPropAsString(root, "kernel");
-    b->description = xmlGetPropAsString(root, "description");
-    b->type = xmlGetPropAsCollectionIndex(root, "bootType", boot_types, -1);
-    hashtable_put(boots, (void *) b->kernel, b, NULL);
-    xmlFreeDoc(doc);
-
-    return TRUE;
-}
-
-static command_status_t fetch_server_boots(const char *server_name, server_t **s, error_t **error)
-{
-    server_set_t *ss;
-    bool request_success;
-
-    *s = NULL;
-    FETCH_ACCOUNT_SERVERS(ss);
-    request_success = TRUE;
-    if (!hashtable_get(ss->servers, (void *) server_name, (void **) s) || !(*s)->boots_uptodate) {
-        xmlDocPtr doc;
-        request_t *req;
-        xmlNodePtr root, n;
-
-        if (NULL == *s) {
-            hashtable_put(ss->servers, (void *) server_name, *s = server_new(), NULL);
-        }
-        req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s/boot", server_name);
-        REQUEST_XML_RESPONSE_WANTED(req);
-        request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
-        request_dtor(req);
-        // result
-        if (request_success) {
-            if (NULL == (root = xmlDocGetRootElement(doc))) {
-                return 0;
-            }
-            for (n = root->children; request_success && n != NULL; n = n->next) {
-                xmlDocPtr doc;
-                xmlChar *content;
-
-                content = xmlNodeGetContent(n);
-                req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s/boot/%s", server_name, (const char *) content);
-                REQUEST_XML_RESPONSE_WANTED(req);
-                request_success &= request_execute(req, RESPONSE_XML, (void **) &doc, error); // request_success is assumed to be TRUE before the first iteration
-                request_dtor(req);
-                // result
-                parse_boot((*s)->boots, doc);
-                xmlFree(content);
-            }
-            xmlFreeDoc(doc);
-            (*s)->boots_uptodate = TRUE;
         }
     }
 

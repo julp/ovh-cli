@@ -14,9 +14,11 @@ typedef struct {
 } column_t;
 
 struct table_t {
-    size_t columns_count;
-    column_t *columns;
     DPtrArray *rows;
+    column_t *columns;
+    size_t columns_count;
+    char *false_true_string[2];
+    size_t false_true_len[2], max_false_true_len;
 };
 
 typedef struct {
@@ -29,9 +31,15 @@ typedef struct {
     value_t *values;
 } row_t;
 
+#if 0
+    _("false")
+    _("true")
+#endif
+
 /**
  * NOTE:
  * - column titles are expected to be already in "local" charset (gettext, if they are translated, will do it for us)
+ * - same for "true"/"false"
  * - columns data are expected to be in UTF-8, we handle their conversion
  **/
 
@@ -103,6 +111,13 @@ table_t *table_new(size_t columns_count, ...)
     va_list ap;
 
     t = mem_new(*t);
+    // speed up true/false conversions
+    t->false_true_string[FALSE] = _("false");
+    cplen(t->false_true_string[FALSE], &t->false_true_len[FALSE], NULL);
+    t->false_true_string[TRUE] = _("true");
+    cplen(t->false_true_string[TRUE], &t->false_true_len[TRUE], NULL);
+    t->max_false_true_len = MAX(t->false_true_len[FALSE], t->false_true_len[TRUE]);
+    // </>
     t->columns_count = columns_count;
     t->columns = mem_new_n(*t->columns, columns_count);
     t->rows = dptrarray_new(NULL, row_destroy, NULL);
@@ -145,36 +160,50 @@ void table_store(table_t *t, ...)
             {
                 char *s_local;
                 error_t *error;
-                size_t s_local_len; // unit: "characters", not bytes
                 const char *s_utf8;
 
                 // TODO: real error handling! Let caller handle this by adding a error_t **error in argument?
 error = NULL;
-                s_utf8 = va_arg(ap, const char *);
-                convert_string_utf8_to_local(s_utf8, strlen(s_utf8), &s_local, NULL, &error);
+                if (NULL == (s_utf8 = va_arg(ap, const char *))) {
+                    s_local = "-";
+                    r->values[i].f = FALSE;
+                    r->values[i].l = STR_LEN("-");
+                } else {
+                    convert_string_utf8_to_local(s_utf8, strlen(s_utf8), &s_local, NULL, &error);
 print_error(error);
 error = NULL;
-                cplen(s_local, &s_local_len, &error);
+                    cplen(s_local, &r->values[i].l, &error);
 print_error(error);
-                r->values[i].f = s_local != s_utf8;
+                    r->values[i].f = s_local != s_utf8;
+                }
                 r->values[i].v = (uintptr_t) s_local; // TODO: conversion UTF-8 => local
-                r->values[i].l = s_local_len;
-                if (s_local_len > t->columns[i].max_len) {
-                    t->columns[i].max_len = s_local_len;
+//                 r->values[i].l = s_local_len;
+                if (r->values[i].l > t->columns[i].max_len) {
+                    t->columns[i].max_len = r->values[i].l;
                 }
                 break;
             }
             case TABLE_TYPE_INT:
             {
                 int v;
-                size_t len;
 
                 v = va_arg(ap, int);
-                len = snprintf(NULL, 0, "%d", v);
                 r->values[i].v = (uintptr_t) v;
-                r->values[i].l = len;
-                if (len > t->columns[i].max_len) {
-                    t->columns[i].len = t->columns[i].min_len = t->columns[i].max_len = len;
+                r->values[i].l = snprintf(NULL, 0, "%d", v);
+                if (r->values[i].l > t->columns[i].max_len) {
+                    t->columns[i].len = t->columns[i].min_len = t->columns[i].max_len = r->values[i].l;
+                }
+                break;
+            }
+            case TABLE_TYPE_BOOLEAN:
+            {
+                bool v;
+
+                v = va_arg(ap, bool);
+                r->values[i].v = (uintptr_t) v;
+                r->values[i].l = t->max_false_true_len;
+                if (r->values[i].l > t->columns[i].max_len) {
+                    t->columns[i].len = t->columns[i].min_len = t->columns[i].max_len = t->max_false_true_len;
                 }
                 break;
             }
@@ -245,6 +274,8 @@ void table_display(table_t *t, uint32_t flags)
     int width;
     size_t i, k;
     Iterator it;
+    break_t **breaks;
+    size_t *breaks_count;
 
     assert(NULL != t);
 
@@ -299,16 +330,15 @@ void table_display(table_t *t, uint32_t flags)
     table_print_separator_line(t);
     // | ... | : data
     dptrarray_to_iterator(&it, t->rows);
+    breaks = mem_new_n(*breaks, t->columns_count);
+    breaks_count = mem_new_n(*breaks_count, t->columns_count);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         row_t *r;
         size_t j, lines_needed;
-#define MAX_COLUMNS 12
-        break_t *breaks[MAX_COLUMNS]; // si alloué dynamiquement, le remonter dans la fonction
-        size_t breaks_count[MAX_COLUMNS];
 
         lines_needed = 1;
         r = iterator_current(&it, NULL);
-        bzero(&breaks_count, sizeof(breaks_count));
+        bzero(breaks_count, sizeof(breaks_count) * t->columns_count);
         for (i = 0; i < t->columns_count; i++) {
             /*if (r->values[i].l > t->columns[i].len && (r->values[i].l / t->columns[i].len + 1) > lines_needed) {
                 lines_needed = r->values[i].l / t->columns[i].len + 1;
@@ -321,6 +351,7 @@ void table_display(table_t *t, uint32_t flags)
                     }
                     break;
                 case TABLE_TYPE_INT:
+                case TABLE_TYPE_BOOLEAN:
                     /* NOP */
                     break;
                 default:
@@ -346,6 +377,14 @@ void table_display(table_t *t, uint32_t flags)
                         case TABLE_TYPE_INT:
                             printf(" %*d |", (int) t->columns[i].len, (int) r->values[i].v);
                             break;
+                        case TABLE_TYPE_BOOLEAN:
+                            putchar(' ');
+                            fputs(t->false_true_string[r->values[i].v], stdout);
+                            for (k = t->false_true_len[r->values[i].v]; k < t->columns[i].len; k++) {
+                                putchar(' ');
+                            }
+                            fputs(" |", stdout);
+                            break;
                         default:
                             assert(FALSE);
                             break;
@@ -359,7 +398,7 @@ void table_display(table_t *t, uint32_t flags)
         for (i = 0; i < t->columns_count; i++) {
             if (TABLE_TYPE_STRING == t->columns[i].type) {
                 if (breaks_count[i] > 1) {
-                    for (j =  0; j < breaks_count[i]; j++) {
+                    for (j = 0; j < breaks_count[i]; j++) {
                         free((void *) breaks[i][j].part);
                     }
                 }
@@ -373,6 +412,8 @@ void table_display(table_t *t, uint32_t flags)
         }
     }
     iterator_close(&it);
+    free(breaks);
+    free(breaks_count);
     // +--- ... ---+
     table_print_separator_line(t);
 }
