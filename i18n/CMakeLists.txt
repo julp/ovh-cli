@@ -1,4 +1,4 @@
-add_subdirectory(french)
+add_subdirectory(fr)
 
 # file(GLOB PO_FILES *.po)
 # foreach(PO_FILE ${PO_FILES})
