@@ -10,7 +10,7 @@
 typedef struct {
     const char *title;
     column_type_t type;
-    size_t min_len, max_len, len;
+    size_t min_len, max_len, len, title_len;
 } column_t;
 
 struct table_t {
@@ -28,6 +28,12 @@ typedef struct {
 typedef struct {
     value_t *values;
 } row_t;
+
+/**
+ * NOTE:
+ * - column titles are expected to be already in "local" charset (gettext, if they are translated, will do it for us)
+ * - columns data are expected to be in UTF-8, we handle their conversion
+ **/
 
 #define DEFAULT_WIDTH 80
 static int console_width(void)
@@ -105,7 +111,8 @@ table_t *table_new(size_t columns_count, ...)
     for (i = 0; i < columns_count; i++) {
         t->columns[i].title = va_arg(ap, const char *);
         t->columns[i].type = va_arg(ap, column_type_t);
-        t->columns[i].len = t->columns[i].min_len = t->columns[i].max_len = strlen(t->columns[i].title);
+        cplen(t->columns[i].title, &t->columns[i].title_len, NULL);
+        t->columns[i].len = t->columns[i].min_len = t->columns[i].max_len = t->columns[i].title_len;
     }
     va_end(ap);
 
@@ -235,9 +242,9 @@ static size_t string_break(size_t max_len, const char *string, size_t string_len
 
 void table_display(table_t *t, uint32_t flags)
 {
-    size_t i;
-    Iterator it;
     int width;
+    size_t i, k;
+    Iterator it;
 
     assert(NULL != t);
 
@@ -278,7 +285,13 @@ void table_display(table_t *t, uint32_t flags)
         // | ... | : column headers
         putchar('|');
         for (i = 0; i < t->columns_count; i++) {
-            printf(" %-*s |", (int) t->columns[i].len, t->columns[i].title);
+            putchar(' ');
+            fputs(t->columns[i].title, stdout);
+//             printf(" %*c |", t->columns[i].len - t->columns[i].title_len, ' ');
+            for (k = t->columns[i].title_len; k < t->columns[i].len; k++) {
+                putchar(' ');
+            }
+            fputs(" |", stdout);
         }
         putchar('\n');
     }
@@ -322,8 +335,6 @@ void table_display(table_t *t, uint32_t flags)
                     switch (t->columns[i].type) {
                         case TABLE_TYPE_STRING:
                         {
-                            size_t k;
-
                             putchar(' ');
                             fputs(breaks[i][j].part, stdout);
                             for (k = breaks[i][j].charlen; k < t->columns[i].len; k++) {
@@ -426,7 +437,7 @@ void table_test(void)
 {
     table_t *t;
 
-    t = table_new(4, "id", TABLE_TYPE_INT, "subdomain", TABLE_TYPE_STRING, "target", TABLE_TYPE_STRING, "extra", TABLE_TYPE_STRING);
+    t = table_new(4, "id", TABLE_TYPE_INT, "subdomain", TABLE_TYPE_STRING, "target", TABLE_TYPE_STRING, "éïàùçè", TABLE_TYPE_STRING);
     table_store(t, 1, "abc", "def", "");
     table_store(t, 2, "ghi", "jkl", long_string);
     table_store(t, 3, "mno", long_string, "pqr");
