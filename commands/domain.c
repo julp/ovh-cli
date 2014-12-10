@@ -393,11 +393,11 @@ static command_status_t record_list(void *arg, error_t **error)
 
         t = table_new(
 #ifdef PRINT_OVH_ID
-            5, "id", TABLE_TYPE_INT,
+            5, _("id"), TABLE_TYPE_INT,
 #else
             4,
 #endif /* PRINT_OVH_ID */
-            "subdomain", TABLE_TYPE_STRING, "type", TABLE_TYPE_STRING, "ttl", TABLE_TYPE_INT, "target", TABLE_TYPE_STRING
+            _("subdomain"), TABLE_TYPE_STRING, _("type"), TABLE_TYPE_STRING, _("TTL"), TABLE_TYPE_INT, _("target"), TABLE_TYPE_STRING
         );
         hashtable_to_iterator(&it, d->records);
         for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {

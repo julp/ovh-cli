@@ -6,7 +6,7 @@
 #, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: PACKAGE VERSION\n"
+"Project-Id-Version: ovh-cli VERSION\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2014-12-10 14:43+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -14,92 +14,92 @@ msgstr ""
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "Language: \n"
 "MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=CHARSET\n"
+"Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
 #: /home/julp/ovh-cli/main.c:257
 msgid "needs help? Type help!"
-msgstr ""
+msgstr "Besoin d'aide ? Tapez help !"
 
 #: /home/julp/ovh-cli/commands/account.c:453
 #, c-format
 msgid "Command aborted: unable to parse duration '%s'"
-msgstr ""
+msgstr "Commande avortée : impossible de traduire l'expression de durée '%s'"
 
 #: /home/julp/ovh-cli/commands/account.c:462
 #, c-format
 msgid "Command aborted: unable to parse expiration date '%s'"
-msgstr ""
+msgstr "Commande avortée : impossible de traduire la date '%s'"
 
 #: /home/julp/ovh-cli/commands/dedicated.c:263
 #, c-format
 msgid "Confirm hard reboot of %s"
-msgstr ""
+msgstr "Confirmer le reboot matériel de %s"
 
 #: /home/julp/ovh-cli/commands/dedicated.c:353
 #, c-format
 msgid "Available boots for '%s':\n"
-msgstr ""
+msgstr "Les boots disponibles pour '%s' sont :\n"
 
 #: /home/julp/ovh-cli/commands/dedicated.c:420
 #, c-format
 msgid "Current boot for %s is:  %s (%s): %s\n"
-msgstr ""
+msgstr "Boot courant pour %s est : %s (%s): %s\n"
 
 #: /home/julp/ovh-cli/commands/dedicated.c:472
 #, c-format
 msgid "This new boot will only be effective on the next (re)boot of '%s'"
-msgstr ""
+msgstr "Le nouveau ne sera effectif qu'au prochain (re)démarrage de '%s'"
 
 #: /home/julp/ovh-cli/commands/dedicated.c:474
 #, c-format
 msgid "Any boot named '%s' was found for server '%s'"
-msgstr ""
+msgstr "Aucun boot nommé '%s' n'a pu être trouvé pour le serveur '%s'"
 
 #: /home/julp/ovh-cli/commands/domain.c:396
 msgid "id"
-msgstr ""
+msgstr "id"
 
 #: /home/julp/ovh-cli/commands/domain.c:400
 msgid "subdomain"
-msgstr ""
+msgstr "sous-domaine"
 
 #: /home/julp/ovh-cli/commands/domain.c:400
 msgid "type"
-msgstr ""
+msgstr "type"
 
 #: /home/julp/ovh-cli/commands/domain.c:400
 msgid "TTL"
-msgstr ""
+msgstr "ttl"
 
 #: /home/julp/ovh-cli/commands/domain.c:400
 msgid "target"
-msgstr ""
+msgstr "cibleé"
 
 #: /home/julp/ovh-cli/commands/domain.c:527
 #, c-format
 msgid "Confirm deletion of '%s.%s'"
-msgstr ""
+msgstr "Confirmer la suppression de '%s.%s'"
 
 #: /home/julp/ovh-cli/commands/domain.c:656
 msgid "enabled"
-msgstr ""
+msgstr "activé"
 
 #: /home/julp/ovh-cli/commands/domain.c:657
 msgid "disabled"
-msgstr ""
+msgstr "désactivé"
 
 #: /home/julp/ovh-cli/commands/domain.c:658
 msgid "enableInProgress"
-msgstr ""
+msgstr "activation en cours"
 
 #: /home/julp/ovh-cli/commands/domain.c:659
 msgid "disableInProgress"
-msgstr ""
+msgstr "désactivation en cours"
 
 #: /home/julp/ovh-cli/modules/conv.c:66
 msgid "Cannot open converter"
-msgstr ""
+msgstr "Ouverture du convertisseur impossible"
 
 #: /home/julp/ovh-cli/modules/conv.c:68
 #, c-format
@@ -108,17 +108,17 @@ msgstr ""
 
 #: /home/julp/ovh-cli/modules/conv.c:70
 msgid "Incomplete multibyte character detected in input string"
-msgstr ""
+msgstr "Caractère multioctets tronqué détecté dans la chaîne source"
 
 #: /home/julp/ovh-cli/modules/conv.c:72
 msgid "Illegal character detected in input string"
-msgstr ""
+msgstr "Caractère illégal rencontré dans la chaîne source"
 
 #: /home/julp/ovh-cli/modules/conv.c:74
 msgid "Buffer length exceeded"
-msgstr ""
+msgstr "Tampon de taille insuffisante"
 
 #: /home/julp/ovh-cli/modules/conv.c:76
 #, c-format
 msgid "Unknown error (%d)"
-msgstr ""
+msgstr "erreur inconnue (%d)"

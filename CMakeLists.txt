@@ -12,7 +12,7 @@ find_package(OpenSSL REQUIRED)
 # set(EDITLINE_DEBUG TRUE)
 find_package(EditLine REQUIRED)
 find_package(Gettext QUIET)
-find_package(FindIntl QUIET)
+find_package(Intl QUIET)
 
 find_path(ICONV_INCLUDE_DIR iconv.h)
 find_library(ICONV_LIBRARIES NAMES iconv libiconv c)
@@ -110,3 +110,5 @@ add_executable(ovh main.c graph.c json.c error.c util.c date.c table.c
     ${BUILTIN_MODULES} ${EXTRA_MODULES_ENABLED} ${MISC_SOURCES}
 )
 target_link_libraries(ovh ${Intl_LIBRARIES} ${CURL_LIBRARIES} ${ICONV_LIBRARIES} ${LIBXML2_LIBRARIES} ${OPENSSL_LIBRARIES} ${EDITLINE_LIBRARIES})
+
+install(TARGETS ovh DESTINATION bin)
