@@ -324,6 +324,8 @@ void json_document_destroy(json_document_t *doc)
         return (json_value_t) node; \
     } while (0);
 
+// #define RSHIFT(x,y) ((x)>>(int)(y))
+// #define RSHIFT(x,y) (((x)<0) ? ~((~(x))>>(int)(y)) : (x)>>(int)(y))
 int64_t json_get_integer(json_value_t value)
 {
     assert(HAS_FLAG(value, JSON_INTEGER_MASK) || JSON_TYPE_NUMBER == json_get_type(value));
@@ -903,11 +905,9 @@ static void json_push(json_parser_t *jp, json_value_t value, json_type_t type)
             jp->types[jp->output_depth] = type;
             jp->values[jp->output_depth] = value;
             break;
-        case JSON_TYPE_STRING:
-            RESET_BUFFER(jp, val_buffer, vp);
-            break;
         default:
             /* NOP */
+            RESET_BUFFER(jp, val_buffer, vp);
             break;
     }
 }
@@ -1128,6 +1128,7 @@ static int do_action(json_parser_t *jp, int next_state)
                 {
                     long long v;
 
+                    PUSH_CHAR(jp, '\0');
                     v = strtoll(jp->val_buffer, NULL, 10);
                     if (((LLONG_MIN == v || LLONG_MAX == v) && ERANGE == errno)) {
 //                         fprintf(stderr, "number %s out of range, stored as string\n", jp->val_buffer);
