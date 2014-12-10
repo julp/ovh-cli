@@ -6,6 +6,7 @@
 #define APPLICATION_SECRET "@APPLICATION_SECRET@"
 #define API_BASE_URL "@API_BASE_URL@"
 #cmakedefine DEBUG
+#cmakedefine PRINT_OVH_ID
 #cmakedefine HAVE_STRTOD_L
 #cmakedefine WITH_NLS
 #cmakedefine WITH_EDITLINE

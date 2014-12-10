@@ -85,6 +85,7 @@ if(Intl_FOUND)
 endif(Intl_FOUND)
 
 option(DEBUG "Enable/disable debugging" OFF)
+option(PRINT_OVH_ID "Enable/disable display of internal OVH identifiers" OFF)
 
 set(
     BUILTIN_MODULES
