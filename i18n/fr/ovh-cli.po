@@ -74,7 +74,7 @@ msgstr "ttl"
 
 #: /home/julp/ovh-cli/commands/domain.c:400
 msgid "target"
-msgstr "cibleé"
+msgstr "cible"
 
 #: /home/julp/ovh-cli/commands/domain.c:527
 #, c-format
