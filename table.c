@@ -205,8 +205,7 @@ static size_t string_break(size_t max_len, const char *string, size_t string_len
 
     i = 0;
     // NOTE: string_len unit is character
-    breaks_count = (string_len / max_len) + 1;
-//     breaks_count = ceil(string_len / max_len);
+    breaks_count = (string_len + max_len - 1) / max_len;
     *breaks = mem_new_n(**breaks, breaks_count);
     if (breaks_count > 1) {
         const char *p;
@@ -257,9 +256,18 @@ void table_display(table_t *t, uint32_t flags)
             int diff;
 
             diff = width - min_len_sum;
-            for (i = 0; i < t->columns_count; i++) {
-                if (t->columns[i].max_len > t->columns[i].min_len) {
-                    t->columns[i].len = t->columns[i].min_len + diff / candidates_for_growth;
+            for (i = 0; candidates_for_growth > 0 && i < t->columns_count; i++) {
+                if (t->columns[i].max_len > t->columns[i].min_len && t->columns[i].max_len < t->columns[i].min_len + diff / candidates_for_growth) {
+                    diff -= t->columns[i].max_len - t->columns[i].min_len;
+                    t->columns[i].len = t->columns[i].min_len = t->columns[i].max_len;
+                    --candidates_for_growth;
+                }
+            }
+            if (diff > 0 && candidates_for_growth > 0) {
+                for (i = 0; i < t->columns_count; i++) {
+                    if (t->columns[i].max_len > t->columns[i].min_len) {
+                        t->columns[i].len = t->columns[i].min_len + diff / candidates_for_growth;
+                    }
                 }
             }
         }
