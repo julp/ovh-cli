@@ -301,6 +301,29 @@ void json_document_destroy(json_document_t *doc)
     free(doc);
 }
 
+#define JSON_UNWRAP_SCALAR(jsonvalue, ctype, jsontype) \
+    do { \
+            json_node_t *node; \
+ \
+    assert(jsontype == json_get_type(jsonvalue)); \
+ \
+    node = (json_node_t *) jsonvalue; \
+ \
+        return *((ctype *) node->value); \
+    } while (0);
+
+#define JSON_WRAP_SCALAR(cvalue, ctype, jsontype) \
+    do { \
+        json_node_t *node; \
+ \
+        node = mem_new(*node); \
+        node->type = jsontype; \
+        node->value = mem_new(ctype); \
+        *((ctype *) node->value) = cvalue; \
+ \
+        return (json_value_t) node; \
+    } while (0);
+
 int64_t json_get_integer(json_value_t value)
 {
     assert(HAS_FLAG(value, JSON_INTEGER_MASK) || JSON_TYPE_NUMBER == json_get_type(value));
@@ -308,6 +331,7 @@ int64_t json_get_integer(json_value_t value)
     if (HAS_FLAG(value, JSON_INTEGER_MASK)) {
         return value >> 1;
     } else {
+        //JSON_UNWRAP_SCALAR(value, int64_t, JSON_TYPE_INTEGER);
         return (int64_t) json_get_number(value);
     }
 }
@@ -322,32 +346,20 @@ json_value_t json_integer(int64_t value) /* WARN_UNUSED_RESULT */
     if (value <= JSON_MAX_SIGNED && value >= JSON_MIN_SIGNED) {
         return ((((json_value_t) value) << 1) | JSON_INTEGER_MASK);
     } else {
+        //JSON_WRAP_SCALAR(value, int64_t, JSON_TYPE_INTEGER);
         return json_number((double) value);
     }
 }
 
 double json_get_number(json_value_t value)
 {
-    json_node_t *node;
-
-    assert(JSON_TYPE_NUMBER == json_get_type(value));
-
-    node = (json_node_t *) value;
-
-    return *((double *) node->value);
+    JSON_UNWRAP_SCALAR(value, double, JSON_TYPE_NUMBER/*JSON_TYPE_DECIMAL*/);
 }
 
 json_value_t json_number(double value) /* WARN_UNUSED_RESULT */
 {
-    json_node_t *node;
-
     // TODO: assumes !inf/nan ?
-    node = mem_new(*node);
-    node->type = JSON_TYPE_NUMBER;
-    node->value = mem_new(double);
-    *((double *) node->value) = value;
-
-    return (json_value_t) node;
+    JSON_WRAP_SCALAR(value, double, JSON_TYPE_NUMBER/*JSON_TYPE_DECIMAL*/);
 }
 
 const char *json_get_string(json_value_t value)
