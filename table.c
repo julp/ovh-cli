@@ -165,7 +165,7 @@ void table_store(table_t *t, ...)
                 // TODO: real error handling! Let caller handle this by adding a error_t **error in argument?
 error = NULL;
                 if (NULL == (s_utf8 = va_arg(ap, const char *))) {
-                    s_local = "-";
+                    s_local = (char *) "-";
                     r->values[i].f = FALSE;
                     r->values[i].l = STR_LEN("-");
                 } else {
