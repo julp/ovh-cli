@@ -733,6 +733,7 @@ static command_status_t dedicated_reverse_set_delete(void *arg, bool set, error_
                     INIT(s, reverse);
                 }
             }
+            free(ip);
         }
     }
 
