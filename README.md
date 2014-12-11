@@ -59,6 +59,7 @@ ovh account <nickhandle> password "" <consumer key>
         * default => set default account
         * switch => change current *account*
 * domain
+    * check => list domains and when they expire
     * list => display all domains owned by the current account
     * \<domain name> ("zone" may be more appropriate)
         * export => export *domain*/zone in DNS format
@@ -73,6 +74,7 @@ ovh account <nickhandle> password "" <consumer key>
                 * add \<target> type \<one of: A, AAAA, CNAME, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT> => add *subdomain* to *domain*
                 * delete => delete *subdomain* of *domain* (TODO: non unique subdomain names are all deleted)
 * dedicated
+    * check => list servers and when they expire
     * list => list all servers associated to the current account
     * \<server name>
         * reboot => **hard** reboot of *server*
