@@ -70,7 +70,7 @@ ovh account <nickhandle> password "" <consumer key>
         * record ("subdomain" may be more appropriate) (TODO: find a more convenient way to manage empty subdomain name - SPF, NS, ... ?)
             * list => display all subdomains of *domain*
             * \<record name>
-                * add \<target> type \<one of: A, AAAA, CNAME, DKIM, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT> => add *subdomain* to *domain*
+                * add \<target> type \<one of: A, AAAA, CNAME, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT> => add *subdomain* to *domain*
                 * delete => delete *subdomain* of *domain* (TODO: non unique subdomain names are all deleted)
 * dedicated
     * list => list all servers associated to the current account
