@@ -80,6 +80,9 @@ ovh account <nickhandle> password "" <consumer key>
             * list => list all available boots for *server*
             * show => display current boot for *server*
             * \<boot name> => set boot for next (re)boots of *server*
+        * reverse
+            * delete => remove reverse name of *server*
+            * set <reverse> => define reverse name of *server*
 * me => display personal informations associated to the current account (name, address, etc)
 * help
 * quit

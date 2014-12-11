@@ -75,7 +75,7 @@ typedef struct {
 #define FREE(s, member) \
     do { \
         if (NULL != s->member) { \
-            free(s->member); \
+            free((void *) s->member); \
             s->member = NULL; \
         } \
     } while (0);
@@ -108,12 +108,8 @@ static void boot_destroy(void *data)
     assert(NULL != data);
 
     b = (boot_t *) data;
-    if (NULL != b->kernel) {
-        free((void *) b->kernel);
-    }
-    if (NULL != b->description) {
-        free((void *) b->description);
-    }
+    FREE(b, kernel);
+    FREE(b, description);
     free(b);
 }
 
@@ -178,7 +174,77 @@ typedef struct {
     int boot_type;
     char *boot_name;
     char *server_name;
+    char *reverse;
 } dedicated_argument_t;
+
+static server_t *fetch_server(server_set_t *ss, const char * const server_name, bool force, error_t **error)
+{
+    server_t *s;
+
+    s = NULL;
+    if (!force && !ss->uptodate && !hashtable_get(ss->servers, server_name, (void **) &s)) {
+        request_t *req;
+#ifdef WITH_XML
+        xmlDocPtr doc;
+#else
+        json_document_t *doc;
+#endif
+        bool request_success;
+
+        hashtable_put(ss->servers, (void *) server_name, s = server_new(), NULL);
+        req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s", server_name);
+#ifdef WITH_XML
+        REQUEST_XML_RESPONSE_WANTED(req);
+        request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
+#else
+        request_add_header(req, "Content-Type: application/json");
+        request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+#endif
+        request_dtor(req);
+        if (request_success) {
+            json_value_t root, propvalue;
+
+            root = json_document_get_root(doc);
+            json_object_get_property(root, "datacenter", &propvalue);
+            s->datacenter = strdup(json_get_string(propvalue));
+            json_object_get_property(root, "professionalUse", &propvalue);
+            s->professionalUse = json_true == propvalue;
+            json_object_get_property(root, "supportLevel", &propvalue);
+            s->supportLevel = strdup(json_get_string(propvalue));
+            json_object_get_property(root, "ip", &propvalue);
+            s->ip = strdup(json_get_string(propvalue));
+            json_object_get_property(root, "name", &propvalue);
+            s->name = strdup(json_get_string(propvalue));
+            json_object_get_property(root, "commercialRange", &propvalue);
+            s->commercialRange = json_null == propvalue ? NULL : strdup(json_get_string(propvalue));
+            json_object_get_property(root, "os", &propvalue);
+            s->os = strdup(json_get_string(propvalue));
+            json_object_get_property(root, "state", &propvalue);
+            s->state = strdup(json_get_string(propvalue));
+            json_object_get_property(root, "reverse", &propvalue);
+            s->reverse = json_null == propvalue ? NULL : strdup(json_get_string(propvalue));
+            json_object_get_property(root, "serverId", &propvalue);
+            s->serverId = json_get_integer(propvalue);
+            json_object_get_property(root, "monitoring", &propvalue);
+            s->monitoring = json_true == propvalue;
+            json_object_get_property(root, "rack", &propvalue);
+            s->rack = strdup(json_get_string(propvalue));
+            json_object_get_property(root, "rootDevice", &propvalue);
+            s->rootDevice = json_null == propvalue ? NULL : strdup(json_get_string(propvalue));
+            json_object_get_property(root, "linkSpeed", &propvalue);
+            s->linkSpeed = json_null == propvalue ? 0 : json_get_integer(propvalue);
+            json_object_get_property(root, "bootId", &propvalue);
+            s->bootId = json_null == propvalue ? 0 : json_get_integer(propvalue);
+#ifdef WITH_XML
+            xmlFreeDoc(doc);
+#else
+            json_document_destroy(doc);
+#endif
+        }
+    }
+
+    return s;
+}
 
 static command_status_t fetch_servers(server_set_t *ss, bool force, error_t **error)
 {
@@ -199,65 +265,10 @@ static command_status_t fetch_servers(server_set_t *ss, bool force, error_t **er
             }
             hashtable_clear(ss->servers);
             for (n = root->children; n != NULL; n = n->next) {
-                server_t *s;
                 xmlChar *content;
-#ifdef WITH_XML
-                xmlDocPtr doc;
-#else
-                json_document_t *doc;
-#endif
 
                 content = xmlNodeGetContent(n);
-                hashtable_put(ss->servers, content, s = server_new(), NULL);
-                req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s", (char *) content);
-#ifdef WITH_XML
-                REQUEST_XML_RESPONSE_WANTED(req);
-                request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
-#else
-                request_add_header(req, "Content-Type: application/json");
-                request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
-#endif
-                request_dtor(req);
-                if (request_success) {
-                    json_value_t root, propvalue;
-
-                    root = json_document_get_root(doc);
-                    json_object_get_property(root, "datacenter", &propvalue);
-                    s->datacenter = strdup(json_get_string(propvalue));
-                    json_object_get_property(root, "professionalUse", &propvalue);
-                    s->professionalUse = json_true == propvalue;
-                    json_object_get_property(root, "supportLevel", &propvalue);
-                    s->supportLevel = strdup(json_get_string(propvalue));
-                    json_object_get_property(root, "ip", &propvalue);
-                    s->ip = strdup(json_get_string(propvalue));
-                    json_object_get_property(root, "name", &propvalue);
-                    s->name = strdup(json_get_string(propvalue));
-                    json_object_get_property(root, "commercialRange", &propvalue);
-                    s->commercialRange = json_null == propvalue ? NULL : strdup(json_get_string(propvalue));
-                    json_object_get_property(root, "os", &propvalue);
-                    s->os = strdup(json_get_string(propvalue));
-                    json_object_get_property(root, "state", &propvalue);
-                    s->state = strdup(json_get_string(propvalue));
-                    json_object_get_property(root, "reverse", &propvalue);
-                    s->reverse = json_null == propvalue ? NULL : strdup(json_get_string(propvalue));
-                    json_object_get_property(root, "serverId", &propvalue);
-                    s->serverId = json_get_integer(propvalue);
-                    json_object_get_property(root, "monitoring", &propvalue);
-                    s->monitoring = json_true == propvalue;
-                    json_object_get_property(root, "rack", &propvalue);
-                    s->rack = strdup(json_get_string(propvalue));
-                    json_object_get_property(root, "rootDevice", &propvalue);
-                    s->rootDevice = json_null == propvalue ? NULL : strdup(json_get_string(propvalue));
-                    json_object_get_property(root, "linkSpeed", &propvalue);
-                    s->linkSpeed = json_null == propvalue ? 0 : json_get_integer(propvalue);
-                    json_object_get_property(root, "bootId", &propvalue);
-                    s->bootId = json_null == propvalue ? 0 : json_get_integer(propvalue);
-#ifdef WITH_XML
-                    xmlFreeDoc(doc);
-#else
-                    json_document_destroy(doc);
-#endif
-                }
+                fetch_server(ss, (char *) content, force, error);
                 xmlFree(content);
             }
             xmlFreeDoc(doc);
@@ -642,6 +653,102 @@ static command_status_t dedicated_boot_set(void *arg, error_t **error)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
+static bool fetch_ip_block(const char * const server_ip, char **ip, error_t **error)
+{
+    bool success;
+    request_t *req;
+    json_document_t *doc;
+
+    req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/ip?ip=%s", server_ip);
+    request_add_header(req, "Content-type: application/json");
+    success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+    request_dtor(req);
+    if (success) {
+        json_value_t root, ipBlock;
+
+        root = json_document_get_root(doc);
+        ipBlock = json_array_get_at(root, 0);
+        *ip = strdup(json_get_string(ipBlock));
+        json_document_destroy(doc);
+    }
+
+    return success;
+}
+
+static command_status_t dedicated_reverse_set_delete(void *arg, bool set, error_t **error)
+{
+    char *ip;
+    server_t *s;
+    bool success;
+    server_set_t *ss;
+    dedicated_argument_t *args;
+
+    args = (dedicated_argument_t *) arg;
+    assert(NULL != args->server_name);
+    if (set) {
+        assert(NULL != args->reverse);
+    }
+    FETCH_ACCOUNT_SERVERS(ss);
+    s = fetch_server(ss, args->server_name, FALSE, error);
+    if ((success = (s != NULL))) {
+        if ((success = fetch_ip_block(s->ip, &ip, error))) {
+            request_t *req;
+
+            if (set) {
+                String *buffer;
+
+                {
+                    json_value_t root;
+                    json_document_t *doc;
+
+                    buffer = string_new();
+                    doc = json_document_new();
+                    root = json_object();
+                    json_object_set_property(root, "ipReverse", json_string(s->ip));
+                    json_object_set_property(root, "reverse", json_string(args->reverse));
+                    json_document_set_root(doc, root);
+                    json_document_serialize(
+                        doc,
+                        buffer,
+#ifdef DEBUG
+                        JSON_OPT_PRETTY_PRINT
+#else
+                        0
+#endif /* DEBUG */
+                    );
+                    json_document_destroy(doc);
+                }
+                req = request_post(REQUEST_FLAG_SIGN, buffer->ptr, API_BASE_URL "/ip/%s/reverse", ip);
+                request_add_header(req, "Content-type: application/json");
+            } else {
+                req = request_delete(REQUEST_FLAG_SIGN, API_BASE_URL "/ip/%s/reverse/%s", ip, s->ip);
+            }
+            success = request_execute(req, RESPONSE_IGNORE, NULL, error);
+            request_dtor(req);
+            if (success) {
+                FREE(s, reverse);
+                if (set) {
+                    s->reverse = strdup(args->reverse);
+                } else {
+                    INIT(s, reverse);
+                }
+            }
+        }
+    }
+
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
+static command_status_t dedicated_reverse_delete(void *arg, error_t **error)
+{
+    return dedicated_reverse_set_delete(arg, FALSE, error);
+}
+
+static command_status_t dedicated_reverse_set(void *arg, error_t **error)
+{
+    return dedicated_reverse_set_delete(arg, TRUE, error);
+}
+
 static bool complete_servers(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *UNUSED(data))
 {
     server_set_t *ss;
@@ -682,8 +789,9 @@ static bool complete_boots(void *parsed_arguments, const char *current_argument,
 
 static void dedicated_regcomm(graph_t *g)
 {
-    argument_t *arg_server, *arg_boot;
+    argument_t *arg_server, *arg_boot, *arg_reverse;
     argument_t *lit_boot, *lit_boot_list, *lit_boot_show;
+    argument_t *lit_reverse, *lit_rev_set, *lit_rev_delete;
     argument_t *lit_dedicated, *lit_dedi_reboot, *lit_dedi_list, *lit_dedi_check;
 
     // dedicated ...
@@ -695,9 +803,14 @@ static void dedicated_regcomm(graph_t *g)
     lit_boot = argument_create_literal("boot", /*NULL*/dedicated_boot_set);
     lit_boot_show = argument_create_literal("show", dedicated_boot_get);
     lit_boot_list = argument_create_literal("list", dedicated_boot_list);
+    // dedicated <server> reverse ...
+    lit_reverse = argument_create_literal("reverse", NULL);
+    lit_rev_set = argument_create_literal("set", dedicated_reverse_set);
+    lit_rev_delete = argument_create_literal("delete", dedicated_reverse_delete);
 
     arg_server = argument_create_string(offsetof(dedicated_argument_t, server_name), "<server>", complete_servers, NULL);
     arg_boot = argument_create_string(offsetof(dedicated_argument_t, boot_name), "<boot>", complete_boots, NULL);
+    arg_reverse = argument_create_string(offsetof(dedicated_argument_t, reverse), "<reverse>", NULL, NULL);
 
     // dedicated ...
     graph_create_full_path(g, lit_dedicated, lit_dedi_list, NULL);
@@ -707,11 +820,17 @@ static void dedicated_regcomm(graph_t *g)
     graph_create_full_path(g, lit_dedicated, arg_server, lit_boot, lit_boot_list, NULL);
     graph_create_full_path(g, lit_dedicated, arg_server, lit_boot, lit_boot_show, NULL);
     graph_create_full_path(g, lit_dedicated, arg_server, lit_boot, arg_boot, NULL);
+    // dedicated <server> reverse ...
+    graph_create_full_path(g, lit_dedicated, arg_server, lit_reverse, lit_rev_delete, NULL);
+    graph_create_full_path(g, lit_dedicated, arg_server, lit_reverse, lit_rev_set, arg_reverse, NULL);
 }
 
 #if 0
 void dedicated_register_rules(json_value_t rules)
 {
+    JSON_ADD_RULE(rules, "GET", "/ip/*");
+    JSON_ADD_RULE(rules, "POST", "/ip/*");
+    JSON_ADD_RULE(rules, "DELETE", "/ip/*");
     JSON_ADD_RULE(rules, "GET", "/dedicated/server/*");
     JSON_ADD_RULE(rules, "PUT", "/dedicated/server/*");
     JSON_ADD_RULE(rules, "POST", "/dedicated/server/*");

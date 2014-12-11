@@ -575,7 +575,25 @@ static const int8_t unreserved[] = {
     /* F */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
-void string_add_post_field(String *this, const char *name, const char *value)
+void string_add_urlencoded_value(String *this, const char *value)
+{
+    size_t needs;
+    const char *p;
+
+    for (p = name; '\0' != *p; p++) {
+        needs += 1 + (!unreserved[(unsigned char) *p]) * (STR_LEN("%XX") - 1);
+    }
+    _maybe_expand_of(this, needs);
+    for (p = name; '\0' != *p; p++) {
+        if (unreserved[(unsigned char) *p]) {
+            this->str[this->len++] = *p;
+        } else {
+            snprintf(this->ptr + this->len, STR_SIZE("%XX"), "%%%02X", *p);
+        }
+    }
+}
+
+void string_add_urlencoded_pair(String *this, const char *name, const char *value)
 {
     size_t needs;
     const char *p;
@@ -587,7 +605,7 @@ void string_add_post_field(String *this, const char *name, const char *value)
     for (p = name; '\0' != *p; p++) {
         needs += 1 + (!unreserved[(unsigned char) *p]) * (STR_LEN("%XX") - 1);
     }
-    if ('\0' != *value) {
+    if (NULL != value || '\0' != *value) {
         needs += STR_LEN("=");
         for (p = value; '\0' != *p; p++) {
             needs += 1 + (!unreserved[(unsigned char) *p]) * (STR_LEN("%XX") - 1);
@@ -604,7 +622,7 @@ void string_add_post_field(String *this, const char *name, const char *value)
             snprintf(this->ptr + this->len, STR_SIZE("%XX"), "%%%02X", *p);
         }
     }
-    if ('\0' != *value) {
+    if (NULL != value || '\0' != *value) {
         this->str[this->len++] = '=';
         for (p = value; '\0' != *p; p++) {
             if (unreserved[(unsigned char) *p]) {

@@ -524,7 +524,7 @@ static size_t my_vsnprintf(void *args, char *dst, size_t dst_size, const char *f
     r = fmt;
     dst_len = 0;
     va_copy(cpy, ap);
-    while ('\0' != r) {
+    while ('\0' != *r) {
         if ('%' == *r) {
             ++r;
             switch (*r) {
@@ -539,7 +539,7 @@ static size_t my_vsnprintf(void *args, char *dst, size_t dst_size, const char *f
                     const char *s;
                     size_t offset, s_len;
 
-                    offset = va_arg(ap, size_t);
+                    offset = va_arg(cpy, size_t);
                     s = *((const char **) (args + offset));
                     s_len = strlen(s);
                     dst_len += s_len;
@@ -554,7 +554,7 @@ static size_t my_vsnprintf(void *args, char *dst, size_t dst_size, const char *f
                     size_t s_len;
                     const char *s;
 
-                    s = va_arg(ap, const char *);
+                    s = va_arg(cpy, const char *);
                     s_len = strlen(s);
                     dst_len += s_len;
                     if (dst_size > dst_len) {
@@ -573,7 +573,7 @@ static size_t my_vsnprintf(void *args, char *dst, size_t dst_size, const char *f
                     uint32_t num;
                     size_t num_len;
 
-                    num = va_arg(ap, uint32_t);
+                    num = va_arg(cpy, uint32_t);
                     num_len = log10(num) + 1;
                     dst_len += num_len;
                     if (dst_size > dst_len) {
@@ -590,7 +590,10 @@ static size_t my_vsnprintf(void *args, char *dst, size_t dst_size, const char *f
                 }
             }
         } else {
-            *w++ = *r;
+            ++dst_len;
+            if (dst_size > dst_len) {
+                *w++ = *r;
+            }
         }
         ++r;
     }

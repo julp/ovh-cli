@@ -49,7 +49,7 @@ typedef struct {
     bool on_off;
 } api_argument_t;
 
-static bool log = FALSE;
+static bool http_log = FALSE;
 
 bool api_ctor(void)
 {
@@ -135,19 +135,127 @@ static bool request_sign(request_t *req, error_t **error)
     return TRUE;
 }
 
+static const int8_t unreserved[] = {
+    /*      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, A, B, C, D, E, F */
+    /* 0 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 1 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 2 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0,
+    /* 3 */ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+    /* 4 */ 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    /* 5 */ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1,
+    /* 6 */ 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    /* 7 */ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0,
+    /* 8 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 9 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* A */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* B */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* C */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* D */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* E */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* F */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+};
+
+#include <math.h>
+static size_t urlf(char *dst, size_t dst_size, const char *fmt, va_list ap)
+{
+    char *w;
+    const char *r;
+    size_t dst_len;
+
+    w = dst;
+    r = fmt;
+    dst_len = 0;
+    while ('\0' != *r) {
+        if ('%' == *r) {
+            ++r;
+            switch (*r) {
+                case '%':
+                    ++dst_len;
+                    if (dst_size > dst_len) {
+                        *w++ = '%';
+                    }
+                    break;
+                case 's':
+                {
+                    const char *s, *p;
+
+                    if (NULL != (s = va_arg(ap, const char *))) {
+                        for (p = s; '\0' != *p; p++) {
+                            if (unreserved[(unsigned char) *p]) {
+                                ++dst_len;
+                                if (dst_size > dst_len) {
+                                    *w++ = *p;
+                                }
+                            } else {
+                                dst_len += STR_LEN("%XX");
+                                if (dst_size > dst_len) {
+                                    w += sprintf(w, "%%%02X", (unsigned char) *p);
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+                case 'u': /* PRIu32 */
+                {
+                    uint32_t num;
+                    size_t num_len;
+
+                    num = va_arg(ap, uint32_t);
+                    num_len = log10(num) + 1;
+                    dst_len += num_len;
+                    if (dst_size > dst_len) {
+                        size_t i;
+
+                        i = num_len;
+                        do {
+                            w[i--] = '0' + num % 10;
+                            num /= 10;
+                        } while (0 != num);
+                        w += num_len;
+                    }
+                    break;
+                }
+            }
+        } else {
+            ++dst_len;
+            if (dst_size > dst_len) {
+                *w++ = *r;
+            }
+        }
+        ++r;
+    }
+    if (dst_size > dst_len) {
+        *w++ = '\0';
+    }
+
+    return dst_len;
+}
+
 static request_t *request_ctor(uint32_t flags, http_method_t method, const char *url, va_list args)
 {
     request_t *req;
     va_list cpyargs;
+    size_t url_len, url_size;
 
     req = mem_new(*req);
     req->flags = flags;
     req->headers = NULL;
     req->method = method;
     va_copy(cpyargs, args);
+#if 0
     req->url = mem_new_n(*req->url, vsnprintf(NULL, 0, url, cpyargs) + 1);
+#else
+    url_size = urlf(NULL, 0, url, cpyargs) + 1;
+    req->url = mem_new_n(*req->url, url_size);
+#endif
     va_end(cpyargs);
+#if 0
     vsprintf(req->url, url, args);
+#else
+    url_len = urlf(req->url, url_size, url, args);
+    assert(url_len < url_size);
+#endif
     req->pdata = req->data = NULL;
     req->ch = curl_easy_init();
     req->buffer = string_new();
@@ -286,7 +394,7 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
     }
     curl_easy_getinfo(req->ch, CURLINFO_CONTENT_TYPE, &content_type);
     curl_easy_getinfo(req->ch, CURLINFO_RESPONSE_CODE, &http_status);
-    if (log) {
+    if (http_log) {
         FILE *fp;
 
         if (NULL != (fp = fopen("http.log", "a"))) {
@@ -446,6 +554,8 @@ const char *request_consumer_key(const char *account, const char *password, time
             json_object_set_property(root, "accessRules", rules);
 //             json_object_set_property(root, "redirection", json_string("https://www.mywebsite.com/"));
             JSON_ADD_RULE(rules, "GET", "/*");
+            JSON_ADD_RULE(rules, "POST", "/ip/*");
+            JSON_ADD_RULE(rules, "DELETE", "/ip/*");
             JSON_ADD_RULE(rules, "POST", "/domain/zone/*");
             JSON_ADD_RULE(rules, "DELETE", "/domain/zone/*");
             JSON_ADD_RULE(rules, "PUT", "/dedicated/server/*");
@@ -575,7 +685,7 @@ static command_status_t log_on_off(void *raw_args, error_t **UNUSED(error))
     api_argument_t *args;
 
     args = (api_argument_t *) raw_args;
-    log = args->on_off;
+    http_log = args->on_off;
 
     return COMMAND_SUCCESS;
 }
