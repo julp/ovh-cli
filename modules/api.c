@@ -196,6 +196,21 @@ static size_t urlf(char *dst, size_t dst_size, const char *fmt, va_list ap)
                     }
                     break;
                 }
+                case 'S': /* string but do not escape */
+                {
+                    size_t s_len;
+                    const char *s;
+
+                    if (NULL != (s = va_arg(ap, const char *))) {
+                        s_len = strlen(s);
+                        dst_len += s_len;
+                        if (dst_size > dst_len) {
+                            memcpy(w, s, s_len);
+                            w += s_len;
+                        }
+                    }
+                    break;
+                }
                 case 'u': /* PRIu32 */
                 {
                     uint32_t num;
@@ -617,7 +632,7 @@ const char *request_consumer_key(const char *account, const char *password, time
             xmlXPathObjectPtr res;
             xmlXPathContextPtr ctxt;
 
-            req = request_get(REQUEST_FLAG_NONE, "%s", validationUrl);
+            req = request_get(REQUEST_FLAG_NONE, "%S", validationUrl);
             request_execute(req, RESPONSE_HTML, (void **) &doc, error); // TODO: check returned value
 #if 0
             puts("====================");
@@ -662,7 +677,7 @@ const char *request_consumer_key(const char *account, const char *password, time
             request_dtor(req);
         }
         // POST validationUrl
-        req = request_post(REQUEST_FLAG_NONE, NULL, "%s", validationUrl);
+        req = request_post(REQUEST_FLAG_NONE, NULL, "%S", validationUrl);
         request_add_post_field(req, "credentialToken", token);
         request_add_post_field(req, account_field_name, account);
         request_add_post_field(req, password_field_name, password);
