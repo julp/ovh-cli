@@ -513,7 +513,7 @@ void json_array_to_iterator(Iterator *it, json_value_t array)
  * released on GNU LGPL as published by the Free Software Foundation;
  * version 2.1 or version 3.0 only
  *
- * https://code.google.com/p/mimarchlinux/
+ * https://github.com/vincenthz/libjson
  *
  * Which was inspired from JSON_parser.c published by http://json.org
  **/
