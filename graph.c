@@ -422,7 +422,7 @@ typedef struct {
 } editline_data_t;
 /* </TODO: DRY> */
 
-static int strcmpp(const void *p1, const void *p2)
+static int strcmpp(const void *p1, const void *p2, void *UNUSED(arg))
 {
     return strcmp(*(char * const *) p1, *(char * const *) p2);
 }
@@ -715,7 +715,7 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
             Iterator it;
 
             puts("");
-            dptrarray_sort(client_data->possibilities, strcmpp);
+            dptrarray_sort(client_data->possibilities, strcmpp, NULL);
             dptrarray_to_iterator(&it, client_data->possibilities);
             for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
                 fputc('\t', stdout);
