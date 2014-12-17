@@ -168,43 +168,29 @@ static service_t *fetch_single_hosting(service_set_t *ss, const char * const ser
         request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (request_success) {
-            json_value_t root, propvalue;
+            json_value_t root;
 
             s->serviceName = strdup(service_name);
             root = json_document_get_root(doc);
-            json_object_get_property(root, "offer", &propvalue);
-            s->offer = strdup(json_get_string(propvalue));
-            json_object_get_property(root, "hostingIpv6", &propvalue);
-            s->hostingIpv6 = json_null == propvalue ? NULL : strdup(json_get_string(propvalue));
-            json_object_get_property(root, "primaryLogin", &propvalue);
-            s->primaryLogin = strdup(json_get_string(propvalue));
-            json_object_get_property(root, "filer", &propvalue);
-            s->filer = strdup(json_get_string(propvalue));
-            json_object_get_property(root, "state", &propvalue);
-            s->state = strdup(json_get_string(propvalue));
-            json_object_get_property(root, "hasCdn", &propvalue);
-            s->hasCdn = json_true == propvalue;
-            json_object_get_property(root, "operatingSystem", &propvalue);
-            s->operatingSystem = strdup(json_get_string(propvalue));
-            json_object_get_property(root, "home", &propvalue);
-            s->home = strdup(json_get_string(propvalue));
+            JSON_GET_PROP_STRING(root, "offer", s->offer);
+            JSON_GET_PROP_STRING(root, "hostingIpv6", s->hostingIpv6);
+            JSON_GET_PROP_STRING(root, "primaryLogin", s->primaryLogin);
+            JSON_GET_PROP_STRING(root, "filer", s->filer);
+            JSON_GET_PROP_STRING(root, "state", s->state);
+            JSON_GET_PROP_BOOL(root, "hasCdn", s->hasCdn);
+            JSON_GET_PROP_STRING(root, "operatingSystem", s->operatingSystem);
+            JSON_GET_PROP_STRING(root, "home", s->home);
             // TODO: quotaSize, quotaUsed, trafficQuotaSize, trafficQuotaUsed: double, size_t ?
 //             json_object_get_property(root, "availableBoostOffer", &propvalue);
 //             s->availableBoostOffer = strdup(json_get_string(propvalue));
-            json_object_get_property(root, "cluster", &propvalue);
-            s->cluster = strdup(json_get_string(propvalue));
-            json_object_get_property(root, "resourceType", &propvalue);
-            s->resourceType = strdup(json_get_string(propvalue));
-            json_object_get_property(root, "clusterIp", &propvalue);
-            s->clusterIp = json_null == propvalue ? NULL : strdup(json_get_string(propvalue));
-            json_object_get_property(root, "clusterIpv6", &propvalue);
-            s->clusterIpv6 = json_null == propvalue ? NULL : strdup(json_get_string(propvalue));
-            json_object_get_property(root, "boostOffer", &propvalue);
-            s->boostOffer = json_null == propvalue ? NULL : strdup(json_get_string(propvalue));
-            json_object_get_property(root, "hasHostedSsl", &propvalue);
-            s->hasHostedSsl = json_true == propvalue;
-            json_object_get_property(root, "hostingIp", &propvalue);
-            s->hostingIp = json_null == propvalue ? NULL : strdup(json_get_string(propvalue));
+            JSON_GET_PROP_STRING(root, "cluster", s->cluster);
+            JSON_GET_PROP_STRING(root, "resourceType", s->resourceType);
+            JSON_GET_PROP_STRING(root, "clusterIp", s->clusterIp);
+            JSON_GET_PROP_STRING(root, "clusterIpv6", s->clusterIpv6);
+            JSON_GET_PROP_STRING(root, "boostOffer", s->boostOffer);
+            JSON_GET_PROP_BOOL(root, "hasHostedSsl", s->hasHostedSsl);
+            JSON_GET_PROP_STRING(root, "hostingIp", s->hostingIp);
+
             json_document_destroy(doc);
         }
     }
@@ -337,8 +323,7 @@ static command_status_t hosting_domain_list(void *arg, error_t **error)
                     char *path;
 
                     root = json_document_get_root(doc);
-                    json_object_get_property(root, "path", &v);
-                    path = strdup(json_get_string(v));
+                    JSON_GET_PROP_STRING(root, "path", path);
                     json_object_get_property(root, "domain", &v);
                     hashtable_put(s->domains, (void *) json_get_string(v), path, NULL);
                     json_document_destroy(doc);
@@ -450,16 +435,11 @@ static command_status_t hosting_cron_list(void *arg, error_t **error)
                     char *email, *frequency, *language, *description, *command;
 
                     root = json_document_get_root(doc);
-                    json_object_get_property(root, "email", &v);
-                    email = strdup(json_get_string(v));
-                    json_object_get_property(root, "frequency", &v);
-                    frequency = strdup(json_get_string(v));
-                    json_object_get_property(root, "language", &v);
-                    language = strdup(json_get_string(v));
-                    json_object_get_property(root, "description", &v);
-                    description = strdup(json_get_string(v));
-                    json_object_get_property(root, "command", &v);
-                    command = strdup(json_get_string(v));
+                    JSON_GET_PROP_STRING(root, "email", email);
+                    JSON_GET_PROP_STRING(root, "frequency", frequency);
+                    JSON_GET_PROP_STRING(root, "language", language);
+                    JSON_GET_PROP_STRING(root, "description", description);
+                    JSON_GET_PROP_STRING(root, "command", command);
                     // TODO: leaks on email, frequency, language, description, command
                     table_store(
                         t,
@@ -564,16 +544,11 @@ static command_status_t hosting_user_list(void *arg, error_t **error)
                     char *home, *iisRemoteRights, *state, *webDavRights;
 
                     root = json_document_get_root(doc);
-                    json_object_get_property(root, "home", &v);
-                    home = strdup(json_get_string(v));
-                    json_object_get_property(root, "isPrimaryAccount", &v);
-                    isPrimaryAccount = json_true == v;
-                    json_object_get_property(root, "state", &v);
-                    state = strdup(json_get_string(v));
-                    json_object_get_property(root, "iisRemoteRights", &v);
-                    iisRemoteRights = json_null == v ? NULL : strdup(json_get_string(v));
-                    json_object_get_property(root, "webDavRights", &v);
-                    webDavRights = json_null == v ? NULL : strdup(json_get_string(v));
+                    JSON_GET_PROP_STRING(root, "home", home);
+                    JSON_GET_PROP_BOOL(root, "isPrimaryAccount", isPrimaryAccount);
+                    JSON_GET_PROP_STRING(root, "state", state);
+                    JSON_GET_PROP_STRING(root, "iisRemoteRights", iisRemoteRights);
+                    JSON_GET_PROP_STRING(root, "webDavRights", webDavRights);
                     // TODO: leaks on login, home, state, iisRemoteRights (if non NULL), webDavRights (if non NULL)
                     table_store(t, login, home, isPrimaryAccount, state, iisRemoteRights, webDavRights);
                     json_document_destroy(doc);
@@ -672,20 +647,13 @@ static command_status_t hosting_database_list(void *arg, error_t **error)
                     char *mode, *version, *state, *user, *type, *server;
 
                     root = json_document_get_root(doc);
-                    json_object_get_property(root, "mode", &v);
-                    mode = strdup(json_get_string(v));
-                    json_object_get_property(root, "version", &v);
-                    version = strdup(json_get_string(v));
-                    json_object_get_property(root, "port", &v);
-                    port = json_get_integer(v);
-                    json_object_get_property(root, "state", &v);
-                    state = strdup(json_get_string(v));
-                    json_object_get_property(root, "user", &v);
-                    user = strdup(json_get_string(v));
-                    json_object_get_property(root, "type", &v);
-                    type = strdup(json_get_string(v));
-                    json_object_get_property(root, "server", &v);
-                    server = json_null == v ? NULL : strdup(json_get_string(v));
+                    JSON_GET_PROP_STRING(root, "mode", mode);
+                    JSON_GET_PROP_STRING(root, "version", version);
+                    JSON_GET_PROP_INT(root, "port", port);
+                    JSON_GET_PROP_STRING(root, "state", state);
+                    JSON_GET_PROP_STRING(root, "user", user);
+                    JSON_GET_PROP_STRING(root, "type", type);
+                    JSON_GET_PROP_STRING(root, "server", server);
                     // TODO: leaks on mode, version, dbname, state, user, type, server (if non NULL)
                     table_store(t, mode, version, dbname, port, state, user, type, server);
                     json_document_destroy(doc);
