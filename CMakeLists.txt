@@ -93,7 +93,7 @@ set(
     commands/account.c
 )
 
-set(EXTRA_MODULES domain me dedicated)
+set(EXTRA_MODULES domain me dedicated hosting)
 
 set(EXTRA_MODULES_ENABLED )
 foreach(MODULE ${EXTRA_MODULES})

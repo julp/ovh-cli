@@ -177,7 +177,7 @@ static command_status_t fetch_domains(domain_set_t *ds, bool force, error_t **er
         req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain");
         REQUEST_XML_RESPONSE_WANTED(req);
         request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
-        request_dtor(req);
+        request_destroy(req);
         if (request_success) {
             if (NULL == (root = xmlDocGetRootElement(doc))) {
                 error_set(error, WARN, "Failed to parse XML document");
@@ -250,7 +250,7 @@ static command_status_t domain_check(void *UNUSED(arg), error_t **error)
             request_add_header(req, "Content-Type: application/json");
             success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
 #endif
-            request_dtor(req);
+            request_destroy(req);
             // response
             if (success) {
 #ifdef XML_RESPONSE
@@ -310,7 +310,7 @@ static command_status_t domain_export(void *arg, error_t **error)
         request_success &= NULL != root;
         xmlFreeDoc(doc);
     }
-    request_dtor(req);
+    request_destroy(req);
 
     return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
@@ -326,7 +326,7 @@ static command_status_t domain_refresh(void *arg, error_t **error)
 
     req = request_post(REQUEST_FLAG_SIGN, NULL, API_BASE_URL "/domain/zone/%s/refresh", args->domain);
     request_success = request_execute(req, RESPONSE_IGNORE, NULL, error); // Response is void
-    request_dtor(req);
+    request_destroy(req);
 
     return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
@@ -350,7 +350,7 @@ static bool get_domain_records(const char *domain, domain_t **d, error_t **error
         req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/record", domain);
         REQUEST_XML_RESPONSE_WANTED(req);
         request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
-        request_dtor(req);
+        request_destroy(req);
         // result
         if (request_success) {
             if (NULL == (root = xmlDocGetRootElement(doc))) {
@@ -364,7 +364,7 @@ static bool get_domain_records(const char *domain, domain_t **d, error_t **error
                 req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/record/%s", domain, (const char *) content);
                 REQUEST_XML_RESPONSE_WANTED(req);
                 request_success &= request_execute(req, RESPONSE_XML, (void **) &doc, error); // request_success is assumed to be TRUE before the first iteration
-                request_dtor(req);
+                request_destroy(req);
                 // result
                 parse_record((*d)->records, doc);
                 xmlFree(content);
@@ -465,7 +465,7 @@ static command_status_t record_add(void *arg, error_t **error)
             REQUEST_XML_RESPONSE_WANTED(req);
             request_add_header(req, "Content-type: application/json");
             request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
-            request_dtor(req);
+            request_destroy(req);
             string_destroy(buffer);
         }
     }
@@ -543,7 +543,7 @@ static command_status_t record_delete(void *arg, error_t **error)
             // request
             req = request_delete(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/record/%" PRIu32, args->domain, match->id);
             request_success = request_execute(req, RESPONSE_IGNORE, NULL, error);
-            request_dtor(req);
+            request_destroy(req);
             // result
             if (request_success) {
                 hashtable_quick_delete(d->records, match->id, NULL, TRUE);
@@ -592,7 +592,7 @@ static command_status_t record_update(void *arg, error_t **error)
     }
     req = request_put(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/%" PRIu32, argv[0], <id>);
     request_execute(req, RESPONSE_IGNORE, NULL, error);
-    request_dtor(req);
+    request_destroy(req);
 #endif
     return TRUE;
 }
@@ -666,7 +666,7 @@ static command_status_t dnssec_status(void *arg, error_t **error)
         request_success &= NULL != root;
         xmlFreeDoc(doc);
     }
-    request_dtor(req);
+    request_destroy(req);
 
     return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
@@ -685,7 +685,7 @@ static command_status_t dnssec_enable_disable(void *arg, error_t **error)
         req = request_delete(REQUEST_FLAG_SIGN, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
     }
     request_success = request_execute(req, RESPONSE_IGNORE, NULL, error);
-    request_dtor(req);
+    request_destroy(req);
 
     return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }

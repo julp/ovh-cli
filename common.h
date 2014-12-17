@@ -15,8 +15,14 @@
 # if GCC_VERSION || __has_attribute(unused)
 #  define UNUSED(x) UNUSED_ ## x __attribute__((unused))
 # else
-#  define UNUSED
+#  define UNUSED(x) x
 # endif /* UNUSED */
+
+# if GCC_VERSION || __has_attribute(deprecated)
+#  define DEPRECATED __attribute__((deprecated))
+# else
+#  define DEPRECATED
+# endif /* DEPRECATED */
 
 # if (GCC_VERSION >= 3003 || __has_attribute(nonnull))
 #  define NONNULL(...) __attribute__((nonnull(__VA_ARGS__)))
@@ -79,6 +85,19 @@
 
 # define UNSET_FLAG(value, flag) \
     ((value) &= ~(flag))
+
+# define FREE(s, member) \
+    do { \
+        if (NULL != s->member) { \
+            free((void *) s->member); \
+            s->member = NULL; \
+        } \
+    } while (0);
+
+# define INIT(s, member) \
+    do { \
+        s->member = NULL; \
+    } while(0);
 
 # ifdef __bool_true_false_are_defined
 #  include <stdbool.h>

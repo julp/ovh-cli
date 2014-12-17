@@ -17,6 +17,7 @@ typedef struct table_t table_t;
 void table_destroy(table_t *);
 void table_display(table_t *, uint32_t);
 table_t *table_new(size_t, ...);
+void table_sort(table_t *, size_t);
 void table_store(table_t *, ...);
 
 #endif /* !TABLE_H */

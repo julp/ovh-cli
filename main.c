@@ -25,9 +25,10 @@ extern module_t account_module;
 #ifdef WITH_NLS
 extern module_t nls_module;
 #endif /* WITH_NLS */
-extern module_t domain_module;
-extern module_t dedicated_module;
 extern module_t me_module;
+extern module_t domain_module;
+extern module_t hosting_module;
+extern module_t dedicated_module;
 
 static graph_t *g = NULL;
 
@@ -43,9 +44,10 @@ static const module_t */*builtin_*/modules[] = {
 #ifdef WITH_NLS
     &nls_module,
 #endif /* WITH_NLS */
+    &me_module,
     &domain_module,
-    &dedicated_module,
-    &me_module
+    &hosting_module,
+    &dedicated_module
 };
 
 void print_error(error_t *error)

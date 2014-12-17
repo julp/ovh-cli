@@ -72,14 +72,6 @@ typedef struct {
     const char *description;
 } boot_t;
 
-#define FREE(s, member) \
-    do { \
-        if (NULL != s->member) { \
-            free((void *) s->member); \
-            s->member = NULL; \
-        } \
-    } while (0);
-
 static void server_destroy(void *data)
 {
     server_t *s;
@@ -112,11 +104,6 @@ static void boot_destroy(void *data)
     FREE(b, description);
     free(b);
 }
-
-#define INIT(s, member) \
-    do { \
-        s->member = NULL; \
-    } while(0);
 
 static server_t *server_new(void)
 {
@@ -197,10 +184,9 @@ static server_t *fetch_server(server_set_t *ss, const char * const server_name, 
         REQUEST_XML_RESPONSE_WANTED(req);
         request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
 #else
-        request_add_header(req, "Content-Type: application/json");
         request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
 #endif
-        request_dtor(req);
+        request_destroy(req);
         if (request_success) {
             json_value_t root, propvalue;
 
@@ -257,7 +243,7 @@ static command_status_t fetch_servers(server_set_t *ss, bool force, error_t **er
         req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server");
         REQUEST_XML_RESPONSE_WANTED(req);
         request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
-        request_dtor(req);
+        request_destroy(req);
         if (request_success) {
             if (NULL == (root = xmlDocGetRootElement(doc))) {
                 error_set(error, WARN, "Failed to parse XML document");
@@ -319,7 +305,7 @@ static command_status_t fetch_server_boots(const char *server_name, server_t **s
         req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s/boot", server_name);
         REQUEST_XML_RESPONSE_WANTED(req);
         request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
-        request_dtor(req);
+        request_destroy(req);
         // result
         if (request_success) {
             if (NULL == (root = xmlDocGetRootElement(doc))) {
@@ -333,7 +319,7 @@ static command_status_t fetch_server_boots(const char *server_name, server_t **s
                 req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s/boot/%s", server_name, (const char *) content);
                 REQUEST_XML_RESPONSE_WANTED(req);
                 request_success &= request_execute(req, RESPONSE_XML, (void **) &doc, error); // request_success is assumed to be TRUE before the first iteration
-                request_dtor(req);
+                request_destroy(req);
                 // result
                 parse_boot((*s)->boots, doc);
                 xmlFree(content);
@@ -450,10 +436,9 @@ static command_status_t dedicated_check(void *UNUSED(arg), error_t **error)
             REQUEST_XML_RESPONSE_WANTED(req);
             success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
 #else
-            request_add_header(req, "Content-Type: application/json");
             success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
 #endif
-            request_dtor(req);
+            request_destroy(req);
             // response
             if (success) {
 #ifdef XML_RESPONSE
@@ -504,7 +489,7 @@ static command_status_t dedicated_reboot(void *arg, error_t **error)
         req = request_post(REQUEST_FLAG_SIGN, NULL, API_BASE_URL "/dedicated/server/%s/reboot", args->server_name);
         REQUEST_XML_RESPONSE_WANTED(req);
         request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
-        request_dtor(req);
+        request_destroy(req);
         if (request_success) {
             // parse response to register the task. Display it? ("This request to hard reboot %s is registered as task #%d (see dedicated %s task %d to see its status)")
         }
@@ -559,7 +544,7 @@ static xmlDocPtr fetch_server_details(const char *server_name, error_t **error)
     req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s", server_name);
     REQUEST_XML_RESPONSE_WANTED(req); // TODO: OVH API seems to be buggy: when asking for XML response, response is empty ?!?
     request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
-    request_dtor(req);
+    request_destroy(req);
 
     return request_success ? doc : NULL;
 }
@@ -640,9 +625,8 @@ static command_status_t dedicated_boot_set(void *arg, error_t **error)
             }
             // request
             req = request_put(REQUEST_FLAG_SIGN, buffer->ptr, API_BASE_URL "/dedicated/server/%s", args->server_name);
-            request_add_header(req, "Content-type: application/json");
             success = request_execute(req, RESPONSE_IGNORE, NULL, error);
-            request_dtor(req);
+            request_destroy(req);
             string_destroy(buffer);
             error_set(error, INFO, _("This new boot will only be effective on the next (re)boot of '%s'"), args->server_name);
         } else {
@@ -660,9 +644,8 @@ static bool fetch_ip_block(const char * const server_ip, char **ip, error_t **er
     json_document_t *doc;
 
     req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/ip?ip=%s", server_ip);
-    request_add_header(req, "Content-type: application/json");
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
-    request_dtor(req);
+    request_destroy(req);
     if (success) {
         json_value_t root, ipBlock;
 
@@ -719,12 +702,11 @@ static command_status_t dedicated_reverse_set_delete(void *arg, bool set, error_
                     json_document_destroy(doc);
                 }
                 req = request_post(REQUEST_FLAG_SIGN, buffer->ptr, API_BASE_URL "/ip/%s/reverse", ip);
-                request_add_header(req, "Content-type: application/json");
             } else {
                 req = request_delete(REQUEST_FLAG_SIGN, API_BASE_URL "/ip/%s/reverse/%s", ip, s->ip);
             }
             success = request_execute(req, RESPONSE_IGNORE, NULL, error);
-            request_dtor(req);
+            request_destroy(req);
             if (success) {
                 FREE(s, reverse);
                 if (set) {

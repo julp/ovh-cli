@@ -269,6 +269,44 @@ static size_t string_break(size_t max_len, const char *string, size_t string_len
     return breaks_count;
 }
 
+static int strcmpp(const void *p1, const void *p2, void *arg)
+{
+//     return strcmp(*(char * const *) p2, *(char * const *) p1);
+    return strcoll((const char *) (*((row_t **) p1))->values[*(size_t *) arg].v, (const char *) (*((row_t **) p2))->values[*(size_t *) arg].v);
+}
+
+static int intcmpp(const void *p1, const void *p2, void *arg)
+{
+    return (*((row_t **) p1))->values[*(size_t *) arg].v - (*((row_t **) p2))->values[*(size_t *) arg].v;
+}
+
+void table_sort(table_t *t, size_t colno/*, int order*/)
+{
+    CmpFuncArg cmpfn;
+
+    assert(NULL != t);
+    assert(colno < t->columns_count);
+
+#if 0
+    CmpFuncArg cmpfn[/* nb table types */][/* 2 : asc/desc */] = {
+        [ TABLE_TYPE_INT ] = {},
+        [ TABLE_TYPE_STRING ] = {},
+        [ TABLE_TYPE_BOOLEAN ] = {},
+    };
+#endif
+    switch (t->columns[colno].type) {
+        case TABLE_TYPE_STRING:
+            cmpfn = strcmpp;
+            break;
+        case TABLE_TYPE_INT:
+            cmpfn = intcmpp;
+            break;
+        default:
+            assert(FALSE);
+    }
+    dptrarray_sort(t->rows, cmpfn, &colno);
+}
+
 void table_display(table_t *t, uint32_t flags)
 {
     int width;
@@ -484,6 +522,8 @@ void table_test(void)
     table_store(t, 3, "mno", long_string, "pqr");
     table_store(t, 4, "stu", long_string, long_string);
     table_store(t, 5, "é", "é", "é");
+    table_sort(t, 1);
+//     table_sort(t, 0);
     table_display(t, TABLE_FLAG_NONE);
     table_destroy(t);
 }

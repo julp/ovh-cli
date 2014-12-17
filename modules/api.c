@@ -1,3 +1,4 @@
+#include <inttypes.h>
 #include <string.h>
 #include <curl/curl.h>
 #include <openssl/evp.h>
@@ -10,17 +11,11 @@
 #include "commands/account.h"
 #include "struct/xtring.h"
 
-typedef enum {
-    HTTP_GET,
-    HTTP_POST,
-    HTTP_PUT,
-    HTTP_DELETE
-} http_method_t;
-
 struct request_t {
     CURL *ch;
     char *url;
     uint32_t flags;
+    long http_status;
     // <CURLOPT_POSTFIELDS>
     const char *data;
     const char *pdata; // if pdata != data, pdata is a copy (= needs to be freed)
@@ -49,7 +44,7 @@ typedef struct {
     bool on_off;
 } api_argument_t;
 
-static bool http_log = FALSE;
+static bool http_log = TRUE;
 
 bool api_ctor(void)
 {
@@ -155,7 +150,9 @@ static const int8_t unreserved[] = {
     /* F */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
+#if 0
 #include <math.h>
+#endif
 static size_t urlf(char *dst, size_t dst_size, const char *fmt, va_list ap)
 {
     char *w;
@@ -217,6 +214,13 @@ static size_t urlf(char *dst, size_t dst_size, const char *fmt, va_list ap)
                     size_t num_len;
 
                     num = va_arg(ap, uint32_t);
+                    num_len = snprintf(NULL, 0, "%" PRIu32, num);
+                    dst_len += num_len;
+                    if (dst_size > dst_len) {
+                        w += sprintf(w, "%" PRIu32, num);
+                    }
+#if 0
+                    num = va_arg(ap, uint32_t);
                     num_len = log10(num) + 1;
                     dst_len += num_len;
                     if (dst_size > dst_len) {
@@ -229,6 +233,7 @@ static size_t urlf(char *dst, size_t dst_size, const char *fmt, va_list ap)
                         } while (0 != num);
                         w += num_len;
                     }
+#endif
                     break;
                 }
             }
@@ -247,11 +252,13 @@ static size_t urlf(char *dst, size_t dst_size, const char *fmt, va_list ap)
     return dst_len;
 }
 
-static request_t *request_ctor(uint32_t flags, http_method_t method, const char *url, va_list args)
+request_t *request_vnew(uint32_t flags, http_method_t method, const void *pdata, const char *url, va_list args)
 {
     request_t *req;
     va_list cpyargs;
     size_t url_len, url_size;
+
+    assert(NULL != url);
 
     req = mem_new(*req);
     req->flags = flags;
@@ -276,6 +283,31 @@ static request_t *request_ctor(uint32_t flags, http_method_t method, const char 
     req->buffer = string_new();
     req->formpost = req->lastptr = NULL;
     req->timestamp = (unsigned int) time(NULL);
+    req->pdata = req->data = pdata;
+    if (NULL != pdata) {
+        if (HAS_FLAG(flags, REQUEST_FLAG_JSON)) {
+            String *buffer;
+
+            buffer = string_new();
+            json_document_serialize(
+                (json_document_t *) pdata, buffer,
+#ifdef DEBUG
+                JSON_OPT_PRETTY_PRINT
+#else
+                0
+#endif /* DEBUG */
+            );
+            req->pdata = string_orphan(buffer);
+            request_add_header(req, "Content-Type: application/json; charset=utf-8");
+        } else {
+            if (HAS_FLAG(flags, REQUEST_FLAG_COPY)) {
+                req->pdata = strdup(pdata);
+            }
+        }
+    }
+    if (NULL != req->pdata && '\0' != *req->pdata) {
+        curl_easy_setopt(req->ch, CURLOPT_POSTFIELDS, req->pdata);
+    }
     if (0 == methods[method].curlconst) {
         curl_easy_setopt(req->ch, CURLOPT_CUSTOMREQUEST, methods[method].name);
     } else {
@@ -289,8 +321,22 @@ static request_t *request_ctor(uint32_t flags, http_method_t method, const char 
     return req;
 }
 
-void request_dtor(request_t *req)
+request_t *request_new(uint32_t flags, http_method_t method, const void *pdata, const char *url, ...)
 {
+    va_list args;
+    request_t *req;
+
+    va_start(args, url);
+    req = request_vnew(flags, method, pdata, url, args);
+    va_end(args);
+
+    return req;
+}
+
+void request_destroy(request_t *req)
+{
+    assert(NULL != req);
+
     free((void *) req->url);
     if (NULL != req->headers) {
         curl_slist_free_all(req->headers);
@@ -307,65 +353,49 @@ void request_dtor(request_t *req)
     }
 }
 
-request_t *request_get(uint32_t flags, const char *url, ...) /* PRINTF(2, 3) */
+request_t *request_get(uint32_t flags, const char *url, ...) /* PRINTF(2, 3) DEPRECATED */
 {
     va_list args;
     request_t *req;
 
     va_start(args, url);
-    req = request_ctor(flags, HTTP_GET, url, args);
+    req = request_vnew(flags, HTTP_GET, NULL, url, args);
     va_end(args);
 
     return req;
 }
 
-request_t *request_post(uint32_t flags, const char *data, const char *url, ...) /* PRINTF(3, 4) */
+request_t *request_post(uint32_t flags, const char *data, const char *url, ...) /* PRINTF(3, 4) DEPRECATED */
 {
     va_list args;
     request_t *req;
 
     va_start(args, url);
-    req = request_ctor(flags, HTTP_POST, url, args);
+    req = request_vnew(flags, HTTP_POST, data, url, args);
     va_end(args);
-    if (NULL != data && '\0' != *data) {
-        req->pdata = req->data = data;
-        if (HAS_FLAG(flags, REQUEST_FLAG_COPY)) {
-            // NOTE: we don't use CURLOPT_COPYPOSTFIELDS because we need this string later for hashing/signature
-            req->pdata = strdup(data);
-        }
-        curl_easy_setopt(req->ch, CURLOPT_POSTFIELDS, req->pdata);
-    }
 
     return req;
 }
 
-request_t *request_put(uint32_t flags, const char *data, const char *url, ...) /* PRINTF(3, 4) */
+request_t *request_put(uint32_t flags, const char *data, const char *url, ...) /* PRINTF(3, 4) DEPRECATED */
 {
     va_list args;
     request_t *req;
 
     va_start(args, url);
-    req = request_ctor(flags, HTTP_PUT, url, args);
+    req = request_vnew(flags, HTTP_PUT, data, url, args);
     va_end(args);
-    if (NULL != data && '\0' != *data) {
-        req->pdata = req->data = data;
-        if (HAS_FLAG(flags, REQUEST_FLAG_COPY)) {
-            // NOTE: we don't use CURLOPT_COPYPOSTFIELDS because we need this string later for hashing/signature
-            req->pdata = strdup(data);
-        }
-        curl_easy_setopt(req->ch, CURLOPT_POSTFIELDS, req->pdata);
-    }
 
     return req;
 }
 
-request_t *request_delete(uint32_t flags, const char *url, ...) /* PRINTF(2, 3) */
+request_t *request_delete(uint32_t flags, const char *url, ...) /* PRINTF(2, 3) DEPRECATED */
 {
     va_list args;
     request_t *req;
 
     va_start(args, url);
-    req = request_ctor(flags, HTTP_DELETE, url, args);
+    req = request_vnew(flags, HTTP_DELETE, NULL, url, args);
     va_end(args);
 
     return req;
@@ -381,10 +411,14 @@ void request_add_post_field(request_t *req, const char *name, const char *value)
     curl_formadd(&req->formpost, &req->lastptr, CURLFORM_COPYNAME, name, CURLFORM_COPYCONTENTS, value, CURLFORM_END);
 }
 
+long request_response_status(request_t *req)
+{
+    return req->http_status;
+}
+
 bool request_execute(request_t *req, int output_type, void **output, error_t **error)
 {
     CURLcode res;
-    long http_status;
     char *content_type;
 
     if (HAS_FLAG(req->flags, REQUEST_FLAG_SIGN)) {
@@ -408,7 +442,7 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
         return FALSE;
     }
     curl_easy_getinfo(req->ch, CURLINFO_CONTENT_TYPE, &content_type);
-    curl_easy_getinfo(req->ch, CURLINFO_RESPONSE_CODE, &http_status);
+    curl_easy_getinfo(req->ch, CURLINFO_RESPONSE_CODE, &req->http_status);
     if (http_log) {
         FILE *fp;
 
@@ -429,7 +463,7 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
                 fputc('\n', fp);
             }
             fprintf(fp, "\n>>> (reponse) URL = %s\n", url);
-            fprintf(fp, "HTTP status = %ld\n", http_status);
+            fprintf(fp, "HTTP status = %ld\n", req->http_status);
             fprintf(fp, "Content-Type = %s\n", content_type);
             fprintf(fp, "Content-Length = %zu\n", req->buffer->len);
             fputs("Body:\n", fp);
@@ -438,8 +472,10 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
             fclose(fp);
         }
     }
-    if (200 != http_status) {
-        // API may throw 403 if forbidden (consumer_key no more valid, object that doesn't belong to us) or 404 on unknown objects?
+    if (HAS_FLAG(req->flags, REQUEST_FLAG_IGNORE_404) && 404L == req->http_status) {
+        return TRUE;
+    } else if (200L != req->http_status) {
+        // API may throw 403 if forbidden (consumer_key no more valid, object that doesn't belong to us) or 404 on unknown objects
         if (NULL != content_type && (0 == strcmp(content_type, "application/xml") || 0 == strcmp(content_type, "text/xml"))) {
             xmlDocPtr doc;
 
@@ -471,7 +507,7 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
                 json_document_destroy(doc);
             }
         } else {
-            error_set(error, WARN, "HTTP request to '%s' failed with status %ld", req->url, http_status);
+            error_set(error, WARN, "HTTP request to '%s' failed with status %ld", req->url, req->http_status);
         }
         return FALSE;
     } else {
@@ -569,6 +605,7 @@ const char *request_consumer_key(const char *account, const char *password, time
             json_object_set_property(root, "accessRules", rules);
 //             json_object_set_property(root, "redirection", json_string("https://www.mywebsite.com/"));
             JSON_ADD_RULE(rules, "GET", "/*");
+            JSON_ADD_RULE(rules, "DELETE", "/me/*");
             JSON_ADD_RULE(rules, "POST", "/ip/*");
             JSON_ADD_RULE(rules, "DELETE", "/ip/*");
             JSON_ADD_RULE(rules, "POST", "/domain/zone/*");
@@ -601,13 +638,13 @@ const char *request_consumer_key(const char *account, const char *password, time
 #endif
         if (NULL == (root = xmlDocGetRootElement(doc))) {
             xmlFreeDoc(doc);
-            request_dtor(req);
+            request_destroy(req);
             return 0;
         }
         consumerKey = xmlGetPropAsString(root, "consumerKey");
         validationUrl = xmlGetPropAsString(root, "validationUrl");
         xmlFreeDoc(doc);
-        request_dtor(req);
+        request_destroy(req);
         string_destroy(buffer);
     }
     if (NULL == password || '\0' == *password) {
@@ -641,14 +678,14 @@ const char *request_consumer_key(const char *account, const char *password, time
 #endif
             if (NULL == (ctxt = xmlXPathNewContext(doc))) {
                 xmlFreeDoc(doc);
-                request_dtor(req);
+                request_destroy(req);
                 free(validationUrl);
                 return 0;
             }
             if (NULL == (res = xmlXPathEvalExpression(BAD_CAST "string(//form//input[@name=\"credentialToken\"]/@value)", ctxt))) {
                 xmlXPathFreeObject(res);
                 xmlFreeDoc(doc);
-                request_dtor(req);
+                request_destroy(req);
                 free(validationUrl);
                 return 0;
             }
@@ -657,7 +694,7 @@ const char *request_consumer_key(const char *account, const char *password, time
             if (NULL == (res = xmlXPathEvalExpression(BAD_CAST "string(//form//input[@type=\"password\"]/@name)", ctxt))) {
                 xmlXPathFreeObject(res);
                 xmlFreeDoc(doc);
-                request_dtor(req);
+                request_destroy(req);
                 free(validationUrl);
                 return 0;
             }
@@ -666,7 +703,7 @@ const char *request_consumer_key(const char *account, const char *password, time
             if (NULL == (res = xmlXPathEvalExpression(BAD_CAST "string(//form//input[@type=\"text\"]/@name)", ctxt))) {
                 xmlXPathFreeObject(res);
                 xmlFreeDoc(doc);
-                request_dtor(req);
+                request_destroy(req);
                 free(validationUrl);
                 return 0;
             }
@@ -674,7 +711,7 @@ const char *request_consumer_key(const char *account, const char *password, time
             xmlXPathFreeObject(res);
             xmlXPathFreeContext(ctxt);
             xmlFreeDoc(doc);
-            request_dtor(req);
+            request_destroy(req);
         }
         // POST validationUrl
         req = request_post(REQUEST_FLAG_NONE, NULL, "%S", validationUrl);
@@ -684,7 +721,7 @@ const char *request_consumer_key(const char *account, const char *password, time
 //         request_add_post_field(req, "duration", "0");
         request_add_post_field(req, "duration", STRINGIFY_EXPANDED(DEFAULT_CONSUMER_KEY_EXPIRATION));
         request_execute(req, RESPONSE_IGNORE, NULL, error); // TODO: check returned value
-        request_dtor(req);
+        request_destroy(req);
         free(token);
         free(account_field_name);
         free(password_field_name);

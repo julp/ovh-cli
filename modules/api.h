@@ -10,11 +10,18 @@ enum {
     RESPONSE_JSON
 };
 
-#define REQUEST_FLAG_NONE 0
-#define REQUEST_FLAG_SIGN (1<<1)
-#define REQUEST_FLAG_COPY (1<<2)
-// #define REQUEST_FLAG_XML  (1<<3)
-// #define REQUEST_FLAG_JSON (1<<4)
+#define REQUEST_FLAG_NONE       0
+#define REQUEST_FLAG_SIGN       (1<<1)
+#define REQUEST_FLAG_COPY       (1<<2)
+#define REQUEST_FLAG_IGNORE_404 (1<<3)
+#define REQUEST_FLAG_JSON       (1<<4)
+
+typedef enum {
+    HTTP_GET,
+    HTTP_POST,
+    HTTP_PUT,
+    HTTP_DELETE
+} http_method_t;
 
 typedef struct request_t request_t;
 
@@ -23,11 +30,14 @@ typedef struct request_t request_t;
 void request_add_post_field(request_t *, const char *, const char *);
 void request_add_header(request_t *, const char *);
 
-void request_dtor(request_t *);
-request_t *request_get(uint32_t, const char *, ...) PRINTF(2, 3);
-request_t *request_delete(uint32_t, const char *, ...) PRINTF(2, 3);
-request_t *request_put(uint32_t, const char *, const char *, ...) PRINTF(3, 4);
-request_t *request_post(uint32_t, const char *, const char *, ...) PRINTF(3, 4);
+void request_destroy(request_t *);
+long request_response_status(request_t *);
+request_t *request_new(uint32_t, http_method_t, const void *, const char *, ...);
+request_t *request_vnew(uint32_t, http_method_t, const void *, const char *, va_list);
+request_t *request_get(uint32_t, const char *, ...) PRINTF(2, 3) DEPRECATED;
+request_t *request_delete(uint32_t, const char *, ...) PRINTF(2, 3) DEPRECATED;
+request_t *request_put(uint32_t, const char *, const char *, ...) PRINTF(3, 4) DEPRECATED;
+request_t *request_post(uint32_t, const char *, const char *, ...) PRINTF(3, 4) DEPRECATED;
 
 bool request_execute(request_t *, int, void **, error_t **);
 
