@@ -7,7 +7,6 @@
 #include "util.h"
 #include "table.h"
 #include "modules/api.h"
-#include "modules/libxml.h"
 #include "commands/account.h"
 #include "struct/hashtable.h"
 
@@ -142,22 +141,21 @@ static bool domain_ctor(void)
     return TRUE;
 }
 
-static int parse_record(HashTable *records, xmlDocPtr doc)
+static int parse_record(HashTable *records, json_document_t *doc)
 {
     record_t *r;
-    xmlNodePtr root;
+    json_value_t root, v;
 
-    if (NULL == (root = xmlDocGetRootElement(doc))) {
-        return 0;
-    }
+    root = json_document_get_root(doc);
     r = mem_new(*r);
-    r->id = xmlGetPropAsInt(root, "id");
-    r->ttl = xmlGetPropAsInt(root, "ttl");
-    r->name = xmlGetPropAsString(root, "subDomain");
-    r->target = xmlGetPropAsString(root, "target");
-    r->type = xmlGetPropAsCollectionIndex(root, "fieldType", domain_record_types, RECORD_TYPE_ANY);
+    JSON_GET_PROP_INT(root, "id", r->id);
+    JSON_GET_PROP_INT(root, "ttl", r->ttl);
+    JSON_GET_PROP_STRING(root, "target", r->target);
+    JSON_GET_PROP_STRING(root, "subDomain", r->name);
+    json_object_get_property(root, "fieldType", &v);
+    r->type = json_get_enum(v, domain_record_types, RECORD_TYPE_ANY);
     hashtable_quick_put_ex(records, 0, r->id, NULL, r, NULL);
-    xmlFreeDoc(doc);
+    json_document_destroy(doc);
 
     return TRUE;
 }
@@ -165,29 +163,29 @@ static int parse_record(HashTable *records, xmlDocPtr doc)
 static command_status_t fetch_domains(domain_set_t *ds, bool force, error_t **error)
 {
     if (!ds->uptodate || force) {
-        xmlDocPtr doc;
         request_t *req;
-        xmlNodePtr root, n;
         bool request_success;
+        json_document_t *doc;
 
         req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/domain");
-        REQUEST_XML_RESPONSE_WANTED(req);
-        request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
+        request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (request_success) {
-            if (NULL == (root = xmlDocGetRootElement(doc))) {
-                error_set(error, WARN, "Failed to parse XML document");
-                return COMMAND_FAILURE;
-            }
-            hashtable_clear(ds->domains);
-            for (n = root->children; n != NULL; n = n->next) {
-                xmlChar *content;
+            Iterator it;
+            json_value_t root;
 
-                content = xmlNodeGetContent(n);
-                hashtable_put(ds->domains, content, domain_new(), NULL);
-                xmlFree(content);
+            root = json_document_get_root(doc);
+            hashtable_clear(ds->domains);
+            json_array_to_iterator(&it, root);
+            for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+                json_value_t v;
+
+                v = (json_value_t) iterator_current(&it, NULL);
+                hashtable_put(ds->domains, (void *) json_get_string(v), domain_new(), NULL); // ds->domains has strdup as key_duper, don't need to strdup it ourself
             }
+            iterator_close(&it);
             ds->uptodate = TRUE;
+            json_document_destroy(doc);
         } else {
             return COMMAND_FAILURE;
         }
@@ -228,40 +226,23 @@ static command_status_t domain_check(void *UNUSED(arg), error_t **error)
         now = time(NULL);
         hashtable_to_iterator(&it, ds->domains);
         for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
-#ifdef XML_RESPONSE
-            xmlDocPtr doc;
-#else
-            json_document_t *doc;
-#endif
             request_t *req;
+            json_document_t *doc;
             const char *domain_name;
 
             iterator_current(&it, (void **) &domain_name);
             // request
             req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/domain/%s/serviceInfos", domain_name);
-#ifdef XML_RESPONSE
-            REQUEST_XML_RESPONSE_WANTED(req);
-            success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
-#else
-            request_add_header(req, "Content-Type: application/json");
             success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
-#endif
             request_destroy(req);
             // response
             if (success) {
-#ifdef XML_RESPONSE
-                xmlNodePtr root;
-#else
-                json_value_t root, expiration;
-#endif
                 time_t domain_expiration;
+                json_value_t root, expiration;
 
-#ifdef XML_RESPONSE
-#else
                 root = json_document_get_root(doc);
                 if (json_object_get_property(root, "expiration", &expiration)) {
                     if ((success = date_parse(json_get_string(expiration), &domain_expiration, error))) {
-#endif
                         int diff_days;
 
                         diff_days = date_diff_in_days(domain_expiration, now);
@@ -270,11 +251,7 @@ static command_status_t domain_check(void *UNUSED(arg), error_t **error)
                         }
                     }
                 }
-#ifdef XML_RESPONSE
-                xmlFreeDoc(doc);
-#else
                 json_document_destroy(doc);
-#endif
             }
         }
     }
@@ -282,6 +259,7 @@ static command_status_t domain_check(void *UNUSED(arg), error_t **error)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
+#include <libxml/parser.h>
 static command_status_t domain_export(void *arg, error_t **error)
 {
     xmlDocPtr doc;
@@ -294,7 +272,7 @@ static command_status_t domain_export(void *arg, error_t **error)
     assert(NULL != args->domain);
 
     req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/domain/zone/%s/export", args->domain);
-    REQUEST_XML_RESPONSE_WANTED(req); // we ask XML instead of JSON else we have to parse/unescape string
+    REQUEST_XML_RESPONSE_WANTED(req); // we ask XML instead of JSON else we have to parse invalid json document or to unescape characters
     if ((request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error))) {
         if (NULL != (root = xmlDocGetRootElement(doc))) {
             xmlChar *content;
@@ -303,7 +281,7 @@ static command_status_t domain_export(void *arg, error_t **error)
             puts((const char *) content);
             xmlFree(content);
         }
-        request_success &= NULL != root;
+        request_success = NULL != root;
         xmlFreeDoc(doc);
     }
     request_destroy(req);
@@ -336,36 +314,35 @@ static bool get_domain_records(const char *domain, domain_t **d, error_t **error
     FETCH_ACCOUNT_DOMAINS(ds);
     request_success = TRUE;
     if (!hashtable_get(ds->domains, (void *) domain, (void **) d) || !(*d)->uptodate) {
-        xmlDocPtr doc;
         request_t *req;
-        xmlNodePtr root, n;
+        json_document_t *doc;
 
         if (NULL == *d) {
             hashtable_put(ds->domains, (void *) domain, *d = domain_new(), NULL);
         }
         req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/domain/zone/%s/record", domain);
-        REQUEST_XML_RESPONSE_WANTED(req);
-        request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
+        request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         // result
         if (request_success) {
-            if (NULL == (root = xmlDocGetRootElement(doc))) {
-                return FALSE;
-            }
-            for (n = root->children; request_success && n != NULL; n = n->next) {
-                xmlDocPtr doc;
-                xmlChar *content;
+            Iterator it;
+            json_value_t root;
 
-                content = xmlNodeGetContent(n);
-                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/domain/zone/%s/record/%s", domain, (const char *) content);
-                REQUEST_XML_RESPONSE_WANTED(req);
-                request_success &= request_execute(req, RESPONSE_XML, (void **) &doc, error); // request_success is assumed to be TRUE before the first iteration
+            root = json_document_get_root(doc);
+            json_array_to_iterator(&it, root);
+            for (iterator_first(&it); request_success && iterator_is_valid(&it); iterator_next(&it)) {
+                json_value_t v;
+                json_document_t *doc;
+
+                v = (json_value_t) iterator_current(&it, NULL);
+                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/domain/zone/%s/record/%u", domain, json_get_integer(v));
+                request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
                 request_destroy(req);
                 // result
                 parse_record((*d)->records, doc);
-                xmlFree(content);
             }
-            xmlFreeDoc(doc);
+            iterator_close(&it);
+            json_document_destroy(doc);
             (*d)->uptodate = TRUE;
         }
     }
@@ -419,8 +396,8 @@ static command_status_t record_list(void *arg, error_t **error)
 // NOTE: it seems OVH permits to create multiple times a DNS record with same name and type
 static command_status_t record_add(void *arg, error_t **error)
 {
-    xmlDocPtr doc;
     bool request_success;
+    json_document_t *doc;
     domain_record_argument_t *args;
 
     args = (domain_record_argument_t *) arg;
@@ -458,9 +435,7 @@ static command_status_t record_add(void *arg, error_t **error)
             request_t *req;
 
             req = request_new(REQUEST_FLAG_SIGN, HTTP_POST, buffer->ptr, API_BASE_URL "/domain/zone/%s/record", args->domain);
-            REQUEST_XML_RESPONSE_WANTED(req);
-            request_add_header(req, "Content-type: application/json");
-            request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
+            request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
             request_destroy(req);
             string_destroy(buffer);
         }
@@ -553,9 +528,9 @@ static command_status_t record_delete(void *arg, error_t **error)
 // arguments: [ttl <int>] [name <string>] [target <string>]
 // (in any order)
 // if we change record's name (subDomain), we need to update records cache
-static command_status_t record_update(void *arg, error_t **error)
+static command_status_t record_update(void *UNUSED(arg), error_t **UNUSED(error))
 {
-#if 0
+#if TODO
     uint32_t ttl;
     String *buffer;
     request_t *req;
@@ -590,7 +565,8 @@ static command_status_t record_update(void *arg, error_t **error)
     request_execute(req, RESPONSE_IGNORE, NULL, error);
     request_destroy(req);
 #endif
-    return TRUE;
+
+    return COMMAND_SUCCESS;
 }
 
 static bool complete_domains(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *UNUSED(data))
@@ -633,36 +609,31 @@ static bool complete_records(void *parsed_arguments, const char *current_argumen
 
 static command_status_t dnssec_status(void *arg, error_t **error)
 {
-    xmlDocPtr doc;
     request_t *req;
-    xmlNodePtr root;
     bool request_success;
+    json_document_t *doc;
     domain_record_argument_t *args;
 
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
     req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
-    REQUEST_XML_RESPONSE_WANTED(req);
-    if ((request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error))) {
-        if (NULL != (root = xmlDocGetRootElement(doc))) {
-            xmlChar *content;
-
-#if 0
-            // for translations, do not remove
-            _("enabled")
-            _("disabled")
-            _("enableInProgress")
-            _("disableInProgress")
-#endif
-            if (NULL != (content = xmlGetProp(root, BAD_CAST "status"))) {
-                puts(_((const char *) content));
-                xmlFree(content);
-            }
-        }
-        request_success &= NULL != root;
-        xmlFreeDoc(doc);
-    }
+    request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
+    if (request_success) {
+        json_value_t root, v;
+
+        root = json_document_get_root(doc);
+#if 0
+        // for translations, do not remove
+        _("enabled")
+        _("disabled")
+        _("enableInProgress")
+        _("disableInProgress")
+#endif
+        json_object_get_property(root, "status", &v);
+        puts(_(json_get_string(v)));
+        json_document_destroy(doc);
+    }
 
     return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
