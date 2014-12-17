@@ -216,29 +216,27 @@ static service_t *fetch_single_hosting(service_set_t *ss, const char * const ser
 static command_status_t fetch_all_hosting(service_set_t *ss, bool force, error_t **error)
 {
     if (!ss->uptodate || force) {
-        xmlDocPtr doc;
         request_t *req;
-        xmlNodePtr root, n;
         bool request_success;
+        json_document_t *doc;
 
         req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/hosting/web");
-        REQUEST_XML_RESPONSE_WANTED(req);
-        request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
+        request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (request_success) {
-            if (NULL == (root = xmlDocGetRootElement(doc))) {
-                error_set(error, WARN, "Failed to parse XML document");
-                return COMMAND_FAILURE;
-            }
-            hashtable_clear(ss->services);
-            for (n = root->children; n != NULL; n = n->next) {
-                xmlChar *content;
+            Iterator it;
+            json_value_t root;
 
-                content = xmlNodeGetContent(n);
-                fetch_single_hosting(ss, (char *) content, force, error);
-                xmlFree(content);
+            root = json_document_get_root(doc);
+            hashtable_clear(ss->services);
+            json_array_to_iterator(&it, root);
+            for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+                json_value_t v;
+
+                v = (json_value_t) iterator_current(&it, NULL);
+                fetch_single_hosting(ss, json_get_string(v), force, error);
             }
-            xmlFreeDoc(doc);
+            json_document_destroy(doc);
             ss->uptodate = TRUE;
         } else {
             return COMMAND_FAILURE;
