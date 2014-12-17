@@ -7,7 +7,6 @@
 #include "util.h"
 #include "table.h"
 #include "modules/api.h"
-#include "modules/libxml.h"
 #include "commands/account.h"
 #include "struct/hashtable.h"
 
@@ -171,21 +170,12 @@ static server_t *fetch_server(server_set_t *ss, const char * const server_name, 
     s = NULL;
     if (!force && !ss->uptodate && !hashtable_get(ss->servers, server_name, (void **) &s)) {
         request_t *req;
-#ifdef WITH_XML
-        xmlDocPtr doc;
-#else
         json_document_t *doc;
-#endif
         bool request_success;
 
         hashtable_put(ss->servers, (void *) server_name, s = server_new(), NULL);
-        req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s", server_name);
-#ifdef WITH_XML
-        REQUEST_XML_RESPONSE_WANTED(req);
-        request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
-#else
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s", server_name);
         request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
-#endif
         request_destroy(req);
         if (request_success) {
             json_value_t root, propvalue;
@@ -221,11 +211,7 @@ static server_t *fetch_server(server_set_t *ss, const char * const server_name, 
             s->linkSpeed = json_null == propvalue ? 0 : json_get_integer(propvalue);
             json_object_get_property(root, "bootId", &propvalue);
             s->bootId = json_null == propvalue ? 0 : json_get_integer(propvalue);
-#ifdef WITH_XML
-            xmlFreeDoc(doc);
-#else
             json_document_destroy(doc);
-#endif
         }
     }
 
@@ -235,29 +221,28 @@ static server_t *fetch_server(server_set_t *ss, const char * const server_name, 
 static command_status_t fetch_servers(server_set_t *ss, bool force, error_t **error)
 {
     if (!ss->uptodate || force) {
-        xmlDocPtr doc;
         request_t *req;
-        xmlNodePtr root, n;
         bool request_success;
+        json_document_t *doc;
 
-        req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server");
-        REQUEST_XML_RESPONSE_WANTED(req);
-        request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server");
+        request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (request_success) {
-            if (NULL == (root = xmlDocGetRootElement(doc))) {
-                error_set(error, WARN, "Failed to parse XML document");
-                return COMMAND_FAILURE;
-            }
-            hashtable_clear(ss->servers);
-            for (n = root->children; n != NULL; n = n->next) {
-                xmlChar *content;
+            Iterator it;
+            json_value_t root;
 
-                content = xmlNodeGetContent(n);
-                fetch_server(ss, (char *) content, force, error);
-                xmlFree(content);
+            root = json_document_get_root(doc);
+            hashtable_clear(ss->servers);
+            json_array_to_iterator(&it, root);
+            for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+                json_value_t v;
+
+                v = (json_value_t) iterator_current(&it, NULL);
+                fetch_server(ss, json_get_string(v), force, error);
             }
-            xmlFreeDoc(doc);
+            iterator_close(&it);
+            json_document_destroy(doc);
             ss->uptodate = TRUE;
         } else {
             return COMMAND_FAILURE;
@@ -267,21 +252,20 @@ static command_status_t fetch_servers(server_set_t *ss, bool force, error_t **er
     return COMMAND_SUCCESS;
 }
 
-static int parse_boot(HashTable *boots, xmlDocPtr doc)
+static int parse_boot(HashTable *boots, json_document_t *doc)
 {
     boot_t *b;
-    xmlNodePtr root;
+    json_value_t root, v;
 
-    if (NULL == (root = xmlDocGetRootElement(doc))) {
-        return 0;
-    }
+    root = json_document_get_root(doc);
     b = mem_new(*b);
-    b->id = xmlGetPropAsInt(root, "bootId");
-    b->kernel = xmlGetPropAsString(root, "kernel");
-    b->description = xmlGetPropAsString(root, "description");
-    b->type = xmlGetPropAsCollectionIndex(root, "bootType", boot_types, -1);
+    JSON_GET_PROP_INT(root, "bootId", b->id);
+    JSON_GET_PROP_STRING(root, "kernel", b->kernel);
+    JSON_GET_PROP_STRING(root, "description", b->description);
+    json_object_get_property(root, "bootType", &v);
+    b->type = json_get_enum(v, boot_types, -1);
     hashtable_put(boots, (void *) b->kernel, b, NULL);
-    xmlFreeDoc(doc);
+    json_document_destroy(doc);
 
     return TRUE;
 }
@@ -295,36 +279,35 @@ static command_status_t fetch_server_boots(const char *server_name, server_t **s
     FETCH_ACCOUNT_SERVERS(ss);
     request_success = TRUE;
     if (!hashtable_get(ss->servers, (void *) server_name, (void **) s) || !(*s)->boots_uptodate) {
-        xmlDocPtr doc;
         request_t *req;
-        xmlNodePtr root, n;
+        json_document_t *doc;
 
         if (NULL == *s) {
             hashtable_put(ss->servers, (void *) server_name, *s = server_new(), NULL);
         }
-        req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s/boot", server_name);
-        REQUEST_XML_RESPONSE_WANTED(req);
-        request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s/boot", server_name);
+        request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         // result
         if (request_success) {
-            if (NULL == (root = xmlDocGetRootElement(doc))) {
-                return 0;
-            }
-            for (n = root->children; request_success && n != NULL; n = n->next) {
-                xmlDocPtr doc;
-                xmlChar *content;
+            Iterator it;
+            json_value_t root;
 
-                content = xmlNodeGetContent(n);
-                req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s/boot/%s", server_name, (const char *) content);
-                REQUEST_XML_RESPONSE_WANTED(req);
-                request_success &= request_execute(req, RESPONSE_XML, (void **) &doc, error); // request_success is assumed to be TRUE before the first iteration
+            root = json_document_get_root(doc);
+            json_array_to_iterator(&it, root);
+            for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+                json_value_t v;
+                json_document_t *doc;
+
+                v = (json_value_t) iterator_current(&it, NULL);
+                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s/boot/%u", server_name, json_get_integer(v));
+                request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error); // request_success is assumed to be TRUE before the first iteration
                 request_destroy(req);
                 // result
                 parse_boot((*s)->boots, doc);
-                xmlFree(content);
             }
-            xmlFreeDoc(doc);
+            iterator_close(&it);
+            json_document_destroy(doc);
             (*s)->boots_uptodate = TRUE;
         }
     }
@@ -421,39 +404,23 @@ static command_status_t dedicated_check(void *UNUSED(arg), error_t **error)
         now = time(NULL);
         hashtable_to_iterator(&it, ss->servers);
         for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
-#ifdef XML_RESPONSE
-            xmlDocPtr doc;
-#else
-            json_document_t *doc;
-#endif
             request_t *req;
+            json_document_t *doc;
             const char *server_name;
 
             iterator_current(&it, (void **) &server_name);
             // request
-            req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s/serviceInfos", server_name);
-#ifdef XML_RESPONSE
-            REQUEST_XML_RESPONSE_WANTED(req);
-            success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
-#else
+            req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s/serviceInfos", server_name);
             success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
-#endif
             request_destroy(req);
             // response
             if (success) {
-#ifdef XML_RESPONSE
-                xmlNodePtr root;
-#else
                 json_value_t root, expiration;
-#endif
                 time_t server_expiration;
 
-#ifdef XML_RESPONSE
-#else
                 root = json_document_get_root(doc);
                 if (json_object_get_property(root, "expiration", &expiration)) {
                     if ((success = date_parse(json_get_string(expiration), &server_expiration, error))) {
-#endif
                         int diff_days;
 
                         diff_days = date_diff_in_days(server_expiration, now);
@@ -462,11 +429,7 @@ static command_status_t dedicated_check(void *UNUSED(arg), error_t **error)
                         }
                     }
                 }
-#ifdef XML_RESPONSE
-                xmlFreeDoc(doc);
-#else
                 json_document_destroy(doc);
-#endif
             }
         }
     }
@@ -476,9 +439,9 @@ static command_status_t dedicated_check(void *UNUSED(arg), error_t **error)
 
 static command_status_t dedicated_reboot(void *arg, error_t **error)
 {
-    xmlDocPtr doc;
     request_t *req;
     bool request_success;
+    json_document_t *doc;
     dedicated_argument_t *args;
 
     request_success = TRUE;
@@ -486,12 +449,12 @@ static command_status_t dedicated_reboot(void *arg, error_t **error)
     assert(NULL != args->server_name);
     // TODO: check server exists?
     if (confirm(_("Confirm hard reboot of %s"), args->server_name)) {
-        req = request_post(REQUEST_FLAG_SIGN, NULL, API_BASE_URL "/dedicated/server/%s/reboot", args->server_name);
-        REQUEST_XML_RESPONSE_WANTED(req);
-        request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_POST, NULL, API_BASE_URL "/dedicated/server/%s/reboot", args->server_name);
+        request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (request_success) {
             // parse response to register the task. Display it? ("This request to hard reboot %s is registered as task #%d (see dedicated %s task %d to see its status)")
+            json_document_destroy(doc);
         }
     }
 
@@ -535,15 +498,14 @@ static command_status_t dedicated_boot_list(void *arg, error_t **error)
     return ret;
 }
 
-static xmlDocPtr fetch_server_details(const char *server_name, error_t **error)
+static json_document_t *fetch_server_details(const char *server_name, error_t **error)
 {
-    xmlDocPtr doc;
     request_t *req;
     bool request_success;
+    json_document_t *doc;
 
-    req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/dedicated/server/%s", server_name);
-    REQUEST_XML_RESPONSE_WANTED(req); // TODO: OVH API seems to be buggy: when asking for XML response, response is empty ?!?
-    request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s", server_name);
+    request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
 
     return request_success ? doc : NULL;
@@ -558,28 +520,27 @@ static command_status_t dedicated_boot_get(void *arg, error_t **error)
     args = (dedicated_argument_t *) arg;
     assert(NULL != args->server_name);
     if ((success = (COMMAND_SUCCESS == fetch_server_boots(args->server_name, &s, error)))) {
-        xmlDocPtr doc;
+        json_document_t *doc;
 
         if ((success = (NULL != (doc = fetch_server_details(args->server_name, error))))) {
-            xmlNodePtr root;
+            boot_t *b;
+            uint32_t id;
+            Iterator it;
+            json_value_t v, root;
 
-            if ((success = (NULL != (root = xmlDocGetRootElement(doc))))) {
-                boot_t *b;
-                uint32_t id;
-                Iterator it;
-
-                id = xmlGetPropAsInt(root, "bootId");
-                hashtable_to_iterator(&it, s->boots);
-                for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-                    b = iterator_current(&it, NULL);
-                    if (id == b->id) {
-                        break;
-                    }
+            root = json_document_get_root(doc);
+            json_object_get_property(root, "bootId", &v);
+            id = json_get_integer(v);
+            hashtable_to_iterator(&it, s->boots);
+            for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+                b = iterator_current(&it, NULL);
+                if (id == b->id) {
+                    break;
                 }
-                iterator_close(&it);
-                printf(_("Current boot for %s is:  %s (%s): %s\n"), args->server_name, b->kernel, boot_types[b->type], b->description);
             }
-            xmlFreeDoc(doc);
+            iterator_close(&it);
+            printf(_("Current boot for %s is:  %s (%s): %s\n"), args->server_name, b->kernel, boot_types[b->type], b->description);
+            json_document_destroy(doc);
         }
     }
 
@@ -624,7 +585,7 @@ static command_status_t dedicated_boot_set(void *arg, error_t **error)
                 json_document_destroy(doc);
             }
             // request
-            req = request_put(REQUEST_FLAG_SIGN, buffer->ptr, API_BASE_URL "/dedicated/server/%s", args->server_name);
+            req = request_new(REQUEST_FLAG_SIGN, HTTP_PUT, buffer->ptr, API_BASE_URL "/dedicated/server/%s", args->server_name);
             success = request_execute(req, RESPONSE_IGNORE, NULL, error);
             request_destroy(req);
             string_destroy(buffer);
@@ -643,7 +604,7 @@ static bool fetch_ip_block(const char * const server_ip, char **ip, error_t **er
     request_t *req;
     json_document_t *doc;
 
-    req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/ip?ip=%s", server_ip);
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/ip?ip=%s", server_ip);
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
     if (success) {
@@ -701,9 +662,9 @@ static command_status_t dedicated_reverse_set_delete(void *arg, bool set, error_
                     );
                     json_document_destroy(doc);
                 }
-                req = request_post(REQUEST_FLAG_SIGN, buffer->ptr, API_BASE_URL "/ip/%s/reverse", ip);
+                req = request_new(REQUEST_FLAG_SIGN, HTTP_POST, buffer->ptr, API_BASE_URL "/ip/%s/reverse", ip);
             } else {
-                req = request_delete(REQUEST_FLAG_SIGN, API_BASE_URL "/ip/%s/reverse/%s", ip, s->ip);
+                req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/ip/%s/reverse/%s", ip, s->ip);
             }
             success = request_execute(req, RESPONSE_IGNORE, NULL, error);
             request_destroy(req);

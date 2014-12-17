@@ -41,6 +41,30 @@ enum {
 #define json_true ((json_value_t) JSON_CONSTANT_TRUE)
 #define json_false ((json_value_t) JSON_CONSTANT_FALSE)
 
+#define JSON_GET_PROP_STRING(object, property, lvalue) \
+    do { \
+        json_value_t v; \
+ \
+        json_object_get_property(object, property, &v); \
+        lvalue = json_null == v ? NULL : strdup(json_get_string(v)); \
+    } while (0);
+
+#define JSON_GET_PROP_INT(object, property, lvalue) \
+    do { \
+        json_value_t v; \
+ \
+        json_object_get_property(object, property, &v); \
+        lvalue = json_get_integer(v); \
+    } while (0);
+
+#define JSON_GET_PROP_BOOL(object, property, lvalue) \
+    do { \
+        json_value_t v; \
+ \
+        json_object_get_property(object, property, &v); \
+        lvalue = json_true == v; \
+    } while (0);
+
 json_value_t json_array(void) WARN_UNUSED_RESULT;
 json_value_t json_array_get_at(json_value_t, size_t);
 void json_array_push(json_value_t, json_value_t);
@@ -55,6 +79,7 @@ void json_document_set_root(json_document_t *, json_value_t);
 int64_t json_get_integer(json_value_t);
 double json_get_number(json_value_t);
 const char *json_get_string(json_value_t);
+int json_get_enum(json_value_t, const char * const *, int);
 json_type_t json_get_type(json_value_t);
 json_value_t json_integer(int64_t) WARN_UNUSED_RESULT;
 json_value_t json_number(double) WARN_UNUSED_RESULT;

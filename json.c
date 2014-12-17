@@ -375,6 +375,26 @@ const char *json_get_string(json_value_t value)
     return node->value;
 }
 
+int json_get_enum(json_value_t value, const char * const *values, int fallback)
+{
+    int ret;
+    json_node_t *node;
+    const char * const *v;
+
+    assert(JSON_TYPE_STRING == json_get_type(value));
+
+    ret = fallback;
+    node = (json_node_t *) value;
+    for (v = values; NULL != *v; v++) {
+        if (0 == strcmp(node->value, *v)) {
+            ret = v - values;
+            break;
+        }
+    }
+
+    return ret;
+}
+
 json_value_t json_string(const char *value) /* WARN_UNUSED_RESULT */
 {
     json_node_t *node;
