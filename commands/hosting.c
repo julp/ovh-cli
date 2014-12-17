@@ -7,7 +7,6 @@
 #include "util.h"
 #include "table.h"
 #include "modules/api.h"
-#include "modules/libxml.h"
 #include "commands/account.h"
 #include "struct/hashtable.h"
 
@@ -236,6 +235,7 @@ static command_status_t fetch_all_hosting(service_set_t *ss, bool force, error_t
                 v = (json_value_t) iterator_current(&it, NULL);
                 fetch_single_hosting(ss, json_get_string(v), force, error);
             }
+            iterator_close(&it);
             json_document_destroy(doc);
             ss->uptodate = TRUE;
         } else {
