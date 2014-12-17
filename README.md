@@ -63,7 +63,7 @@ ovh account <nickhandle> password "" <consumer key>
     * list => display all domains owned by the current account
     * \<domain name> ("zone" may be more appropriate)
         * export => export *domain*/zone in DNS format
-        * refresh => refresh *domain* (generation of a new zone ID?)
+        * refresh => refresh *domain* (generation of a new serial)
         * dnssec
             * status => print if DNSSEC is enabled/disabled for *domain*
             * enable => enable DNSSEC for *domain*
@@ -85,6 +85,13 @@ ovh account <nickhandle> password "" <consumer key>
         * reverse
             * delete => remove reverse name of *server*
             * set \<reverse> => define reverse name of *server*
+* hosting
+    * list => list all hosted website
+    * \<hosting>
+        * user list => list (FTP & SSH?) users of *hosting*
+        * cron list => list cron jobs for *hosting*
+        * domain list => list domains associated to *hosting*
+        * database list => list databases associated to *hosting*
 * me => display personal informations associated to the current account (name, address, etc)
 * help
 * quit
