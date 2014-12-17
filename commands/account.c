@@ -253,8 +253,7 @@ static int account_load(error_t **error)
 
                 a->consumer_key = xmlGetPropAsString(n, "consumer_key");
                 if ('\0' == *a->consumer_key) {
-                    free(a->consumer_key);
-                    a->consumer_key = NULL;
+                    FREE(a, consumer_key);
                 } else {
                     expires_at = xmlGetPropAsString(n, "expires_at");
                     a->expires_at = (time_t) atol(expires_at);
@@ -287,15 +286,9 @@ static void account_account_dtor(void *data)
     assert(NULL != data);
 
     account = (account_t *) data;
-    if (NULL != account->account) {
-        free(account->account);
-    }
-    if (NULL != account->password) {
-        free(account->password);
-    }
-    if (NULL != account->consumer_key) {
-        free((void *) account->consumer_key);
-    }
+    FREE(account, account);
+    FREE(account, password);
+    FREE(account, consumer_key);
     if (NULL != account->modules_data) {
         if (NULL != acd->modules_callbacks) {
             Iterator it;
@@ -550,10 +543,12 @@ static command_status_t account_switch(void *arg, error_t **error)
     return ret ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
+#if TODO
 static command_status_t account_update(void *arg, error_t **error)
 {
     return COMMAND_SUCCESS;
 }
+#endif
 
 static void account_regcomm(graph_t *g)
 {

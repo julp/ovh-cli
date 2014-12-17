@@ -69,7 +69,7 @@ static command_status_t me(void *UNUSED(arg), error_t **error)
             const char *key;
             json_value_t v;
 
-            v = (json_value_t) iterator_current(&it, &key);
+            v = (json_value_t) iterator_current(&it, (void **) &key);
             table_store(t, key, v == json_null ? NULL : json_get_string(v));
         }
         iterator_close(&it);
@@ -226,7 +226,7 @@ static command_status_t me_credential_flush(void *UNUSED(arg), error_t **error)
     json_document_t *doc;
 
     // TODO: find a way to not invalidate ourselves
-    req = request_get(REQUEST_FLAG_SIGN, API_BASE_URL "/me/api/credential");
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/me/api/credential");
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
     if (success) {
