@@ -626,7 +626,7 @@ const char *request_consumer_key(const char *account, const char *password, time
 
 #undef JSON_ADD_RULE
         }
-        req = request_post(REQUEST_FLAG_NONE, buffer->ptr, API_BASE_URL "/auth/credential");
+        req = request_new(REQUEST_FLAG_NONE, HTTP_POST, buffer->ptr, API_BASE_URL "/auth/credential");
         REQUEST_XML_RESPONSE_WANTED(req);
         request_add_header(req, "Content-type: application/json");
         request_add_header(req, "X-Ovh-Application: " APPLICATION_KEY);
@@ -669,7 +669,7 @@ const char *request_consumer_key(const char *account, const char *password, time
             xmlXPathObjectPtr res;
             xmlXPathContextPtr ctxt;
 
-            req = request_get(REQUEST_FLAG_NONE, "%S", validationUrl);
+            req = request_new(REQUEST_FLAG_NONE, HTTP_GET, NULL, "%S", validationUrl);
             request_execute(req, RESPONSE_HTML, (void **) &doc, error); // TODO: check returned value
 #if 0
             puts("====================");
@@ -714,7 +714,7 @@ const char *request_consumer_key(const char *account, const char *password, time
             request_destroy(req);
         }
         // POST validationUrl
-        req = request_post(REQUEST_FLAG_NONE, NULL, "%S", validationUrl);
+        req = request_new(REQUEST_FLAG_NONE, HTTP_POST, NULL, "%S", validationUrl);
         request_add_post_field(req, "credentialToken", token);
         request_add_post_field(req, account_field_name, account);
         request_add_post_field(req, password_field_name, password);
