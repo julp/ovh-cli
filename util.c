@@ -11,5 +11,5 @@ bool confirm(const char *prompt, ...)
     fputs(" (y/N)> ", stdout);
     fflush(stdout);
 
-    return 'y' != /*tolower*/(getchar());
+    return 'y' == /*tolower*/(getchar());
 }
