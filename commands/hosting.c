@@ -23,8 +23,10 @@
 
 typedef struct {
     char *service_name;
-    char *path;
-    char *domain;
+    char *domain_path;
+    char *domain_name;
+    char *database_name;
+    int database_date;
 } hosting_argument_t;
 
 typedef struct {
@@ -53,7 +55,7 @@ typedef struct {
     char *hostingIp;
     char *serviceName;
     bool domains_uptodate;
-    HashTable *domains; // domain => path ?
+    HashTable *domains; // domain (string) => path (string)
 } service_t;
 
 static void service_destroy(void *data)
@@ -372,16 +374,16 @@ static command_status_t hosting_domain_create(void *arg, error_t **error)
 
     FETCH_ACCOUNT_HOSTING(ss);
     args = (hosting_argument_t *) arg;
-    assert(NULL != args->path);
-    assert(NULL != args->domain);
+    assert(NULL != args->domain_path);
+    assert(NULL != args->domain_name);
     assert(NULL != args->service_name);
     reqdoc = json_document_new();
     {
         json_value_t root;
 
         root = json_object();
-        json_object_set_property(root, "path", json_string(args->path));
-        json_object_set_property(root, "domain", json_string(args->domain));
+        json_object_set_property(root, "path", json_string(args->domain_path));
+        json_object_set_property(root, "domain", json_string(args->domain_name));
         json_document_set_root(reqdoc, root);
     }
     req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, API_BASE_URL "/hosting/web/%s/attachedDomain", args->service_name);
@@ -396,9 +398,9 @@ static command_status_t hosting_domain_create(void *arg, error_t **error)
         root = json_document_get_root(doc);
         JSON_GET_PROP_INT(root, "id", task_id);
         if (hashtable_get(ss->services, args->service_name, (void **) &s)) {
-            hashtable_put(s->domains, args->domain, strdup(args->path), NULL); // check domain isn't already attached? (else we have a leak on previous path in hashtable?)
+            hashtable_put(s->domains, args->domain_name, strdup(args->domain_path), NULL); // check domain isn't already attached? (else we have a leak on previous path in hashtable?)
         }
-        printf("Request to link domain '%s' to hosting '%s' was successfully registered as task #%" PRIi64, args->domain, args->service_name, task_id);
+        printf("Request to link domain '%s' to hosting '%s' was successfully registered as task #%" PRIi64 "\n", args->domain_name, args->service_name, task_id);
     }
 
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
@@ -420,13 +422,13 @@ static command_status_t hosting_domain_delete(void *arg, error_t **error)
     success = TRUE;
     FETCH_ACCOUNT_HOSTING(ss);
     args = (hosting_argument_t *) arg;
-    assert(NULL != args->domain);
+    assert(NULL != args->domain_name);
     assert(NULL != args->service_name);
-    if (confirm(_("Confirm unlinking domain '%s' to hosting '%s'"), args->domain, args->service_name)) {
+    if (confirm(_("Confirm unlinking domain '%s' to hosting '%s'"), args->domain_name, args->service_name)) {
         request_t *req;
         json_document_t *doc;
 
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/hosting/web/%s/attachedDomain/%s", args->service_name, args->domain);
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/hosting/web/%s/attachedDomain/%s", args->service_name, args->domain_name);
         success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (success) {
@@ -437,9 +439,9 @@ static command_status_t hosting_domain_delete(void *arg, error_t **error)
             root = json_document_get_root(doc);
             JSON_GET_PROP_INT(root, "id", task_id);
             if (hashtable_get(ss->services, args->service_name, (void **) &s)) {
-                hashtable_delete(s->domains, args->domain, TRUE);
+                hashtable_delete(s->domains, args->domain_name, TRUE);
             }
-            printf("Request to unlink domain '%s' to hosting '%s' was successfully registered as task #%" PRIi64, args->domain, args->service_name, task_id);
+            printf("Request to unlink domain '%s' to hosting '%s' was successfully registered as task #%" PRIi64 "\n", args->domain_name, args->service_name, task_id);
         }
     }
 
@@ -741,6 +743,47 @@ static command_status_t hosting_database_list(void *arg, error_t **error)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
+static const char *database_dates[] = {
+    "now",
+    "daily.1",
+    "weekly.1",
+    NULL
+};
+
+static command_status_t hosting_database_dump(void *arg, error_t **error)
+{
+    bool success;
+    request_t *req;
+    hosting_argument_t *args;
+    json_document_t *doc, *reqdoc;
+
+    args = (hosting_argument_t *) arg;
+    assert(NULL != args->service_name);
+    assert(NULL != args->database_name);
+    reqdoc = json_document_new();
+    {
+        json_value_t root;
+
+        root = json_object();
+        json_object_set_property(root, "date", json_string(database_dates[args->database_date]));
+        json_document_set_root(reqdoc, root);
+    }
+    req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, API_BASE_URL "/hosting/web/%s/database/%s/dump", args->service_name, args->database_name);
+    success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+    request_destroy(req);
+    json_document_destroy(reqdoc);
+    if (success) {
+        int64_t task_id;
+        json_value_t root;
+
+        root = json_document_get_root(doc);
+        JSON_GET_PROP_INT(root, "id", task_id);
+        printf("Request to dump database '%s' for hosting '%s' was successfully registered as task #%" PRIi64 "\n", args->database_name, args->service_name, task_id);
+    }
+
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
 #if 0
 static command_status_t hosting_database_create(void *arg, error_t **error)
 {
@@ -768,10 +811,11 @@ static bool complete_hosting(void *parsed_arguments, const char *current_argumen
 static void hosting_regcomm(graph_t *g)
 {
     argument_t *lit_host_list;
-    argument_t *arg_hosting, *arg_domain, *arg_path;
     argument_t *lit_hosting, *lit_cron, *lit_user, *lit_db, *lit_domain;
-    argument_t *lit_cron_list, *lit_user_list, *lit_db_list;
+    argument_t *lit_cron_list, *lit_user_list;
+    argument_t *lit_db_list, *lit_db_dump;
     argument_t *lit_domain_list, *lit_domain_add, *lit_domain_delete;
+    argument_t *arg_hosting, *arg_domain_name, *arg_domain_path, *arg_database_date, *arg_database_name;
 
     lit_hosting = argument_create_literal("hosting", NULL);
     lit_host_list = argument_create_literal("list", hosting_list);
@@ -783,6 +827,7 @@ static void hosting_regcomm(graph_t *g)
 
     lit_db = argument_create_literal("database", NULL);
     lit_db_list = argument_create_literal("list", hosting_database_list);
+    lit_db_dump = argument_create_literal("dump", hosting_database_dump);
 
     lit_user = argument_create_literal("user", NULL);
     lit_user_list = argument_create_literal("list", hosting_user_list);
@@ -790,17 +835,25 @@ static void hosting_regcomm(graph_t *g)
     lit_cron = argument_create_literal("cron", NULL);
     lit_cron_list = argument_create_literal("list", hosting_cron_list);
 
-    arg_path = argument_create_string(offsetof(hosting_argument_t, path), "<path>", NULL, NULL);
-    arg_domain = argument_create_string(offsetof(hosting_argument_t, domain), "<domain>", NULL, NULL);
+    arg_domain_path = argument_create_string(offsetof(hosting_argument_t, domain_path), "<path>", NULL, NULL);
+    arg_domain_name = argument_create_string(offsetof(hosting_argument_t, domain_name), "<domain>", NULL, NULL);
     arg_hosting = argument_create_string(offsetof(hosting_argument_t, service_name), "<hosting>", complete_hosting, NULL);
+    arg_database_name = argument_create_string(offsetof(hosting_argument_t, database_name), "<database>", NULL, NULL);
+    arg_database_date = argument_create_choices(offsetof(hosting_argument_t, database_date), "<date>", database_dates);
 
     graph_create_full_path(g, lit_hosting, lit_host_list, NULL);
 
+    // hosting ...
     graph_create_full_path(g, lit_hosting, arg_hosting, lit_domain, lit_domain_list, NULL);
-    graph_create_full_path(g, lit_hosting, arg_hosting, lit_domain, arg_domain, lit_domain_delete, NULL);
-    graph_create_full_path(g, lit_hosting, arg_hosting, lit_domain, arg_domain, lit_domain_add, arg_path, NULL);
+    // hosting <hosting> domain ...
+    graph_create_full_path(g, lit_hosting, arg_hosting, lit_domain, arg_domain_name, lit_domain_delete, NULL);
+    graph_create_full_path(g, lit_hosting, arg_hosting, lit_domain, arg_domain_name, lit_domain_add, arg_domain_path, NULL);
+    // hosting <hosting> database ...
     graph_create_full_path(g, lit_hosting, arg_hosting, lit_db, lit_db_list, NULL);
+    graph_create_full_path(g, lit_hosting, arg_hosting, lit_db, arg_database_name, lit_db_dump, arg_database_date, NULL);
+    // hosting <hosting> user ...
     graph_create_full_path(g, lit_hosting, arg_hosting, lit_user, lit_user_list, NULL);
+    // hosting <hosting> cron ...
     graph_create_full_path(g, lit_hosting, arg_hosting, lit_cron, lit_cron_list, NULL);
 }
 
