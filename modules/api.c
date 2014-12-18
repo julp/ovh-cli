@@ -580,11 +580,10 @@ const char *request_consumer_key(const char *account, const char *password, time
     // POST /auth/credential
     {
         xmlDocPtr doc;
-        String *buffer;
         xmlNodePtr root;
+        json_document_t *reqdoc;
 
         {
-            json_document_t *doc;
             json_value_t root, rules;
 
 #define JSON_ADD_RULE(parent, method, value) \
@@ -597,11 +596,10 @@ const char *request_consumer_key(const char *account, const char *password, time
         json_array_push(parent, object); \
     } while (0);
 
-            buffer = string_new();
-            doc = json_document_new();
+            reqdoc = json_document_new();
             root = json_object();
             rules = json_array();
-            json_document_set_root(doc, root);
+            json_document_set_root(reqdoc, root);
             json_object_set_property(root, "accessRules", rules);
 //             json_object_set_property(root, "redirection", json_string("https://www.mywebsite.com/"));
             JSON_ADD_RULE(rules, "GET", "/*");
@@ -613,24 +611,15 @@ const char *request_consumer_key(const char *account, const char *password, time
             JSON_ADD_RULE(rules, "PUT", "/dedicated/server/*");
             JSON_ADD_RULE(rules, "POST", "/dedicated/server/*");
             JSON_ADD_RULE(rules, "DELETE", "/dedicated/server/*");
-            json_document_serialize(
-                doc,
-                buffer,
-#ifdef DEBUG
-                JSON_OPT_PRETTY_PRINT
-#else
-                0
-#endif /* DEBUG */
-            );
-            json_document_destroy(doc);
 
 #undef JSON_ADD_RULE
         }
-        req = request_new(REQUEST_FLAG_NONE, HTTP_POST, buffer->ptr, API_BASE_URL "/auth/credential");
+        req = request_new(REQUEST_FLAG_NONE | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, API_BASE_URL "/auth/credential");
         REQUEST_XML_RESPONSE_WANTED(req);
         request_add_header(req, "Content-type: application/json");
         request_add_header(req, "X-Ovh-Application: " APPLICATION_KEY);
         request_execute(req, RESPONSE_XML, (void **) &doc, error); // TODO: check returned value
+        json_document_destroy(reqdoc);
 #if 0
         puts("====================");
         xmlDocFormatDump(stdout, doc, 1);
@@ -645,7 +634,6 @@ const char *request_consumer_key(const char *account, const char *password, time
         validationUrl = xmlGetPropAsString(root, "validationUrl");
         xmlFreeDoc(doc);
         request_destroy(req);
-        string_destroy(buffer);
     }
     if (NULL == password || '\0' == *password) {
         error_set(
