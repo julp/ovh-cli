@@ -172,8 +172,9 @@ static bool account_save(error_t **error)
             char buffer[512];
 
             SET_PROP(node, "consumer_key", account->consumer_key);
-            if (snprintf(buffer, ARRAY_SIZE(buffer), "%lld", (long long) account->expires_at) >= ARRAY_SIZE(buffer)) {
-                error_set(error, WARN, "buffer overflow");
+            ret = snprintf(buffer, ARRAY_SIZE(buffer), "%lld", (long long) account->expires_at);
+            if (ret < 0 || ((size_t) ret) >= ARRAY_SIZE(buffer)) {
+                error_set(error, WARN, "error or buffer overflow");
                 return FALSE;
             }
             SET_PROP(node, "expires_at", buffer);
