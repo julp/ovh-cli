@@ -465,7 +465,7 @@ void string_formatted(String *str, const char *format, ...) /* PRINTF(2, 3) */
         va_end(args);
         va_start(args, format);
         ret = vsnprintf(str->ptr, str->allocated, format, args);
-        assert(ret <= str->allocated);
+        assert(ret > 0 && ((size_t) ret) <= str->allocated);
         va_end(args);
     } else {
         va_end(args);
