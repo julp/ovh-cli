@@ -1390,7 +1390,18 @@ INITIALIZER_P(json_test)
     UT("[9223372036854775808]", TRUE);  /* INT64_MAX     */
 # endif
 #elif 32 == __WORDSIZE
-    // TODO
+    UT("[-2147483649]", TRUE); /* INT32_MIN - 1 => double */
+    UT("[-2147483648]", TRUE); /* INT32_MIN     => double */
+    UT("[-2147483647]", TRUE); /* INT32_MIN + 1 => double  */
+    UT("[2147483648]", TRUE); /* INT32_MAX + 1 => double */
+    UT("[2147483647]", TRUE); /* INT32_MAX     => double */
+    UT("[2147483646]", TRUE); /* INT32_MAX - 1 => double  */
+    UT("[-1073741825]", TRUE); /* JSON_MIN_SIGNED - 1 => double */
+    UT("[-1073741824]", TRUE); /* JSON_MIN_SIGNED     => int64_t */
+    UT("[-1073741823]", TRUE); /* JSON_MIN_SIGNED + 1 => int64_t */
+    UT("[1073741824]", TRUE); /* JSON_MAX_SIGNED + 1 => double */
+    UT("[1073741823]", TRUE); /* JSON_MAX_SIGNED     => int64_t */
+    UT("[1073741822]", TRUE); /* JSON_MAX_SIGNED - 1 => int64_t */
 #else
 # error undefined/unexpected __WORDSIZE
 #endif
