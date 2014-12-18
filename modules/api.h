@@ -34,10 +34,6 @@ void request_destroy(request_t *);
 long request_response_status(request_t *);
 request_t *request_new(uint32_t, http_method_t, const void *, const char *, ...);
 request_t *request_vnew(uint32_t, http_method_t, const void *, const char *, va_list);
-request_t *request_get(uint32_t, const char *, ...) PRINTF(2, 3) DEPRECATED;
-request_t *request_delete(uint32_t, const char *, ...) PRINTF(2, 3) DEPRECATED;
-request_t *request_put(uint32_t, const char *, const char *, ...) PRINTF(3, 4) DEPRECATED;
-request_t *request_post(uint32_t, const char *, const char *, ...) PRINTF(3, 4) DEPRECATED;
 
 bool request_execute(request_t *, int, void **, error_t **);
 

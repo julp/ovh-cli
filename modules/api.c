@@ -353,54 +353,6 @@ void request_destroy(request_t *req)
     }
 }
 
-request_t *request_get(uint32_t flags, const char *url, ...) /* PRINTF(2, 3) DEPRECATED */
-{
-    va_list args;
-    request_t *req;
-
-    va_start(args, url);
-    req = request_vnew(flags, HTTP_GET, NULL, url, args);
-    va_end(args);
-
-    return req;
-}
-
-request_t *request_post(uint32_t flags, const char *data, const char *url, ...) /* PRINTF(3, 4) DEPRECATED */
-{
-    va_list args;
-    request_t *req;
-
-    va_start(args, url);
-    req = request_vnew(flags, HTTP_POST, data, url, args);
-    va_end(args);
-
-    return req;
-}
-
-request_t *request_put(uint32_t flags, const char *data, const char *url, ...) /* PRINTF(3, 4) DEPRECATED */
-{
-    va_list args;
-    request_t *req;
-
-    va_start(args, url);
-    req = request_vnew(flags, HTTP_PUT, data, url, args);
-    va_end(args);
-
-    return req;
-}
-
-request_t *request_delete(uint32_t flags, const char *url, ...) /* PRINTF(2, 3) DEPRECATED */
-{
-    va_list args;
-    request_t *req;
-
-    va_start(args, url);
-    req = request_vnew(flags, HTTP_DELETE, NULL, url, args);
-    va_end(args);
-
-    return req;
-}
-
 void request_add_post_field(request_t *req, const char *name, const char *value)
 {
     /**
