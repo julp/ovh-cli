@@ -285,11 +285,11 @@ int main(int argc, char **argv)
             if (convert_string_local_to_utf8(line, count, &utf8_line, NULL, &error)) {
                 args_len = str_split(utf8_line, &args);
                 graph_run_command(g, args_len, (const char **) args, &error);
+                convert_string_free(line, &utf8_line);
+                free(args[0]);
+                free(args);
             }
             print_error(error);
-            convert_string_free(line, &utf8_line);
-            free(args[0]);
-            free(args);
             history(hist, &ev, H_ENTER, line);
         }
         history_end(hist);
