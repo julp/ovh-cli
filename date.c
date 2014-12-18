@@ -54,7 +54,6 @@ bool parse_duration(const char *duration, time_t *value)
                 case ' ':
                     ++p;
                     continue;
-                    break;
                 case '0':
                 case '1':
                 case '2':
