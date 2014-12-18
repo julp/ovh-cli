@@ -88,9 +88,12 @@ ovh account <nickhandle> password "" <consumer key>
 * hosting
     * list => list all hosted website
     * \<hosting>
-        * user list => list (FTP & SSH?) users of *hosting*
+        * user list => list (FTP & SSH) users of *hosting*
         * cron list => list cron jobs for *hosting*
         * domain list => list domains associated to *hosting*
+        * \<domain>
+            * delete => unlink *domain* to *hosting*
+            * add \<path> => link *domain* to *hosting* through *path*
         * database list => list databases associated to *hosting*
 * me => display personal informations associated to the current account (name, address, etc)
 * help
