@@ -511,8 +511,7 @@ static const char long_string[] = \
 
 // can't use constructor, output_encoding (modules/conv.c is not yet set)
 // INITIALIZER_DECL(table_test);
-// INITIALIZER_P(table_test)
-void table_test(void)
+INITIALIZER_P(table_test)
 {
     table_t *t;
 
