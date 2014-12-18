@@ -547,35 +547,23 @@ static command_status_t dedicated_boot_set(void *arg, error_t **error)
         boot_t *b;
 
         if ((success = hashtable_get(s->boots, args->boot_name, (void **) &b))) {
-            String *buffer;
             request_t *req;
+            json_document_t *reqdoc;
 
             // data
             {
                 json_value_t root;
-                json_document_t *doc;
 
-                buffer = string_new();
-                doc = json_document_new();
+                reqdoc = json_document_new();
                 root = json_object();
                 json_object_set_property(root, "bootId", json_integer(b->id));
-                json_document_set_root(doc, root);
-                json_document_serialize(
-                    doc,
-                    buffer,
-#ifdef DEBUG
-                    JSON_OPT_PRETTY_PRINT
-#else
-                    0
-#endif /* DEBUG */
-                );
-                json_document_destroy(doc);
+                json_document_set_root(reqdoc, root);
             }
             // request
-            req = request_new(REQUEST_FLAG_SIGN, HTTP_PUT, buffer->ptr, API_BASE_URL "/dedicated/server/%s", args->server_name);
+            req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_PUT, reqdoc, API_BASE_URL "/dedicated/server/%s", args->server_name);
             success = request_execute(req, RESPONSE_IGNORE, NULL, error);
             request_destroy(req);
-            string_destroy(buffer);
+            json_document_destroy(reqdoc);
             error_set(error, INFO, _("This new boot will only be effective on the next (re)boot of '%s'"), args->server_name);
         } else {
             error_set(error, NOTICE, _("Any boot named '%s' was found for server '%s'"), args->boot_name, args->server_name);
@@ -624,32 +612,17 @@ static command_status_t dedicated_reverse_set_delete(void *arg, bool set, error_
     if ((success = (s != NULL))) {
         if ((success = fetch_ip_block(s->ip, &ip, error))) {
             request_t *req;
+            json_document_t *doc;
 
             if (set) {
-                String *buffer;
+                json_value_t root;
 
-                {
-                    json_value_t root;
-                    json_document_t *doc;
-
-                    buffer = string_new();
-                    doc = json_document_new();
-                    root = json_object();
-                    json_object_set_property(root, "ipReverse", json_string(s->ip));
-                    json_object_set_property(root, "reverse", json_string(args->reverse));
-                    json_document_set_root(doc, root);
-                    json_document_serialize(
-                        doc,
-                        buffer,
-#ifdef DEBUG
-                        JSON_OPT_PRETTY_PRINT
-#else
-                        0
-#endif /* DEBUG */
-                    );
-                    json_document_destroy(doc);
-                }
-                req = request_new(REQUEST_FLAG_SIGN, HTTP_POST, buffer->ptr, API_BASE_URL "/ip/%s/reverse", ip);
+                doc = json_document_new();
+                root = json_object();
+                json_object_set_property(root, "ipReverse", json_string(s->ip));
+                json_object_set_property(root, "reverse", json_string(args->reverse));
+                json_document_set_root(doc, root);
+                req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, doc, API_BASE_URL "/ip/%s/reverse", ip);
             } else {
                 req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/ip/%s/reverse/%s", ip, s->ip);
             }
@@ -658,6 +631,7 @@ static command_status_t dedicated_reverse_set_delete(void *arg, bool set, error_
             if (success) {
                 FREE(s, reverse);
                 if (set) {
+                    json_document_destroy(doc);
                     s->reverse = strdup(args->reverse);
                 } else {
                     INIT(s, reverse);
