@@ -404,40 +404,28 @@ static command_status_t record_add(void *arg, error_t **error)
     assert(NULL != args->domain);
     assert(NULL != args->record);
     {
-        String *buffer;
+        json_document_t *reqdoc;
 
         // data
         {
             json_value_t root;
-            json_document_t *doc;
 
-            buffer = string_new();
-            doc = json_document_new();
+            reqdoc = json_document_new();
             root = json_object();
             json_object_set_property(root, "target", json_string(args->value));
             json_object_set_property(root, "fieldType", json_string(domain_record_types[args->type]));
 //             if ('\0' != *subdomain)
                 json_object_set_property(root, "subDomain", json_string(args->record));
-            json_document_set_root(doc, root);
-            json_document_serialize(
-                doc,
-                buffer,
-#ifdef DEBUG
-                JSON_OPT_PRETTY_PRINT
-#else
-                0
-#endif /* DEBUG */
-            );
-            json_document_destroy(doc);
+            json_document_set_root(reqdoc, root);
         }
         // request
         {
             request_t *req;
 
-            req = request_new(REQUEST_FLAG_SIGN, HTTP_POST, buffer->ptr, API_BASE_URL "/domain/zone/%s/record", args->domain);
+            req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, API_BASE_URL "/domain/zone/%s/record", args->domain);
             request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
             request_destroy(req);
-            string_destroy(buffer);
+            json_document_destroy(reqdoc);
         }
     }
     // result
@@ -486,7 +474,7 @@ static command_status_t record_delete(void *arg, error_t **error)
                 record_t *r;
 
                 r = iterator_current(&it, NULL);
-                if (0 == strcmp(r->name, args->record)) { // TODO: strcmp_l? type?
+                if (r->name[0] == args->record[0] && 0 == strcmp(r->name, args->record)) { // TODO: strcmp_l? type?
                     ++matches;
                     match = r;
                 }
@@ -501,10 +489,10 @@ static command_status_t record_delete(void *arg, error_t **error)
                     break;
                 }
                 case 0:
-                    error_set(error, WARN, "Abort, no record match '%s'\n", args->record);
+                    error_set(error, WARN, "Abort, no record match '%s'", args->record);
                     return COMMAND_FAILURE;
                 default:
-                    error_set(error, WARN, "Abort, more than one record match '%s'\n", args->record);
+                    error_set(error, WARN, "Abort, more than one record match '%s'", args->record);
                     return COMMAND_FAILURE;
             }
         }
