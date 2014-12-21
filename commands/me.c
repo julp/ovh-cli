@@ -276,9 +276,9 @@ static command_status_t me_credential_list(void *UNUSED(arg), error_t **error)
                     expiration,
                     lastUse,
                     FALSE,
-                    credential_status[credentialStatus],
+                    _(credential_status[credentialStatus]),
                     stringified_rules,
-                    NULL == app ? NULL : application_status[app->status],
+                    NULL == app ? NULL : _(application_status[app->status]),
                     NULL == app ? NULL : app->name,
                     NULL == app ? NULL : app->description
                 );
