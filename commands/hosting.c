@@ -398,6 +398,7 @@ static command_status_t hosting_domain_create(void *arg, error_t **error)
 
         root = json_document_get_root(doc);
         JSON_GET_PROP_INT(root, "id", task_id);
+        json_document_destroy(doc);
         if (hashtable_get(ss->services, args->service_name, (void **) &s)) {
             hashtable_put(s->domains, args->domain_name, strdup(args->domain_path), NULL); // check domain isn't already attached? (else we have a leak on previous path in hashtable?)
         }
@@ -439,6 +440,7 @@ static command_status_t hosting_domain_delete(void *arg, error_t **error)
 
             root = json_document_get_root(doc);
             JSON_GET_PROP_INT(root, "id", task_id);
+            json_document_destroy(doc);
             if (hashtable_get(ss->services, args->service_name, (void **) &s)) {
                 hashtable_delete(s->domains, args->domain_name, TRUE);
             }
@@ -676,6 +678,7 @@ static command_status_t hosting_user_delete(void *arg, error_t **error)
 
             root = json_document_get_root(doc);
             JSON_GET_PROP_INT(root, "id", task_id);
+            json_document_destroy(doc);
             if (hashtable_get(ss->services, args->service_name, (void **) &s)) {
                 hashtable_delete(s->domains, args->domain_name, TRUE);
             }
@@ -809,6 +812,7 @@ static command_status_t hosting_database_dump(void *arg, error_t **error)
 
         root = json_document_get_root(doc);
         JSON_GET_PROP_INT(root, "id", task_id);
+        json_document_destroy(doc);
         printf("Request to dump database '%s' for hosting '%s' was successfully registered as task #%" PRIi64 "\n", args->database_name, args->service_name, task_id);
     }
 
@@ -843,6 +847,7 @@ static command_status_t hosting_database_delete(void *arg, error_t **error)
 
             root = json_document_get_root(doc);
             JSON_GET_PROP_INT(root, "id", task_id);
+            json_document_destroy(doc);
             printf("Request to drop database '%s' for hosting '%s' was successfully registered as task #%" PRIi64 "\n", args->database_name, args->service_name, task_id);
         }
     }
