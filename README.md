@@ -89,6 +89,8 @@ ovh account <nickhandle> password "" <consumer key>
     * list => list all hosted website
     * \<hosting>
         * user list => list (FTP & SSH) users of *hosting*
+        * \<user>
+            * delete => remove *user* from *hosting*
         * cron list => list cron jobs for *hosting*
         * domain list => list domains associated to *hosting*
         * \<domain>
