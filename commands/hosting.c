@@ -22,6 +22,7 @@
 // crons/databases/modules/users
 
 typedef struct {
+    char *user_name;
     char *service_name;
     char *domain_path;
     char *domain_name;
@@ -648,12 +649,42 @@ static command_status_t hosting_user_update(void *arg, error_t **error)
 {
     //
 }
+#endif
 
 static command_status_t hosting_user_delete(void *arg, error_t **error)
 {
-    //
+    bool success;
+    service_set_t *ss;
+    hosting_argument_t *args;
+
+    success = TRUE;
+    FETCH_ACCOUNT_HOSTING(ss);
+    args = (hosting_argument_t *) arg;
+    assert(NULL != args->user_name);
+    assert(NULL != args->service_name);
+    if (confirm(_("Confirm deletion of user '%s' for hosting '%s'"), args->user_name, args->service_name)) {
+        request_t *req;
+        json_document_t *doc;
+
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/hosting/web/%s/user/%s", args->service_name, args->user_name);
+        success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+        request_destroy(req);
+        if (success) {
+            service_t *s;
+            int64_t task_id;
+            json_value_t root;
+
+            root = json_document_get_root(doc);
+            JSON_GET_PROP_INT(root, "id", task_id);
+            if (hashtable_get(ss->services, args->service_name, (void **) &s)) {
+                hashtable_delete(s->domains, args->domain_name, TRUE);
+            }
+            printf("Request to delete user '%s' to hosting '%s' was successfully registered as task #%" PRIi64 "\n", args->user_name, args->service_name, task_id);
+        }
+    }
+
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
-#endif
 
 #if 0
 mode: _("besteffort"), _("classic")
@@ -798,19 +829,22 @@ static command_status_t hosting_database_delete(void *arg, error_t **error)
     json_document_t *doc;
     hosting_argument_t *args;
 
+    success = TRUE;
     args = (hosting_argument_t *) arg;
     assert(NULL != args->service_name);
     assert(NULL != args->database_name);
-    req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/hosting/web/%s/database/%s", args->service_name, args->database_name);
-    success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
-    request_destroy(req);
-    if (success) {
-        int64_t task_id;
-        json_value_t root;
+    if (confirm(_("Confirm drop database '%s' for hosting '%s'"), args->database_name, args->service_name)) {
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/hosting/web/%s/database/%s", args->service_name, args->database_name);
+        success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+        request_destroy(req);
+        if (success) {
+            int64_t task_id;
+            json_value_t root;
 
-        root = json_document_get_root(doc);
-        JSON_GET_PROP_INT(root, "id", task_id);
-        printf("Request to drop database '%s' for hosting '%s' was successfully registered as task #%" PRIi64 "\n", args->database_name, args->service_name, task_id);
+            root = json_document_get_root(doc);
+            JSON_GET_PROP_INT(root, "id", task_id);
+            printf("Request to drop database '%s' for hosting '%s' was successfully registered as task #%" PRIi64 "\n", args->database_name, args->service_name, task_id);
+        }
     }
 
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
@@ -832,10 +866,11 @@ static void hosting_regcomm(graph_t *g)
 {
     argument_t *lit_host_list;
     argument_t *lit_hosting, *lit_cron, *lit_user, *lit_db, *lit_domain;
-    argument_t *lit_cron_list, *lit_user_list;
+    argument_t *lit_cron_list;
+    argument_t * lit_user_list, *lit_user_delete;
     argument_t *lit_db_list, *lit_db_dump, *lit_db_delete;
     argument_t *lit_domain_list, *lit_domain_add, *lit_domain_delete;
-    argument_t *arg_hosting, *arg_domain_name, *arg_domain_path, *arg_database_date, *arg_database_name;
+    argument_t *arg_hosting, *arg_domain_name, *arg_domain_path, *arg_database_date, *arg_database_name, *arg_user_name;
 
     lit_hosting = argument_create_literal("hosting", NULL);
     lit_host_list = argument_create_literal("list", hosting_list);
@@ -852,10 +887,12 @@ static void hosting_regcomm(graph_t *g)
 
     lit_user = argument_create_literal("user", NULL);
     lit_user_list = argument_create_literal("list", hosting_user_list);
+    lit_user_delete = argument_create_literal("delete", hosting_user_delete);
 
     lit_cron = argument_create_literal("cron", NULL);
     lit_cron_list = argument_create_literal("list", hosting_cron_list);
 
+    arg_user_name = argument_create_string(offsetof(hosting_argument_t, user_name), "<user>", NULL, NULL);
     arg_domain_path = argument_create_string(offsetof(hosting_argument_t, domain_path), "<path>", NULL, NULL);
     arg_domain_name = argument_create_string(offsetof(hosting_argument_t, domain_name), "<domain>", NULL, NULL);
     arg_hosting = argument_create_string(offsetof(hosting_argument_t, service_name), "<hosting>", complete_hosting, NULL);
@@ -875,6 +912,7 @@ static void hosting_regcomm(graph_t *g)
     graph_create_full_path(g, lit_hosting, arg_hosting, lit_db, arg_database_name, lit_db_dump, arg_database_date, NULL);
     // hosting <hosting> user ...
     graph_create_full_path(g, lit_hosting, arg_hosting, lit_user, lit_user_list, NULL);
+    graph_create_full_path(g, lit_hosting, arg_hosting, lit_user, arg_user_name, lit_user_delete, NULL);
     // hosting <hosting> cron ...
     graph_create_full_path(g, lit_hosting, arg_hosting, lit_cron, lit_cron_list, NULL);
 }
