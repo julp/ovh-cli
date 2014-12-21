@@ -4,6 +4,7 @@
 
 #include "common.h"
 #include "table.h"
+#include "date.h"
 #include "modules/conv.h"
 #include "struct/dptrarray.h"
 
@@ -67,6 +68,7 @@ static int console_width(void)
 
 #include <wchar.h>
 #include <locale.h>
+// TODO: if the string contains \n: return length of the longest line?
 static bool cplen(const char *string, size_t *string_len, error_t **error)
 {
     size_t cp_len;
@@ -207,6 +209,27 @@ print_error(error);
                 }
                 break;
             }
+            case TABLE_TYPE_DATETIME:
+            {
+                struct tm v;
+                char buffer[512];
+                struct tm ltm = { 0 };
+
+                v = va_arg(ap, struct tm);
+                if (0 == memcmp(&v, &ltm, sizeof(ltm))) {
+                    r->values[i].v = (uintptr_t) "-";
+                    r->values[i].l = STR_LEN("-");
+                } else {
+                    r->values[i].l = strftime(buffer, ARRAY_SIZE(buffer), "%x %X", &v);
+                    assert(r->values[i].l > 0);
+                    r->values[i].v = (uintptr_t) strdup(buffer);
+                    r->values[i].f = TRUE;
+                }
+                if (r->values[i].l > t->columns[i].max_len) {
+                    t->columns[i].len = t->columns[i].min_len = t->columns[i].max_len = r->values[i].l;
+                }
+                break;
+            }
             default:
                 assert(FALSE);
                 break;
@@ -235,38 +258,46 @@ typedef struct {
     const char *part;
 } break_t;
 
+#include "nearest_power.h"
 static size_t string_break(size_t max_len, const char *string, size_t string_len, break_t **breaks)
 {
-    size_t i, breaks_count;
+    size_t i, breaks_len, breaks_size;
 
     i = 0;
-    // NOTE: string_len unit is character
-    breaks_count = (string_len + max_len - 1) / max_len;
-    *breaks = mem_new_n(**breaks, breaks_count);
-    if (breaks_count > 1) {
+    // NOTE: string_len unit is "character"
+    breaks_len = (string_len + max_len - 1) / max_len;
+    breaks_size = nearest_power(breaks_len, 8);
+    *breaks = mem_new_n(**breaks, breaks_size);
+    if (breaks_len <= 1 && NULL == strchr(string, '\n')) {
+        (*breaks)[i].charlen = string_len;
+        (*breaks)[i++].part = string; // don't free breaks[0].part if string == breaks[0].part (or 1 == breaks_count)
+    } else {
         const char *p;
         size_t start, end; // byte index
 
         p = string;
         start = end = 0;
-        while (i < breaks_count) {
+        while ('\0' != *p) {
+            bool forced;
             size_t cp_len, cp_count;
 
-            (*breaks)[i].charlen = 0;
-            for (cp_count = 0; cp_count < max_len && (cp_len = mblen(p, MB_CUR_MAX)) > 0; cp_count++) {
+            forced = FALSE;
+            if (i >= breaks_size) {
+                breaks_size <<= 1;
+                *breaks = mem_renew(*breaks, **breaks, breaks_size);
+            }
+            for (cp_count = 0; !forced && cp_count < max_len && (cp_len = mblen(p, MB_CUR_MAX)) > 0; cp_count++) { // TODO: < 0 with size_t can't work
+                forced = 1 == cp_len && '\n' == *p;
                 p += cp_len;
                 end += cp_len;
-                ++(*breaks)[i].charlen;
             }
-            (*breaks)[i++].part = strndup(string + start, end - start);
+            (*breaks)[i].charlen = cp_count - forced;
+            (*breaks)[i++].part = strndup(string + start, end - start - forced);
             start = end;
         }
-    } else {
-        (*breaks)[i].charlen = string_len;
-        (*breaks)[i++].part = string; // don't free breaks[0].part if string == breaks[0].part (or 1 == breaks_count)
     }
 
-    return breaks_count;
+    return i;
 }
 
 static int strcmpp(const void *p1, const void *p2, void *arg)
@@ -390,6 +421,7 @@ void table_display(table_t *t, uint32_t flags)
                     break;
                 case TABLE_TYPE_INT:
                 case TABLE_TYPE_BOOLEAN:
+                case TABLE_TYPE_DATETIME:
                     /* NOP */
                     break;
                 default:
@@ -419,6 +451,14 @@ void table_display(table_t *t, uint32_t flags)
                             putchar(' ');
                             fputs(t->false_true_string[r->values[i].v], stdout);
                             for (k = t->false_true_len[r->values[i].v]; k < t->columns[i].len; k++) {
+                                putchar(' ');
+                            }
+                            fputs(" |", stdout);
+                            break;
+                        case TABLE_TYPE_DATETIME:
+                            putchar(' ');
+                            fputs(r->values[i].v, stdout);
+                            for (k = r->values[i].l; k < t->columns[i].len; k++) {
                                 putchar(' ');
                             }
                             fputs(" |", stdout);
@@ -521,6 +561,7 @@ INITIALIZER_P(table_test)
     table_store(t, 3, "mno", long_string, "pqr");
     table_store(t, 4, "stu", long_string, long_string);
     table_store(t, 5, "é", "é", "é");
+    table_store(t, 6, "é", "é", "abc\ndéf");
     table_sort(t, 1);
 //     table_sort(t, 0);
     table_display(t, TABLE_FLAG_NONE);

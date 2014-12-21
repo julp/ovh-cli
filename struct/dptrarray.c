@@ -221,7 +221,7 @@ void dptrarray_sort(DPtrArray *this, CmpFuncArg cmpfn, void *arg)
     assert(NULL != this);
     assert(NULL != cmpfn);
 
-#ifdef __BSD__
+#ifdef BSD
     qsort_r(this->data, this->length, sizeof(*this->data), arg, cmpfn);
 #else
     qsort_r(this->data, this->length, sizeof(*this->data), cmpfn, arg);

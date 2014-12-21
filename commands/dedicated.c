@@ -407,7 +407,7 @@ static command_status_t dedicated_check(void *UNUSED(arg), error_t **error)
 
                 root = json_document_get_root(doc);
                 if (json_object_get_property(root, "expiration", &expiration)) {
-                    if ((success = date_parse(json_get_string(expiration), &server_expiration, error))) {
+                    if ((success = date_parse_simple(json_get_string(expiration), NULL, &server_expiration, error))) {
                         int diff_days;
 
                         diff_days = date_diff_in_days(server_expiration, now);

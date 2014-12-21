@@ -1,17 +1,15 @@
-#include <limits.h>
 #include <string.h>
 #include <ctype.h>
 #include <stdio.h>
 
 #include "struct/xtring.h"
+#include "nearest_power.h"
 
 #ifdef DEBUG
 # define STRING_INITIAL_LENGTH 1 /* Voluntarily small for development/test */
 #else
 # define STRING_INITIAL_LENGTH 4096
 #endif /* DEBUG */
-
-#define SIZE_MAX_2 (SIZE_MAX << (sizeof(size_t) * CHAR_BIT - 1))
 
 #define STRING_INIT_LEN(/*String **/ str, /*size_t*/ length) \
     do {                                                     \
@@ -23,27 +21,12 @@
 
 /* ==================== private helpers for growing up ==================== */
 
-static inline size_t nearest_power(size_t requested_length)
-{
-    if (requested_length > SIZE_MAX_2) {
-        return SIZE_MAX;
-    } else {
-        int i = 1;
-        requested_length = MAX(requested_length, STRING_INITIAL_LENGTH);
-        while ((1UL << i) < requested_length) {
-            i++;
-        }
-
-        return (1UL << i);
-    }
-}
-
 static void _string_maybe_expand_of(String *str, size_t additional_length)
 {
     assert(NULL != str);
 
     if (str->len + additional_length >= str->allocated) {
-        str->allocated = nearest_power(str->len + additional_length);
+        str->allocated = nearest_power(str->len + additional_length, STRING_INITIAL_LENGTH);
         str->ptr = mem_renew(str->ptr, *str->ptr, str->allocated + 1);
     }
 }
@@ -53,7 +36,7 @@ static void _string_maybe_expand_to(String *str, size_t total_length)
     assert(NULL != str);
 
     if (total_length >= str->allocated) {
-        str->allocated = nearest_power(total_length);
+        str->allocated = nearest_power(total_length, STRING_INITIAL_LENGTH);
         str->ptr = mem_renew(str->ptr, *str->ptr, str->allocated + 1);
     }
 }

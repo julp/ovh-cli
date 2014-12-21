@@ -41,13 +41,16 @@ enum {
 #define json_true ((json_value_t) JSON_CONSTANT_TRUE)
 #define json_false ((json_value_t) JSON_CONSTANT_FALSE)
 
-#define JSON_GET_PROP_STRING(object, property, lvalue) \
+#define JSON_GET_PROP_STRING_EX(object, property, lvalue, copy) \
     do { \
         json_value_t v; \
  \
         json_object_get_property(object, property, &v); \
-        lvalue = json_null == v ? NULL : strdup(json_get_string(v)); \
+        lvalue = json_null == v ? NULL : (copy ? strdup(json_get_string(v)) : (char *) json_get_string(v)); \
     } while (0);
+
+#define JSON_GET_PROP_STRING(object, property, lvalue) \
+    JSON_GET_PROP_STRING_EX(object, property, lvalue, TRUE)
 
 #define JSON_GET_PROP_INT(object, property, lvalue) \
     do { \

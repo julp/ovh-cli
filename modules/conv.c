@@ -6,7 +6,7 @@
 
 #include "common.h"
 
-static const char *input_encoding, *output_encoding;
+static const char *input_encoding, *output_encoding = "UTF-8";
 
 static bool convert_ctor(void)
 {

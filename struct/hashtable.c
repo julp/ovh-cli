@@ -2,6 +2,7 @@
 #include <ctype.h>
 
 #include "hashtable.h"
+#include "nearest_power.h"
 
 typedef struct _HashNode {
     hash_t hash;
@@ -30,21 +31,6 @@ struct _HashTable {
 #define MIN_SIZE 8
 
 // static const HashNode NullHashNode = { 0, NULL, NULL, NULL, NULL, NULL, NULL };
-
-static inline uint32_t nearest_power(size_t requested, size_t minimal)
-{
-    if (requested > 0x80000000) {
-        return UINT32_MAX;
-    } else {
-        int i = 1;
-        requested = MAX(requested, minimal);
-        while ((1U << i) < requested) {
-            i++;
-        }
-
-        return (1U << i);
-    }
-}
 
 hash_t value_hash(const void *k)
 {
@@ -214,7 +200,7 @@ static bool hashtable_put_real(HashTable *this, uint32_t flags, hash_t h, void *
     index = h & this->mask;
     n = this->nodes[index];
     if (NULL == this->hf) {
-        key = &h;
+        key = /*&*/h;
     }
     while (NULL != n) {
         if (n->hash == h && this->ef(key, n->key)) {
@@ -234,7 +220,7 @@ static bool hashtable_put_real(HashTable *this, uint32_t flags, hash_t h, void *
     }
     n = mem_new(*n);
     if (NULL == this->hf) {
-        n->key = &n->hash;
+        n->key = /*&n->has*/h;
     } else if (NULL == this->key_duper) {
         n->key = key;
     } else {
@@ -291,7 +277,7 @@ bool hashtable_quick_get(HashTable *this, hash_t h, const void *key, void **valu
     index = h & this->mask;
     n = this->nodes[index];
     if (NULL == this->hf) {
-        key = &h;
+        key = /*&*/h;
     }
     while (NULL != n) {
         if (n->hash == h && this->ef(key, n->key)) {

@@ -10,6 +10,7 @@ typedef enum {
     TABLE_TYPE_ENUM,
     TABLE_TYPE_STRING,
     TABLE_TYPE_BOOLEAN,
+    TABLE_TYPE_DATETIME
 } column_type_t;
 
 typedef struct table_t table_t;
