@@ -457,7 +457,7 @@ void table_display(table_t *t, uint32_t flags)
                             break;
                         case TABLE_TYPE_DATETIME:
                             putchar(' ');
-                            fputs(r->values[i].v, stdout);
+                            fputs((const char *) r->values[i].v, stdout);
                             for (k = r->values[i].l; k < t->columns[i].len; k++) {
                                 putchar(' ');
                             }
