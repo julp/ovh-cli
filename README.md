@@ -95,6 +95,8 @@ ovh account <nickhandle> password "" <consumer key>
             * delete => unlink *domain* to *hosting*
             * add \<path> => link *domain* to *hosting* through *path*
         * database list => list databases associated to *hosting*
+        * \<database>
+            * delete => drop *database* associated to *hosting*
 * me => display personal informations associated to the current account (name, address, etc)
 * credentials
     * list => list all credentials used to connect to any OVH application with current account

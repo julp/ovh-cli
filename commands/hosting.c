@@ -789,12 +789,32 @@ static command_status_t hosting_database_create(void *arg, error_t **error)
 {
     //
 }
+#endif
 
 static command_status_t hosting_database_delete(void *arg, error_t **error)
 {
-    //
+    bool success;
+    request_t *req;
+    json_document_t *doc;
+    hosting_argument_t *args;
+
+    args = (hosting_argument_t *) arg;
+    assert(NULL != args->service_name);
+    assert(NULL != args->database_name);
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/hosting/web/%s/database/%s", args->service_name, args->database_name);
+    success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+    request_destroy(req);
+    if (success) {
+        int64_t task_id;
+        json_value_t root;
+
+        root = json_document_get_root(doc);
+        JSON_GET_PROP_INT(root, "id", task_id);
+        printf("Request to drop database '%s' for hosting '%s' was successfully registered as task #%" PRIi64 "\n", args->database_name, args->service_name, task_id);
+    }
+
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
-#endif
 
 static bool complete_hosting(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *UNUSED(data))
 {
@@ -813,7 +833,7 @@ static void hosting_regcomm(graph_t *g)
     argument_t *lit_host_list;
     argument_t *lit_hosting, *lit_cron, *lit_user, *lit_db, *lit_domain;
     argument_t *lit_cron_list, *lit_user_list;
-    argument_t *lit_db_list, *lit_db_dump;
+    argument_t *lit_db_list, *lit_db_dump, *lit_db_delete;
     argument_t *lit_domain_list, *lit_domain_add, *lit_domain_delete;
     argument_t *arg_hosting, *arg_domain_name, *arg_domain_path, *arg_database_date, *arg_database_name;
 
@@ -828,6 +848,7 @@ static void hosting_regcomm(graph_t *g)
     lit_db = argument_create_literal("database", NULL);
     lit_db_list = argument_create_literal("list", hosting_database_list);
     lit_db_dump = argument_create_literal("dump", hosting_database_dump);
+    lit_db_delete = argument_create_literal("delete", hosting_database_delete);
 
     lit_user = argument_create_literal("user", NULL);
     lit_user_list = argument_create_literal("list", hosting_user_list);
@@ -850,6 +871,7 @@ static void hosting_regcomm(graph_t *g)
     graph_create_full_path(g, lit_hosting, arg_hosting, lit_domain, arg_domain_name, lit_domain_add, arg_domain_path, NULL);
     // hosting <hosting> database ...
     graph_create_full_path(g, lit_hosting, arg_hosting, lit_db, lit_db_list, NULL);
+    graph_create_full_path(g, lit_hosting, arg_hosting, lit_db, arg_database_name, lit_db_delete, NULL);
     graph_create_full_path(g, lit_hosting, arg_hosting, lit_db, arg_database_name, lit_db_dump, arg_database_date, NULL);
     // hosting <hosting> user ...
     graph_create_full_path(g, lit_hosting, arg_hosting, lit_user, lit_user_list, NULL);
