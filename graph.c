@@ -322,20 +322,23 @@ void /*_*/graph_create_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, graph_node_t
 
 #define MAX_ALTERNATE_PATHS 12
 // créer tous les chemins/permutations possibles entre start et end (1 - 2 - 3, 1 - 3 - 2, 2 - 1 - 3, 2 - 3 - 1, 3 - 1 - 2, 3 - 2 - 1)
-void /*_*/graph_create_all_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, graph_node_t *start, graph_node_t *end, ...) /* SENTINEL */
+void /*_*/graph_create_all_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, graph_node_t *start, graph_node_t *end, ...)
 {
     va_list ap;
     size_t i, group_count, subpaths_count;
-    graph_node_t *parent, *node, *nodes[MAX_ALTERNATE_PATHS];
+    graph_node_t *real_end, *parent, *node, *starts[MAX_ALTERNATE_PATHS], *ends[MAX_ALTERNATE_PATHS];
 
     assert(NULL != start);
 
+    real_end = end;
     va_start(ap, end);
     subpaths_count = 0;
     while (0 != (group_count = va_arg(ap, int))) {
         assert(subpaths_count < MAX_ALTERNATE_PATHS);
-        nodes[subpaths_count++] = parent = va_arg(ap, graph_node_t *);
-        assert(NULL != parent);
+        starts[subpaths_count] = node = va_arg(ap, graph_node_t *);
+        assert(NULL != node);
+        graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, start, node);
+        parent = node;
         // link nodes of subgroup between them if not yet done
         for (i = 2; i <= group_count; i++) {
             node = va_arg(ap, graph_node_t *);
@@ -343,12 +346,15 @@ void /*_*/graph_create_all_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, graph_no
             graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, parent, node);
             parent = node;
         }
+        ends[subpaths_count] = parent;
         if (NULL == end) {
-            CREATE_ARG(end, ARG_TYPE_END, "(END)");
+            CREATE_ARG(real_end, ARG_TYPE_END, "(END)");
         }
-        graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, parent, end);
+        graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, parent, real_end);
+        ++subpaths_count;
     }
     va_end(ap);
+#if 0
     if (subpaths_count > 0) {
         graph_node_t *tmp;
         size_t j, k, a[MAX_ALTERNATE_PATHS], b[MAX_ALTERNATE_PATHS], c[MAX_ALTERNATE_PATHS + 1];
@@ -383,6 +389,47 @@ void /*_*/graph_create_all_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, graph_no
                 j = j + 1;
                 k = k - 1;
             }
+        }
+    }
+#else
+    for (i = 0; i < subpaths_count; i++) {
+        size_t j;
+
+        for (j = 0; j < subpaths_count; j++) {
+            if (j != i) {
+                graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, ends[i], starts[j]);
+            }
+        }
+    }
+#endif
+}
+
+static void traverse_graph_node_ex(graph_node_t *node, HashTable *visited, int depth, bool indent)
+{
+    bool has_end;
+    size_t children_count;
+    graph_node_t *current;
+
+    if (ARG_TYPE_LITERAL == node->type && !hashtable_put_ex(visited, HT_PUT_ON_DUP_KEY_PRESERVE, node, NULL, NULL)) {
+        return;
+    }
+    has_end = FALSE;
+    children_count = 0;
+    for (current = node->firstChild; NULL != current; current = current->nextSibling) {
+        ++children_count;
+        has_end |= ARG_TYPE_END == current->type;
+    }
+    if (indent) {
+        printf("%*c", depth * 4, ' ');
+    }
+    putchar(' ');
+    fputs(node->string, stdout);
+    if (children_count > 1 || has_end) {
+        putchar('\n');
+    }
+    for (current = node->firstChild; NULL != current; current = current->nextSibling) {
+        if (ARG_TYPE_END != current->type) {
+            traverse_graph_node_ex(current, visited, 1 == children_count ? depth : depth + 1, 1 != children_count);
         }
     }
 }
@@ -751,7 +798,7 @@ command_status_t graph_run_command(graph_t *g, int args_count, const char **args
             prev_arg = arg;
             if (NULL == (arg = graph_node_find(arg, args[depth]))) {
                 error_set(error, NOTICE, "too many arguments"); // also a literal or a choice does not match what is planned (eg: domain foo.tld dnssec on - "on" instead of status/enable/disable)
-                traverse_graph_node(prev_arg, 0, TRUE);
+//                 traverse_graph_node(prev_arg, 0, TRUE);
                 handle = NULL;
                 return COMMAND_USAGE;
             }
@@ -770,7 +817,7 @@ command_status_t graph_run_command(graph_t *g, int args_count, const char **args
         }
         if (NULL == handle || !graph_node_end_in_children(arg)) {
             error_set(error, NOTICE, "unknown command");
-            traverse_graph_node(arg, 0, TRUE);
+//             traverse_graph_node(arg, 0, TRUE);
         } else {
             ret = handle((void *) arguments, error);
         }
@@ -785,13 +832,16 @@ command_status_t graph_run_command(graph_t *g, int args_count, const char **args
 void graph_display(graph_t *g)
 {
     Iterator it;
+    HashTable *visited;
 
+    visited = hashtable_new(value_hash, value_equal, NULL, NULL, NULL);
     hashtable_to_iterator(&it, g->roots);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         argument_t *arg;
 
         arg = iterator_current(&it, NULL);
-        traverse_graph_node(arg, 0, TRUE);
+        traverse_graph_node_ex(arg, visited, 0, TRUE);
     }
     iterator_close(&it);
+    hashtable_destroy(visited);
 }

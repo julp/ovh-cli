@@ -28,7 +28,7 @@ argument_t *argument_create_string(size_t, const char *, complete_t, void *);
 bool complete_from_hashtable_keys(void *, const char *, size_t, DPtrArray *, void *);
 void /*_*/graph_create_full_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *, graph_node_t *, ...) SENTINEL;
 void /*_*/graph_create_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *, graph_node_t *, graph_node_t *, ...) SENTINEL;
-void /*_*/graph_create_all_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *, graph_node_t *, graph_node_t *, ...) SENTINEL;
+void /*_*/graph_create_all_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *, graph_node_t *, graph_node_t *, ...);
 void graph_destroy(graph_t *);
 void graph_display(graph_t *);
 graph_t *graph_new(void);

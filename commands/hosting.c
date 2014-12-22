@@ -365,6 +365,21 @@ static command_status_t hosting_domain_list(void *arg, error_t **error)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
+#if 0
+static void parse_and_display_task(json_document_t *doc, const char *msgf, ...)
+{
+    va_lsit ap;
+    int64_t task_id;
+    json_value_t root;
+
+    JSON_GET_PROP_INT(root, "id", task_id);
+    json_document_destroy(doc);
+    va_start(msgf, ap);
+    vprintf(msgf, ap);
+    va_end(ap);
+}
+#endif
+
 static command_status_t hosting_domain_create(void *arg, error_t **error)
 {
     bool success;
