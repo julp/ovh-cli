@@ -8,6 +8,12 @@
 #include "modules/conv.h"
 #include "struct/dptrarray.h"
 
+typedef struct resource_t {
+    const void *ptr;
+//     func_dtor_t dtor_func;
+    struct resource_t *next;
+} resource_t;
+
 typedef struct {
     const char *title;
     column_type_t type;
@@ -17,7 +23,9 @@ typedef struct {
 struct table_t {
     DPtrArray *rows;
     column_t *columns;
+    resource_t *strings;
     size_t columns_count;
+    bool collect_strings;
     char *false_true_string[2];
     size_t false_true_len[2], max_false_true_len;
 };
@@ -113,6 +121,8 @@ table_t *table_new(size_t columns_count, ...)
     va_list ap;
 
     t = mem_new(*t);
+    t->strings = NULL;
+    t->collect_strings = FALSE;
     // speed up true/false conversions
     t->false_true_string[FALSE] = _("false");
     cplen(t->false_true_string[FALSE], &t->false_true_len[FALSE], NULL);
@@ -136,10 +146,28 @@ table_t *table_new(size_t columns_count, ...)
     return t;
 }
 
+void table_set_collect_strings(table_t *t, bool collect_strings)
+{
+    assert(NULL != t);
+
+    t->collect_strings = collect_strings;
+}
+
 void table_destroy(table_t *t)
 {
     assert(NULL != t);
 
+    if (NULL != t->strings) {
+        resource_t *current, *next;
+
+        current = t->strings;
+        while (NULL != current) {
+            next = current->next;
+            free((void *) current->ptr);
+            free(current);
+            current = next;
+        }
+    }
     free(t->columns);
     dptrarray_destroy(t->rows);
     free(t);
@@ -171,6 +199,14 @@ error = NULL;
                     r->values[i].f = FALSE;
                     r->values[i].l = STR_LEN("-");
                 } else {
+                    if (t->collect_strings) {
+                        resource_t *r;
+
+                        r = mem_new(*r);
+                        r->next = t->strings;
+                        r->ptr = s_utf8;
+                        t->strings = r;
+                    }
                     convert_string_utf8_to_local(s_utf8, strlen(s_utf8), &s_local, NULL, &error);
 print_error(error);
 error = NULL;

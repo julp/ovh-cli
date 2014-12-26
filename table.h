@@ -2,7 +2,7 @@
 
 # define TABLE_H
 
-# define TABLE_FLAG_NONE       0
+# define TABLE_FLAG_NONE       (0)
 # define TABLE_FLAG_NO_HEADERS (1<<0)
 
 typedef enum {
@@ -20,5 +20,6 @@ void table_display(table_t *, uint32_t);
 table_t *table_new(size_t, ...);
 void table_sort(table_t *, size_t);
 void table_store(table_t *, ...);
+void table_set_collect_strings(table_t *, bool);
 
 #endif /* !TABLE_H */
