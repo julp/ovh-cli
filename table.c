@@ -17,6 +17,9 @@ typedef struct resource_t {
 typedef struct {
     const char *title;
     column_type_t type;
+    size_t *enum_values_len;
+    const char **enum_values;
+    size_t enum_max_value_len;
     size_t min_len, max_len, len, title_len;
 } column_t;
 
@@ -45,11 +48,25 @@ typedef struct {
     _("true")
 #endif
 
+const char * const false_true[] = {
+    N_("false"),
+    N_("true"),
+    NULL
+};
+
 /**
  * NOTE:
  * - column titles are expected to be already in "local" charset (gettext, if they are translated, will do it for us)
  * - same for "true"/"false"
  * - columns data are expected to be in UTF-8, we handle their conversion
+ * - TABLE_TYPE_DATETIME is not intended for format with non-fixed length output (simple formats like dd/mm/yyyy, yyyy-mm-dd, etc)
+ **/
+
+/**
+ * TODO:
+ * - refactoring
+ * - pipe to PAGER is too much lines
+ * - map TABLE_TYPE_BOOL on TABLE_TYPE_ENUM ? (copy t->false_true* to t->columns[i].enum*)
  **/
 
 #define DEFAULT_WIDTH 80
@@ -140,6 +157,27 @@ table_t *table_new(size_t columns_count, ...)
         t->columns[i].type = va_arg(ap, column_type_t);
         cplen(t->columns[i].title, &t->columns[i].title_len, NULL);
         t->columns[i].len = t->columns[i].min_len = t->columns[i].max_len = t->columns[i].title_len;
+        if (TABLE_TYPE_ENUM == t->columns[i].type) {
+            size_t enum_size;
+            const char * const *v;
+            const char * const *values;
+
+            enum_size = 0;
+            t->columns[i].enum_max_value_len = 0;
+            values = va_arg(ap, const char * const *);
+            for (v = values; NULL != *v; v++) {
+                ++enum_size;
+            }
+            t->columns[i].enum_values = mem_new_n(*t->columns[i].enum_values, enum_size);
+            t->columns[i].enum_values_len = mem_new_n(*t->columns[i].enum_values_len, enum_size);
+            for (v = values; NULL != *v; v++) {
+                t->columns[i].enum_values[v - values] = _(*v);
+                cplen(t->columns[i].enum_values[v - values], &t->columns[i].enum_values_len[v - values], NULL);
+                if (t->columns[i].enum_values_len[v - values] > t->columns[i].enum_max_value_len) {
+                    t->columns[i].enum_max_value_len = t->columns[i].enum_values_len[v - values];
+                }
+            }
+        }
     }
     va_end(ap);
 
@@ -155,6 +193,8 @@ void table_set_collect_strings(table_t *t, bool collect_strings)
 
 void table_destroy(table_t *t)
 {
+    size_t i;
+
     assert(NULL != t);
 
     if (NULL != t->strings) {
@@ -166,6 +206,12 @@ void table_destroy(table_t *t)
             free((void *) current->ptr);
             free(current);
             current = next;
+        }
+    }
+    for (i = 0; i < t->columns_count; i++) {
+        if (TABLE_TYPE_ENUM == t->columns[i].type) {
+            free(t->columns[i].enum_values);
+            free(t->columns[i].enum_values_len);
         }
     }
     free(t->columns);
@@ -233,7 +279,19 @@ print_error(error);
                 }
                 break;
             }
-            case TABLE_TYPE_BOOLEAN:
+            case TABLE_TYPE_ENUM:
+            {
+                size_t v;
+
+                v = va_arg(ap, size_t);
+                r->values[i].v = (uintptr_t) /*t->columns[i].enum_values[*/v/*]*/;
+                r->values[i].l = t->columns[i].enum_values_len[v];
+                if (r->values[i].l > t->columns[i].max_len) {
+                    t->columns[i].len = t->columns[i].min_len = t->columns[i].max_len = t->columns[i].enum_max_value_len;
+                }
+                break;
+            }
+            case TABLE_TYPE_BOOL:
             {
                 bool v;
 
@@ -267,6 +325,7 @@ print_error(error);
                 break;
             }
             default:
+                debug("unknown type: %d", t->columns[i].type);
                 assert(FALSE);
                 break;
         }
@@ -357,8 +416,8 @@ void table_sort(table_t *t, size_t colno/*, int order*/)
 #if 0
     CmpFuncArg cmpfn[/* nb table types */][/* 2 : asc/desc */] = {
         [ TABLE_TYPE_INT ] = {},
+        [ TABLE_TYPE_BOOL ] = {},
         [ TABLE_TYPE_STRING ] = {},
-        [ TABLE_TYPE_BOOLEAN ] = {},
     };
 #endif
     switch (t->columns[colno].type) {
@@ -384,7 +443,6 @@ void table_display(table_t *t, uint32_t flags)
 
     assert(NULL != t);
 
-//     if (dptrarray_size(t->rows) > 0) {
     width = console_width();
     if (width > 0) {
         int min_len_sum, candidates_for_growth;
@@ -433,103 +491,114 @@ void table_display(table_t *t, uint32_t flags)
     }
     // +--- ... ---+
     table_print_separator_line(t);
-    // | ... | : data
-    dptrarray_to_iterator(&it, t->rows);
-    breaks = mem_new_n(*breaks, t->columns_count);
-    breaks_count = mem_new_n(*breaks_count, t->columns_count);
-    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        row_t *r;
-        size_t j, lines_needed;
+    if (dptrarray_length(t->rows) > 0) {
+        // | ... | : data
+        dptrarray_to_iterator(&it, t->rows);
+        breaks = mem_new_n(*breaks, t->columns_count);
+        breaks_count = mem_new_n(*breaks_count, t->columns_count);
+        for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+            row_t *r;
+            size_t j, lines_needed;
 
-        lines_needed = 1;
-        r = iterator_current(&it, NULL);
-        bzero(breaks_count, sizeof(breaks_count) * t->columns_count);
-        for (i = 0; i < t->columns_count; i++) {
-            /*if (r->values[i].l > t->columns[i].len && (r->values[i].l / t->columns[i].len + 1) > lines_needed) {
-                lines_needed = r->values[i].l / t->columns[i].len + 1;
-            }*/
-            switch (t->columns[i].type) {
-                case TABLE_TYPE_STRING:
-                    breaks_count[i] = string_break(t->columns[i].len, (const char *) r->values[i].v, r->values[i].l, &breaks[i]);
-                    if (breaks_count[i] > lines_needed) {
-                        lines_needed = breaks_count[i];
-                    }
-                    break;
-                case TABLE_TYPE_INT:
-                case TABLE_TYPE_BOOLEAN:
-                case TABLE_TYPE_DATETIME:
-                    /* NOP */
-                    break;
-                default:
-                    assert(FALSE);
-                    break;
-            }
-        }
-        for (j =  0; j < lines_needed; j++) {
-            putchar('|');
+            lines_needed = 1;
+            r = iterator_current(&it, NULL);
+            bzero(breaks_count, sizeof(breaks_count) * t->columns_count);
             for (i = 0; i < t->columns_count; i++) {
-                if (0 == j || j < breaks_count[i]) {
-                    switch (t->columns[i].type) {
-                        case TABLE_TYPE_STRING:
-                        {
-                            putchar(' ');
-                            fputs(breaks[i][j].part, stdout);
-                            for (k = breaks[i][j].charlen; k < t->columns[i].len; k++) {
-                                putchar(' ');
-                            }
-                            fputs(" |", stdout);
-                            break;
+                /*if (r->values[i].l > t->columns[i].len && (r->values[i].l / t->columns[i].len + 1) > lines_needed) {
+                    lines_needed = r->values[i].l / t->columns[i].len + 1;
+                }*/
+                switch (t->columns[i].type) {
+                    case TABLE_TYPE_STRING:
+                        breaks_count[i] = string_break(t->columns[i].len, (const char *) r->values[i].v, r->values[i].l, &breaks[i]);
+                        if (breaks_count[i] > lines_needed) {
+                            lines_needed = breaks_count[i];
                         }
-                        case TABLE_TYPE_INT:
-                            printf(" %*d |", (int) t->columns[i].len, (int) r->values[i].v);
-                            break;
-                        case TABLE_TYPE_BOOLEAN:
-                            putchar(' ');
-                            fputs(t->false_true_string[r->values[i].v], stdout);
-                            for (k = t->false_true_len[r->values[i].v]; k < t->columns[i].len; k++) {
-                                putchar(' ');
-                            }
-                            fputs(" |", stdout);
-                            break;
-                        case TABLE_TYPE_DATETIME:
-                            putchar(' ');
-                            fputs((const char *) r->values[i].v, stdout);
-                            for (k = r->values[i].l; k < t->columns[i].len; k++) {
-                                putchar(' ');
-                            }
-                            fputs(" |", stdout);
-                            break;
-                        default:
-                            assert(FALSE);
-                            break;
-                    }
-                } else {
-                    printf(" %*c |", (int) t->columns[i].len, ' ');
+                        break;
+                    case TABLE_TYPE_INT:
+                    case TABLE_TYPE_BOOL:
+                    case TABLE_TYPE_ENUM:
+                    case TABLE_TYPE_DATETIME:
+                        /* NOP */
+                        break;
+                    default:
+                        assert(FALSE);
+                        break;
                 }
             }
-            putchar('\n');
-        }
-        for (i = 0; i < t->columns_count; i++) {
-            if (TABLE_TYPE_STRING == t->columns[i].type) {
-                if (breaks_count[i] > 1) {
-                    for (j = 0; j < breaks_count[i]; j++) {
-                        free((void *) breaks[i][j].part);
+            for (j =  0; j < lines_needed; j++) {
+                putchar('|');
+                for (i = 0; i < t->columns_count; i++) {
+                    if (0 == j || j < breaks_count[i]) {
+                        switch (t->columns[i].type) {
+                            case TABLE_TYPE_STRING:
+                            {
+                                putchar(' ');
+                                fputs(breaks[i][j].part, stdout);
+                                for (k = breaks[i][j].charlen; k < t->columns[i].len; k++) {
+                                    putchar(' ');
+                                }
+                                fputs(" |", stdout);
+                                break;
+                            }
+                            case TABLE_TYPE_INT:
+                                printf(" %*d |", (int) t->columns[i].len, (int) r->values[i].v);
+                                break;
+                            case TABLE_TYPE_ENUM:
+                                putchar(' ');
+                                fputs(t->columns[i].enum_values[r->values[i].v], stdout);
+                                for (k = t->columns[i].enum_values_len[r->values[i].v]; k < t->columns[i].len; k++) {
+                                    putchar(' ');
+                                }
+                                fputs(" |", stdout);
+                                break;
+                            case TABLE_TYPE_BOOL:
+                                putchar(' ');
+                                fputs(t->false_true_string[r->values[i].v], stdout);
+                                for (k = t->false_true_len[r->values[i].v]; k < t->columns[i].len; k++) {
+                                    putchar(' ');
+                                }
+                                fputs(" |", stdout);
+                                break;
+                            case TABLE_TYPE_DATETIME:
+                                putchar(' ');
+                                fputs((const char *) r->values[i].v, stdout);
+                                for (k = r->values[i].l; k < t->columns[i].len; k++) {
+                                    putchar(' ');
+                                }
+                                fputs(" |", stdout);
+                                break;
+                            default:
+                                assert(FALSE);
+                                break;
+                        }
+                    } else {
+                        printf(" %*c |", (int) t->columns[i].len, ' ');
                     }
                 }
-                free(breaks[i]);
-                // <TODO: better place in row_destroy>
-                if (r->values[i].f) {
-                    free((void *) r->values[i].v);
+                putchar('\n');
+            }
+            for (i = 0; i < t->columns_count; i++) {
+                if (TABLE_TYPE_STRING == t->columns[i].type) {
+                    if (breaks_count[i] > 1) {
+                        for (j = 0; j < breaks_count[i]; j++) {
+                            free((void *) breaks[i][j].part);
+                        }
+                    }
+                    free(breaks[i]);
+                    // <TODO: better place in row_destroy>
+                    if (r->values[i].f) {
+                        free((void *) r->values[i].v);
+                    }
+                    // </TODO>
                 }
-                // </TODO>
             }
         }
+        iterator_close(&it);
+        free(breaks);
+        free(breaks_count);
+        // +--- ... ---+
+        table_print_separator_line(t);
     }
-    iterator_close(&it);
-    free(breaks);
-    free(breaks_count);
-    // +--- ... ---+
-    table_print_separator_line(t);
 }
 
 #define DIGIT_0 "\xF0\x9D\x9F\x8E" /* 1D7CE, Nd */
@@ -585,19 +654,32 @@ static const char long_string[] = \
     /* 311..320 */ STRING \
     /* 321..330 */ STRING;
 
+// From domain (dnssec status)
+static const char * const test_enum[] = {
+    N_("enabled"),
+    N_("disabled"),
+    N_("enableInProgress"),
+    N_("disableInProgress"),
+    NULL
+};
+
 // can't use constructor, output_encoding (modules/conv.c is not yet set)
 // INITIALIZER_DECL(table_test);
 INITIALIZER_P(table_test)
 {
     table_t *t;
 
-    t = table_new(4, "id", TABLE_TYPE_INT, "subdomain", TABLE_TYPE_STRING, "target", TABLE_TYPE_STRING, "éïàùçè", TABLE_TYPE_STRING);
-    table_store(t, 1, "abc", "def", "");
-    table_store(t, 2, "ghi", "jkl", long_string);
-    table_store(t, 3, "mno", long_string, "pqr");
-    table_store(t, 4, "stu", long_string, long_string);
-    table_store(t, 5, "é", "é", "é");
-    table_store(t, 6, "é", "é", "abc\ndéf");
+#ifdef WITH_NLS
+    extern bool nls_ctor(void);
+    nls_ctor();
+#endif /* WITH_NLS */
+    t = table_new(5, "id", TABLE_TYPE_INT, "subdomain", TABLE_TYPE_STRING, "target", TABLE_TYPE_STRING, "éïàùçè", TABLE_TYPE_STRING, "status", TABLE_TYPE_ENUM, test_enum);
+    table_store(t, 1, "abc", "def", "", 0);
+    table_store(t, 2, "ghi", "jkl", long_string, 1);
+    table_store(t, 3, "mno", long_string, "pqr", 2);
+    table_store(t, 4, "stu", long_string, long_string, 3);
+    table_store(t, 5, "é", "é", "é", 2);
+    table_store(t, 6, "é", "é", "abc\ndéf", 1);
     table_sort(t, 1);
 //     table_sort(t, 0);
     table_display(t, TABLE_FLAG_NONE);
