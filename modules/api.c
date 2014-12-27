@@ -351,6 +351,7 @@ void request_destroy(request_t *req)
     if (NULL != req->buffer) {
         string_destroy(req->buffer);
     }
+    free(req);
 }
 
 void request_add_post_field(request_t *req, const char *name, const char *value)
