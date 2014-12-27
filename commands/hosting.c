@@ -506,11 +506,11 @@ static command_status_t hosting_cron_list(void *arg, error_t **error)
 #else
                 5,
 #endif /* PRINT_OVH_ID */
-                _("language"), TABLE_TYPE_STRING,
-                _("frequency"), TABLE_TYPE_STRING,
-                _("description"), TABLE_TYPE_STRING,
-                _("command"), TABLE_TYPE_STRING,
-                _("email"), TABLE_TYPE_STRING
+                _("language"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
+                _("frequency"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
+                _("description"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
+                _("command"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
+                _("email"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE
             );
             for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
                 int64_t id; // cron ID
@@ -531,7 +531,6 @@ static command_status_t hosting_cron_list(void *arg, error_t **error)
                     JSON_GET_PROP_STRING(root, "language", language);
                     JSON_GET_PROP_STRING(root, "description", description);
                     JSON_GET_PROP_STRING(root, "command", command);
-                    // TODO: leaks on email, frequency, language, description, command
                     table_store(
                         t,
 #ifdef PRINT_OVH_ID
@@ -613,12 +612,12 @@ static command_status_t hosting_user_list(void *arg, error_t **error)
             json_array_to_iterator(&it, root);
             t = table_new(
                 6,
-                _("login"), TABLE_TYPE_STRING,
-                _("home"), TABLE_TYPE_STRING,
+                _("login"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
+                _("home"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
                 _("isPrimaryAccount"), TABLE_TYPE_BOOLEAN,
-                _("state"), TABLE_TYPE_STRING,
-                _("iisRemoteRights"), TABLE_TYPE_STRING,
-                _("webDavRights"), TABLE_TYPE_STRING
+                _("state"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
+                _("iisRemoteRights"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
+                _("webDavRights"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE
             );
             for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
                 char *login;
@@ -640,7 +639,6 @@ static command_status_t hosting_user_list(void *arg, error_t **error)
                     JSON_GET_PROP_STRING(root, "state", state);
                     JSON_GET_PROP_STRING(root, "iisRemoteRights", iisRemoteRights);
                     JSON_GET_PROP_STRING(root, "webDavRights", webDavRights);
-                    // TODO: leaks on login, home, state, iisRemoteRights (if non NULL), webDavRights (if non NULL)
                     table_store(t, login, home, isPrimaryAccount, state, iisRemoteRights, webDavRights);
                     json_document_destroy(doc);
                 }
@@ -745,14 +743,14 @@ static command_status_t hosting_database_list(void *arg, error_t **error)
             json_array_to_iterator(&it, root);
             t = table_new(
                 8,
-                _("mode"), TABLE_TYPE_STRING,
-                _("version"), TABLE_TYPE_STRING,
-                _("name"), TABLE_TYPE_STRING,
+                _("mode"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
+                _("version"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
+                _("name"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
                 _("port"), TABLE_TYPE_INT,
-                _("state"), TABLE_TYPE_STRING,
-                _("user"), TABLE_TYPE_STRING,
-                _("type"), TABLE_TYPE_STRING,
-                _("server"), TABLE_TYPE_STRING
+                _("state"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
+                _("user"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
+                _("type"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
+                _("server"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE
             );
             for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
                 char *dbname;
@@ -776,7 +774,6 @@ static command_status_t hosting_database_list(void *arg, error_t **error)
                     JSON_GET_PROP_STRING(root, "user", user);
                     JSON_GET_PROP_STRING(root, "type", type);
                     JSON_GET_PROP_STRING(root, "server", server);
-                    // TODO: leaks on mode, version, dbname, state, user, type, server (if non NULL)
                     table_store(t, mode, version, dbname, port, state, user, type, server);
                     json_document_destroy(doc);
                 }
