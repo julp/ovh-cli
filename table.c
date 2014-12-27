@@ -28,7 +28,6 @@ struct table_t {
     column_t *columns;
     resource_t *strings;
     size_t columns_count;
-    bool collect_strings;
     char *false_true_string[2];
     size_t false_true_len[2], max_false_true_len;
 };
@@ -65,7 +64,7 @@ const char * const false_true[] = {
 /**
  * TODO:
  * - refactoring
- * - pipe to PAGER is too much lines
+ * - pipe to PAGER if too much lines
  * - map TABLE_TYPE_BOOL on TABLE_TYPE_ENUM ? (copy t->false_true* to t->columns[i].enum*)
  **/
 
@@ -139,7 +138,6 @@ table_t *table_new(size_t columns_count, ...)
 
     t = mem_new(*t);
     t->strings = NULL;
-    t->collect_strings = FALSE;
     // speed up true/false conversions
     t->false_true_string[FALSE] = _("false");
     cplen(t->false_true_string[FALSE], &t->false_true_len[FALSE], NULL);
@@ -184,13 +182,6 @@ table_t *table_new(size_t columns_count, ...)
     return t;
 }
 
-void table_set_collect_strings(table_t *t, bool collect_strings)
-{
-    assert(NULL != t);
-
-    t->collect_strings = collect_strings;
-}
-
 void table_destroy(table_t *t)
 {
     size_t i;
@@ -231,7 +222,7 @@ void table_store(table_t *t, ...)
     r->values = mem_new_n(*r->values, t->columns_count);
     va_start(ap, t);
     for (i = 0; i < t->columns_count; i++) {
-        switch (t->columns[i].type) {
+        switch (TABLE_TYPE(t->columns[i].type)) {
             case TABLE_TYPE_STRING:
             {
                 char *s_local;
@@ -245,7 +236,7 @@ error = NULL;
                     r->values[i].f = FALSE;
                     r->values[i].l = STR_LEN("-");
                 } else {
-                    if (t->collect_strings) {
+                    if (HAS_FLAG(t->columns[i].type, TABLE_TYPE_DELEGATE)) {
                         resource_t *r;
 
                         r = mem_new(*r);
@@ -420,7 +411,7 @@ void table_sort(table_t *t, size_t colno/*, int order*/)
         [ TABLE_TYPE_STRING ] = {},
     };
 #endif
-    switch (t->columns[colno].type) {
+    switch (TABLE_TYPE(t->columns[colno].type)) {
         case TABLE_TYPE_STRING:
             cmpfn = strcmpp;
             break;
@@ -507,7 +498,7 @@ void table_display(table_t *t, uint32_t flags)
                 /*if (r->values[i].l > t->columns[i].len && (r->values[i].l / t->columns[i].len + 1) > lines_needed) {
                     lines_needed = r->values[i].l / t->columns[i].len + 1;
                 }*/
-                switch (t->columns[i].type) {
+                switch (TABLE_TYPE(t->columns[i].type)) {
                     case TABLE_TYPE_STRING:
                         breaks_count[i] = string_break(t->columns[i].len, (const char *) r->values[i].v, r->values[i].l, &breaks[i]);
                         if (breaks_count[i] > lines_needed) {
@@ -529,7 +520,7 @@ void table_display(table_t *t, uint32_t flags)
                 putchar('|');
                 for (i = 0; i < t->columns_count; i++) {
                     if (0 == j || j < breaks_count[i]) {
-                        switch (t->columns[i].type) {
+                        switch (TABLE_TYPE(t->columns[i].type)) {
                             case TABLE_TYPE_STRING:
                             {
                                 putchar(' ');
@@ -578,7 +569,7 @@ void table_display(table_t *t, uint32_t flags)
                 putchar('\n');
             }
             for (i = 0; i < t->columns_count; i++) {
-                if (TABLE_TYPE_STRING == t->columns[i].type) {
+                if (TABLE_TYPE_STRING == TABLE_TYPE(t->columns[i].type)) {
                     if (breaks_count[i] > 1) {
                         for (j = 0; j < breaks_count[i]; j++) {
                             free((void *) breaks[i][j].part);
@@ -673,13 +664,13 @@ INITIALIZER_P(table_test)
     extern bool nls_ctor(void);
     nls_ctor();
 #endif /* WITH_NLS */
-    t = table_new(5, "id", TABLE_TYPE_INT, "subdomain", TABLE_TYPE_STRING, "target", TABLE_TYPE_STRING, "éïàùçè", TABLE_TYPE_STRING, "status", TABLE_TYPE_ENUM, test_enum);
-    table_store(t, 1, "abc", "def", "", 0);
-    table_store(t, 2, "ghi", "jkl", long_string, 1);
-    table_store(t, 3, "mno", long_string, "pqr", 2);
-    table_store(t, 4, "stu", long_string, long_string, 3);
-    table_store(t, 5, "é", "é", "é", 2);
-    table_store(t, 6, "é", "é", "abc\ndéf", 1);
+    t = table_new(5, "id", TABLE_TYPE_INT, "subdomain", TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE, "target", TABLE_TYPE_STRING, "éïàùçè", TABLE_TYPE_STRING, "status", TABLE_TYPE_ENUM, test_enum);
+    table_store(t, 1, strdup("abc"), "def", "", 0);
+    table_store(t, 2, strdup("ghi"), "jkl", long_string, 1);
+    table_store(t, 3, strdup("mno"), long_string, "pqr", 2);
+    table_store(t, 4, strdup("stu"), long_string, long_string, 3);
+    table_store(t, 5, strdup("é"), "é", "é", 2);
+    table_store(t, 6, strdup("é"), "é", "abc\ndéf", 1);
     table_sort(t, 1);
 //     table_sort(t, 0);
     table_display(t, TABLE_FLAG_NONE);
