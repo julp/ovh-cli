@@ -152,7 +152,7 @@ static command_status_t me_credential_list(void *UNUSED(arg), error_t **error)
             _("last used"), TABLE_TYPE_DATETIME,
             _("ovhSupport"), TABLE_TYPE_BOOLEAN,
             _("credential status"), TABLE_TYPE_STRING,
-            _("rules"), TABLE_TYPE_STRING,
+            _("rules"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
             _("application status"), TABLE_TYPE_STRING,
             _("application name"), TABLE_TYPE_STRING,
             _("application description"), TABLE_TYPE_STRING
@@ -247,7 +247,7 @@ static command_status_t me_credential_list(void *UNUSED(arg), error_t **error)
                     }
                     iterator_close(&it);
                     hashtable_destroy(rules);
-                    stringified_rules = string_orphan(buffer); // TODO: leak
+                    stringified_rules = string_orphan(buffer);
                 }
                 json_document_destroy(doc);
                 if (!hashtable_quick_get(applications, (hash_t) applicationId, (void *) applicationId, (void **) &app)) {
