@@ -8,6 +8,7 @@
 
 #include "common.h"
 #include "date.h"
+#include "table.h"
 #include "modules/api.h"
 #include "modules/libxml.h"
 #include "struct/hashtable.h"
@@ -396,28 +397,27 @@ static void account_dtor(void)
 
 static command_status_t account_list(void *UNUSED(arg), error_t **UNUSED(error))
 {
+    table_t *t;
     Iterator it;
 
+    t = table_new(4, "account", TABLE_TYPE_STRING, "expiration", TABLE_TYPE_DATETIME, "current", TABLE_TYPE_BOOLEAN, "default", TABLE_TYPE_BOOLEAN);
     hashtable_to_iterator(&it, acd->accounts);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         account_t *account;
+        struct tm expiration, *tm;
 
         account = (account_t *) iterator_current(&it, NULL);
-        if (account == acd->current) {
-            printf("=>");
+        if (0 == account->expires_at) {
+            bzero(&expiration, sizeof(expiration));
         } else {
-            printf("  ");
+            tm = localtime(&account->expires_at);
+            expiration = *tm;
         }
-        if (account == acd->autosel) {
-            printf("* ");
-        } else {
-            printf(" ");
-        }
-        // TODO: expiration date of CK (if any) ?
-        printf("%s", account->account);
-        printf("\n");
+        table_store(t, account->account, expiration, account == acd->current, account == acd->autosel);
     }
     iterator_close(&it);
+    table_display(t, TABLE_FLAG_NONE);
+    table_destroy(t);
 
     return COMMAND_SUCCESS;
 }
