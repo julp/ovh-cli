@@ -370,7 +370,10 @@ static command_status_t record_list(void *arg, error_t **error)
 #else
             4,
 #endif /* PRINT_OVH_ID */
-            _("subdomain"), TABLE_TYPE_STRING, _("type"), TABLE_TYPE_STRING, _("TTL"), TABLE_TYPE_INT, _("target"), TABLE_TYPE_STRING
+            _("subdomain"), TABLE_TYPE_STRING,
+            _("type"), TABLE_TYPE_ENUM, domain_record_types,
+            _("TTL"), TABLE_TYPE_INT,
+            _("target"), TABLE_TYPE_STRING
         );
         hashtable_to_iterator(&it, d->records);
         for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
@@ -381,7 +384,7 @@ static command_status_t record_list(void *arg, error_t **error)
 #ifdef PRINT_OVH_ID
                 r->id,
 #endif /* PRINT_OVH_ID */
-                r->name, record_type_map[r->type].short_name, r->ttl, r->target
+                r->name, r->type, r->ttl, r->target
             );
         }
         iterator_close(&it);
