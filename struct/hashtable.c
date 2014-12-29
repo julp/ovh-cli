@@ -180,7 +180,7 @@ hash_t hashtable_hash(HashTable *this, const void *key)
 {
     assert(NULL != this);
 
-    return this->hf(key);
+    return NULL == this->hf ? key : this->hf(key);
 }
 
 size_t hashtable_size(HashTable *this)
@@ -253,7 +253,7 @@ static bool hashtable_put_real(HashTable *this, uint32_t flags, hash_t h, void *
 
 void hashtable_put(HashTable *this, void *key, void *value, void **oldvalue)
 {
-    hashtable_put_real(this, 0, this->hf(key), key, value, oldvalue);
+    hashtable_put_real(this, 0, NULL == this->hf ? key : this->hf(key), key, value, oldvalue);
 }
 
 bool hashtable_quick_put_ex(HashTable *this, uint32_t flags, hash_t h, void *key, void *value, void **oldvalue)
@@ -263,7 +263,7 @@ bool hashtable_quick_put_ex(HashTable *this, uint32_t flags, hash_t h, void *key
 
 bool hashtable_put_ex(HashTable *this, uint32_t flags, void *key, void *value, void **oldvalue)
 {
-    return hashtable_put_real(this, flags, this->hf(key), key, value, oldvalue);
+    return hashtable_put_real(this, flags, NULL == this->hf ? key : this->hf(key), key, value, oldvalue);
 }
 
 bool hashtable_quick_get(HashTable *this, hash_t h, const void *key, void **value)
@@ -292,7 +292,7 @@ bool hashtable_quick_get(HashTable *this, hash_t h, const void *key, void **valu
 
 bool hashtable_get(HashTable *this, const void *key, void **value)
 {
-    return hashtable_quick_get(this, this->hf(key), key, value);
+    return hashtable_quick_get(this, NULL == this->hf ? key : this->hf(key), key, value);
 }
 
 bool hashtable_quick_contains(HashTable *this, hash_t h, const void *key)
@@ -319,7 +319,7 @@ bool hashtable_quick_contains(HashTable *this, hash_t h, const void *key)
 
 bool hashtable_contains(HashTable *this, const void *key)
 {
-    return hashtable_quick_contains(this, this->hf(key), key);
+    return hashtable_quick_contains(this, NULL == this->hf ? key : this->hf(key), key);
 }
 
 static bool hashtable_delete_real(HashTable *this, hash_t h, const void *key, bool call_dtor)
@@ -374,7 +374,7 @@ bool hashtable_quick_delete(HashTable *this, hash_t h, const void *key, bool cal
 
 bool hashtable_delete(HashTable *this, const void *key, bool call_dtor)
 {
-    return hashtable_delete_real(this, this->hf(key), key, call_dtor);
+    return hashtable_delete_real(this, NULL == this->hf ? key : this->hf(key), key, call_dtor);
 }
 
 static void hashtable_clear_real(HashTable *this)
