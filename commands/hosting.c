@@ -884,7 +884,7 @@ static void hosting_regcomm(graph_t *g)
     argument_t *lit_host_list;
     argument_t *lit_hosting, *lit_cron, *lit_user, *lit_db, *lit_domain;
     argument_t *lit_cron_list;
-    argument_t * lit_user_list, *lit_user_delete;
+    argument_t *lit_user_list, *lit_user_delete;
     argument_t *lit_db_list, *lit_db_dump, *lit_db_delete;
     argument_t *lit_domain_list, *lit_domain_add, *lit_domain_delete;
     argument_t *arg_hosting, *arg_domain_name, *arg_domain_path, *arg_database_date, *arg_database_name, *arg_user_name;
