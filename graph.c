@@ -21,10 +21,7 @@ struct argument_t {
     complete_t complete; // spécifique à ARG_TYPE_STRING et ARG_TYPE_CHOICES
     const char *string;
     handle_t handle;
-    graph_node_t *nextSibling;
-    graph_node_t *previousSibling;
-    graph_node_t *firstChild;
-    graph_node_t *lastChild;
+    DPtrArray *children;
     void *data; // TODO: removal in favor of *_data
     void *completion_data; // data for completion
     void *command_data; // data to run command
@@ -32,7 +29,6 @@ struct argument_t {
 };
 
 struct graph_t {
-    DtorFunc dtor;
     HashTable *roots;
     HashTable *nodes;
     graph_node_t *end;
@@ -47,8 +43,19 @@ struct graph_t {
         node->complete = NULL; \
         node->offset = (size_t) -1; \
         node->string = string_or_hint; \
-        node->nextSibling = node->previousSibling = node->firstChild = node->lastChild = NULL; \
+        node->children = NULL; \
     } while (0);
+
+static void graph_node_destroy(void *data)
+{
+    graph_node_t *node;
+
+    node = (graph_node_t *) data;
+    if (NULL != node->children) {
+        dptrarray_destroy(node->children);
+    }
+    free(node);
+}
 
 graph_t *graph_new(void)
 {
@@ -56,8 +63,8 @@ graph_t *graph_new(void)
 
     g = mem_new(*g);
 //     CREATE_ARG(g->end, ARG_TYPE_END, "(END)");
-    g->roots = hashtable_ascii_cs_new(NULL, NULL, free);
-    g->nodes = hashtable_new(value_hash, value_equal, NULL, NULL, free);
+    g->roots = hashtable_ascii_cs_new(NULL, NULL, graph_node_destroy);
+    g->nodes = hashtable_new(value_hash, value_equal, NULL, NULL, graph_node_destroy);
 
     return g;
 }
@@ -194,69 +201,35 @@ static int graph_node_compare(graph_node_t *a, graph_node_t *b)
     }
 }
 
-// #define GRAPH_DEBUG 1
 static void graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, graph_node_t *parent, graph_node_t *child)
 {
+    size_t i, l;
     graph_node_t *current;
 
-#ifdef GRAPH_DEBUG
-debug("%s %s %d", ubasename(__ugrep_file), __ugrep_func, __ugrep_line);
-#endif /* GRAPH_DEBUG */
-    for (current = parent->firstChild; NULL != current && graph_node_compare(child, current) > 0; current = current->nextSibling)
-#ifdef GRAPH_DEBUG
-    {
-        debug("%s", current->string);
-    }
-debug("%s", child->string);
-#else
-        ;
-#endif /* GRAPH_DEBUG */
-    if (0 == graph_node_compare(child, current)) {
-        if (child->type == ARG_TYPE_END) {
-            free(child);
-        }
-        return;
-    }
-    hashtable_put_ex(g->nodes, HT_PUT_ON_DUP_KEY_PRESERVE, (void *) child, child, NULL);
-    // il aurait aussi fallu que si le noeud qu'on insère est "end" et qu'on sait qu'il a au moins déjà un frère, le "clôner"
-    if (NULL == current) {
-#ifdef GRAPH_DEBUG
-debug("%s", child->string);
-#endif /* GRAPH_DEBUG */
-        /*if (parent->lastChild == g->end) {
-            graph_node_t *tmp;
-
-            tmp = parent->lastChild;
-            CREATE_ARG(parent->lastChild, ARG_TYPE_END, "(END)");
-        }*/
-        child->previousSibling = parent->lastChild;
-        parent->lastChild = child;
-        child->nextSibling = NULL;
-        if (NULL != child->previousSibling) {
-            child->previousSibling->nextSibling = child;
-        }
-        if (NULL == parent->firstChild) {
-            parent->firstChild = child;
-        }
+    current = NULL;
+    if (NULL == parent->children) {
+        parent->children = dptrarray_new(NULL, NULL, NULL);
+        hashtable_put_ex(g->nodes, HT_PUT_ON_DUP_KEY_PRESERVE, (void *) child, child, NULL);
+        dptrarray_push(parent->children, child);
     } else {
-        /*if (current == g->end) {
-            graph_node_t *tmp;
-
-            tmp = current;
-            CREATE_ARG(current, ARG_TYPE_END, "(END)");
-//             current->nextSibling = tmp->nextSibling;
-        }*/
-#ifdef GRAPH_DEBUG
-debug("%s / %s", child->string, current->string);
-#endif /* GRAPH_DEBUG */
-        child->nextSibling = current;
-        child->previousSibling = current->previousSibling;
-        if (NULL != current->previousSibling) {
-            current->previousSibling->nextSibling = child;
-        } else {
-            parent->firstChild = child;
+        for (i = 0, l = dptrarray_length(parent->children); i < l; i++) {
+            current = dptrarray_at_unsafe(parent->children, i, graph_node_t);
+            if (!(graph_node_compare(child, current) > 0)) {
+                break;
+            }
         }
-        current->previousSibling = child;
+        if (0 == graph_node_compare(child, current)) {
+            if (child->type == ARG_TYPE_END) {
+                free(child);
+            }
+            return;
+        }
+        hashtable_put_ex(g->nodes, HT_PUT_ON_DUP_KEY_PRESERVE, (void *) child, child, NULL);
+        if (NULL == current) {
+            dptrarray_push(parent->children, child);
+        } else {
+            dptrarray_insert(parent->children, i, child);
+        }
     }
 }
 
@@ -406,6 +379,7 @@ void /*_*/graph_create_all_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, graph_no
 
 static void traverse_graph_node_ex(graph_node_t *node, HashTable *visited, int depth, bool indent)
 {
+    size_t i, l;
     bool has_end;
     size_t children_count;
     graph_node_t *current;
@@ -415,7 +389,8 @@ static void traverse_graph_node_ex(graph_node_t *node, HashTable *visited, int d
     }
     has_end = FALSE;
     children_count = 0;
-    for (current = node->firstChild; NULL != current; current = current->nextSibling) {
+    for (i = 0, l = dptrarray_length(node->children); i < l; i++) {
+        current = dptrarray_at_unsafe(node->children, i, graph_node_t);
         ++children_count;
         has_end |= ARG_TYPE_END == current->type;
     }
@@ -427,7 +402,8 @@ static void traverse_graph_node_ex(graph_node_t *node, HashTable *visited, int d
     if (children_count > 1 || has_end) {
         putchar('\n');
     }
-    for (current = node->firstChild; NULL != current; current = current->nextSibling) {
+    for (i = 0/*, l = dptrarray_length(node->children)*/; i < l; i++) {
+        current = dptrarray_at_unsafe(node->children, i, graph_node_t);
         if (ARG_TYPE_END != current->type) {
             traverse_graph_node_ex(current, visited, 1 == children_count ? depth : depth + 1, 1 != children_count);
         }
@@ -436,13 +412,15 @@ static void traverse_graph_node_ex(graph_node_t *node, HashTable *visited, int d
 
 static void traverse_graph_node(graph_node_t *node, int depth, bool indent)
 {
+    size_t i, l;
     bool has_end;
     size_t children_count;
     graph_node_t *current;
 
     has_end = FALSE;
     children_count = 0;
-    for (current = node->firstChild; NULL != current; current = current->nextSibling) {
+    for (i = 0, l = dptrarray_length(node->children); i < l; i++) {
+        current = dptrarray_at_unsafe(node->children, i, graph_node_t);
         ++children_count;
         has_end |= ARG_TYPE_END == current->type;
     }
@@ -454,7 +432,8 @@ static void traverse_graph_node(graph_node_t *node, int depth, bool indent)
     if (children_count > 1 || has_end) {
         putchar('\n');
     }
-    for (current = node->firstChild; NULL != current; current = current->nextSibling) {
+    for (i = 0/*, l = dptrarray_length(node->children)*/; i < l; i++) {
+        current = dptrarray_at_unsafe(node->children, i, graph_node_t);
         if (ARG_TYPE_END != current->type) {
             traverse_graph_node(current, 1 == children_count ? depth : depth + 1, 1 != children_count);
         }
@@ -535,11 +514,16 @@ static argument_description_t descriptions[] = {
 
 static graph_node_t *graph_node_find(graph_node_t *parent, const char *value)
 {
-    graph_node_t *child;
+    if (NULL != parent->children) {
+        size_t i, l;
 
-    for (child = parent->firstChild; NULL != child; child = child->nextSibling) {
-        if (descriptions[child->type].matcher(child, value)) {
-            return child;
+        for (i = 0, l = dptrarray_length(parent->children); i < l; i++) {
+            graph_node_t *child;
+
+            child = dptrarray_at_unsafe(parent->children, i, graph_node_t);
+            if (descriptions[child->type].matcher(child, value)) {
+                return child;
+            }
         }
     }
 
@@ -548,11 +532,16 @@ static graph_node_t *graph_node_find(graph_node_t *parent, const char *value)
 
 static bool graph_node_end_in_children(graph_node_t *node)
 {
-    graph_node_t *child;
+    if (NULL != node->children) {
+        size_t i, l;
 
-    for (child = node->firstChild; NULL != child; child = child->nextSibling) {
-        if (ARG_TYPE_END == child->type) {
-            return TRUE;
+        for (i = 0, l = dptrarray_length(node->children); i < l; i++) {
+            graph_node_t *child;
+
+            child = dptrarray_at_unsafe(node->children, i, graph_node_t);
+            if (ARG_TYPE_END == child->type) {
+                return TRUE;
+            }
         }
     }
 
@@ -726,9 +715,12 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
                     }
                 }
                 if (NULL != arg) {
-                    graph_node_t *child;
+                    size_t i, l;
 
-                    for (child = arg->firstChild; NULL != child; child = child->nextSibling) {
+                    for (i = 0, l = dptrarray_length(arg->children); i < l; i++) {
+                        graph_node_t *child;
+
+                        child = dptrarray_at_unsafe(arg->children, i, graph_node_t);
                         if (NULL != child->complete) {
                             child->complete((void *) arguments, NULL == argv[cursorc] ? "" : argv[cursorc], cursoro, client_data->possibilities, child->data);
                         }

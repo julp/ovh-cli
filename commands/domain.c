@@ -305,7 +305,7 @@ static command_status_t domain_refresh(void *arg, error_t **error)
     return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static bool get_domain_records(const char *domain, domain_t **d, error_t **error)
+static bool get_domain_records(const char *domain, domain_t **d, bool force, error_t **error)
 {
     domain_set_t *ds;
     bool request_success;
@@ -313,7 +313,8 @@ static bool get_domain_records(const char *domain, domain_t **d, error_t **error
     *d = NULL;
     FETCH_ACCOUNT_DOMAINS(ds);
     request_success = TRUE;
-    if (!hashtable_get(ds->domains, (void *) domain, (void **) d) || !(*d)->uptodate) {
+    // TODO: hashtable_clear((*d)->records) if force
+    if (!hashtable_get(ds->domains, (void *) domain, (void **) d) || !(*d)->uptodate || force) {
         request_t *req;
         json_document_t *doc;
 
@@ -360,7 +361,7 @@ static command_status_t record_list(void *arg, error_t **error)
 
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
-    if (COMMAND_SUCCESS == (ret = get_domain_records(args->domain, &d, error))) {
+    if (COMMAND_SUCCESS == (ret = get_domain_records(args->domain, &d, args->nocache, error))) {
         // display
         table_t *t;
 
@@ -380,12 +381,14 @@ static command_status_t record_list(void *arg, error_t **error)
             record_t *r;
 
             r = iterator_current(&it, NULL);
-            table_store(t,
+            if (0 == args->type || r->type == args->type) {
+                table_store(t,
 #ifdef PRINT_OVH_ID
-                r->id,
+                    r->id,
 #endif /* PRINT_OVH_ID */
-                r->name, r->type, r->ttl, r->target
-            );
+                    r->name, r->type, r->ttl, r->target
+                );
+            }
         }
         iterator_close(&it);
         table_display(t, TABLE_FLAG_NONE);
@@ -459,7 +462,7 @@ static command_status_t record_delete(void *arg, error_t **error)
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
     assert(NULL != args->record);
-    if ((request_success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, error)))) {
+    if ((request_success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, FALSE, error)))) {
 #if 0
         // what was the goal? If true, it is more the domain which does not exist!
         if (!hashtable_get(domains, (void *) argv[0], (void **) &d)) {
@@ -580,7 +583,7 @@ static bool complete_records(void *parsed_arguments, const char *current_argumen
 
     args = (domain_record_argument_t *) parsed_arguments;
     assert(NULL != args->domain);
-    if ((request_success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, NULL)))) {
+    if ((request_success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, FALSE, NULL)))) {
         Iterator it;
 
         hashtable_to_iterator(&it, d->records);
