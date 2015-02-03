@@ -1,5 +1,6 @@
 #include <stddef.h>
 #include <string.h>
+#include <strings.h>
 #include <histedit.h>
 
 #include "common.h"
