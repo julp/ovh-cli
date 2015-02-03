@@ -62,7 +62,7 @@ graph_t *graph_new(void)
     graph_t *g;
 
     g = mem_new(*g);
-//     CREATE_ARG(g->end, ARG_TYPE_END, "(END)");
+    CREATE_ARG(g->end, ARG_TYPE_END, "(END)");
     g->roots = hashtable_ascii_cs_new(NULL, NULL, graph_node_destroy);
     g->nodes = hashtable_new(value_hash, value_equal, NULL, NULL, graph_node_destroy);
 
@@ -219,9 +219,9 @@ static void graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, grap
             }
         }
         if (0 == graph_node_compare(child, current)) {
-            if (child->type == ARG_TYPE_END) {
-                free(child);
-            }
+//             if (child->type == ARG_TYPE_END) {
+//                 free(child);
+//             }
             return;
         }
         hashtable_put_ex(g->nodes, HT_PUT_ON_DUP_KEY_PRESERVE, (void *) child, child, NULL);
@@ -237,7 +237,7 @@ static void graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, grap
 void /*_*/graph_create_full_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, graph_node_t *start, ...) /* SENTINEL */
 {
     va_list nodes;
-    graph_node_t *end, *node, *parent;
+    graph_node_t /**end, */*node, *parent;
 
     assert(NULL != g);
     assert(NULL != start);
@@ -251,8 +251,8 @@ void /*_*/graph_create_full_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, graph_n
         parent = node;
     }
     va_end(nodes);
-    CREATE_ARG(end, ARG_TYPE_END, "(END)");
-    graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, parent, /*g->*/end);
+//     CREATE_ARG(end, ARG_TYPE_END, "(END)");
+    graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, parent, g->end);
 }
 
 // créer un chemin entre 2 sommets (end peut être NULL)
@@ -273,12 +273,12 @@ void /*_*/graph_create_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, graph_node_t
     }
     va_end(nodes);
     if (NULL == end) {
-        CREATE_ARG(end, ARG_TYPE_END, "(END)");
-//         graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, /*g->*/end);
-//     } else {
-//         graph_node_insert_child(UGREP_FILE_LINE_FUNC_RELAY_CC g, parent, end);
+//         CREATE_ARG(end, ARG_TYPE_END, "(END)");
+        graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, parent, g->end);
+    } else {
+        graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, parent, end);
     }
-    graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, parent, end);
+//     graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, parent, end);
 }
 
 /*size_t fact(size_t n)
@@ -321,7 +321,8 @@ void /*_*/graph_create_all_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, graph_no
         }
         ends[subpaths_count] = parent;
         if (NULL == end) {
-            CREATE_ARG(real_end, ARG_TYPE_END, "(END)");
+//             CREATE_ARG(real_end, ARG_TYPE_END, "(END)");
+            real_end = g->end;
         }
         graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, parent, real_end);
         ++subpaths_count;
