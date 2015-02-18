@@ -559,6 +559,7 @@ const char *request_consumer_key(const char *account, const char *password, time
             JSON_ADD_RULE(rules, "DELETE", "/me/*");
             JSON_ADD_RULE(rules, "POST", "/ip/*");
             JSON_ADD_RULE(rules, "DELETE", "/ip/*");
+            JSON_ADD_RULE(rules, "PUT", "/domain/zone/*");
             JSON_ADD_RULE(rules, "POST", "/domain/zone/*");
             JSON_ADD_RULE(rules, "DELETE", "/domain/zone/*");
             JSON_ADD_RULE(rules, "PUT", "/dedicated/server/*");

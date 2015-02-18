@@ -21,6 +21,7 @@ typedef bool (*complete_t)(void *, const char *, size_t, DPtrArray *, void *);
     _graph_create_all_path(UGREP_FILE_LINE_FUNC_CC g, start, end, ## __VA_ARGS__)
 */
 
+argument_t *argument_create_uint(size_t, const char *);
 argument_t *argument_create_literal(const char *, handle_t);
 argument_t *argument_create_relevant_literal(size_t, const char *, handle_t);
 argument_t *argument_create_choices(size_t, const char *, const char * const *);

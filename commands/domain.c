@@ -28,6 +28,7 @@ typedef enum {
 #undef DECLARE_RECORD_TYPE
 } record_type_t;
 
+#if 0 /* UNUSED */
 static struct {
     const char *short_name;
     // ...
@@ -37,6 +38,7 @@ static struct {
 #include "record.h"
 #undef DECLARE_RECORD_TYPE
 };
+#endif
 
 static const char *domain_record_types[] = {
 #define DECLARE_RECORD_TYPE(name) \
@@ -61,7 +63,7 @@ typedef struct {
 // describe a DNS record of a given domain
 typedef struct {
     uint32_t id;
-    uint32_t ttl;
+    uint32_t ttl; // in minutes
     const char *name;
     record_type_t type;
     const char *target;
@@ -70,8 +72,10 @@ typedef struct {
 typedef struct {
     bool on_off;
     bool nocache;
+    uint32_t ttl; // in minutes
     char *domain;
-    char *record; // also called subdomain
+    char *record; // also called subdomain (current value)
+    char *name; // new subdomain name
     char *value; // also called target
     record_type_t type;
 } domain_record_argument_t;
@@ -399,7 +403,7 @@ static command_status_t record_list(void *arg, error_t **error)
 }
 
 // ./ovh domain domain.ext record toto add www type CNAME
-// NOTE: it seems OVH permits to create multiple times a DNS record with same name and type
+// TODO: ttl (optionnal)
 static command_status_t record_add(void *arg, error_t **error)
 {
     bool request_success;
@@ -452,6 +456,27 @@ static command_status_t record_add(void *arg, error_t **error)
     return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
+static size_t find_record(HashTable *records, const char *name, record_t **match)
+{
+    Iterator it;
+    size_t matches;
+
+    matches = 0;
+    hashtable_to_iterator(&it, records);
+    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        record_t *r;
+
+        r = iterator_current(&it, NULL);
+        if (r->name[0] == name[0] && 0 == strcmp(r->name, name)) { // TODO: strcmp_l? type?
+            ++matches;
+            *match = r;
+        }
+    }
+    iterator_close(&it);
+
+    return matches;
+}
+
 static command_status_t record_delete(void *arg, error_t **error)
 {
     domain_t *d;
@@ -471,21 +496,9 @@ static command_status_t record_delete(void *arg, error_t **error)
         }
 #endif
         {
-            Iterator it;
             size_t matches;
 
-            matches = 0;
-            hashtable_to_iterator(&it, d->records);
-            for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-                record_t *r;
-
-                r = iterator_current(&it, NULL);
-                if (r->name[0] == args->record[0] && 0 == strcmp(r->name, args->record)) { // TODO: strcmp_l? type?
-                    ++matches;
-                    match = r;
-                }
-            }
-            iterator_close(&it);
+            matches = find_record(d->records, args->record, &match);
             switch (matches) {
                 case 1:
                 {
@@ -522,43 +535,76 @@ static command_status_t record_delete(void *arg, error_t **error)
 // arguments: [ttl <int>] [name <string>] [target <string>]
 // (in any order)
 // if we change record's name (subDomain), we need to update records cache
-static command_status_t record_update(void *UNUSED(arg), error_t **UNUSED(error))
+static command_status_t record_update(void *arg, error_t **error)
 {
-#if TODO
-    uint32_t ttl;
-    String *buffer;
-    request_t *req;
-    const char *subdomain, *target;
+    domain_t *d;
+    record_t *r;
+    bool success;
+    domain_record_argument_t *args;
 
-    // data
-    {
-        json_value_t root;
-        json_document_t *doc;
-
-        buffer = string_new();
-        doc = json_document_new();
-        root = json_object();
-        json_object_set_property(root, "target", json_string(target));
-        json_object_set_property(root, "fieldType", json_string(type));
-//             if ('\0' != *subdomain)
-            json_object_set_property(root, "subDomain", json_string(subdomain));
-        json_object_set_property(root, "ttl", json_integer(ttl));
-        json_document_set_root(doc, root);
-        json_document_serialize(
-            doc,
-            buffer,
-#ifdef DEBUG
-            JSON_OPT_PRETTY_PRINT
-#else
-            0
-#endif /* DEBUG */
-        );
-        json_document_destroy(doc);
+    args = (domain_record_argument_t *) arg;
+    assert(NULL != args->domain);
+    assert(NULL != args->record);
+#if 0
+    if (NULL == args->value && NULL == args->name && 0 == args->ttl) {
+        // nothing to do
+        return COMMAND_USAGE;
     }
-    req = request_new(REQUEST_FLAG_SIGN, HTTP_PUT, NULL, API_BASE_URL "/domain/zone/%s/%" PRIu32, argv[0], <id>);
-    request_execute(req, RESPONSE_IGNORE, NULL, error);
-    request_destroy(req);
 #endif
+    if ((success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, FALSE, error)))) {
+        json_document_t *reqdoc;
+
+        size_t matches;
+
+        matches = find_record(d->records, args->record, &r);
+        switch (matches) {
+            case 1:
+                // NOP : OK
+                break;
+            case 0:
+                error_set(error, WARN, "Abort, no record match '%s'", args->record);
+                return COMMAND_FAILURE;
+            default:
+                error_set(error, WARN, "Abort, more than one record match '%s'", args->record);
+                return COMMAND_FAILURE;
+        }
+        // data
+        {
+            json_value_t root;
+
+            reqdoc = json_document_new();
+            root = json_object();
+            if (NULL != args->value) {
+                json_object_set_property(root, "target", json_string(args->value));
+            }
+            if (NULL != args->name) {
+                json_object_set_property(root, "subDomain", json_string(args->name));
+            }
+            json_object_set_property(root, "ttl", json_integer(args->ttl));
+            json_document_set_root(reqdoc, root);
+        }
+        // request
+        {
+            request_t *req;
+
+            req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_PUT, reqdoc, API_BASE_URL "/domain/zone/%s/record/%" PRIu32, args->domain, r->id);
+            success = request_execute(req, RESPONSE_IGNORE, NULL, error);
+            request_destroy(req);
+            json_document_destroy(reqdoc);
+        }
+        if (success) {
+            if (NULL != args->value) {
+                FREE(r, target);
+                r->target = strdup(args->value);
+            }
+            if (NULL != args->name) {
+                FREE(r, name);
+                r->name = strdup(args->name);
+            }
+            r->ttl = args->ttl;
+        }
+    }
+//     debug("request update of %s.%s to %s.%s with TTL = %" PRIu32 " and value = '%s'", args->record, args->domain, args->name, args->domain, args->ttl, args->value);
 
     return COMMAND_SUCCESS;
 }
@@ -654,16 +700,22 @@ static command_status_t dnssec_enable_disable(void *arg, error_t **error)
 static void domain_regcomm(graph_t *g)
 {
     argument_t
+        *arg_ttl,
+        *arg_name,
         *arg_domain,
         *arg_record, // called subdomain by OVH
         *arg_type,
         *arg_value, // called target by OVH
         *arg_dnssec_on_off
     ;
+    argument_t *lit_ttl, *lit_name, *lit_target;
     argument_t *lit_dnssec, *lit_dnssec_status;
     argument_t *lit_domain, *lit_domain_list, *lit_domain_check, *lit_domain_refresh, *lit_domain_export, *lit_domain_nocache;
     argument_t *lit_record, *lit_record_list, *lit_record_add, *lit_record_delete, *lit_record_update, *lit_record_type, *lit_record_nocache;
 
+    lit_ttl = argument_create_literal("ttl", NULL);
+    lit_name = argument_create_literal("name", NULL);
+    lit_target = argument_create_literal("target", NULL);
     // domain ...
     lit_domain = argument_create_literal("domain", NULL);
     lit_domain_list = argument_create_literal("list", domain_list);
@@ -679,13 +731,15 @@ static void domain_regcomm(graph_t *g)
     lit_record_list = argument_create_literal("list", record_list);
     lit_record_add = argument_create_literal("add", record_add);
     lit_record_delete = argument_create_literal("delete", record_delete);
-//     lit_record_update = argument_create_literal("update", record_update);
+    lit_record_update = argument_create_literal("update", record_update);
     lit_record_type = argument_create_literal("type", NULL);
     lit_record_nocache = argument_create_relevant_literal(offsetof(domain_record_argument_t, nocache), "nocache", NULL);
 
+    arg_ttl = argument_create_uint(offsetof(domain_record_argument_t, ttl), "<ttl>");
     arg_domain = argument_create_string(offsetof(domain_record_argument_t, domain), "<domain>", complete_domains, NULL);
     arg_record = argument_create_string(offsetof(domain_record_argument_t, record), "<record>", complete_records, NULL);
     arg_type = argument_create_choices(offsetof(domain_record_argument_t, type), "<type>",  domain_record_types);
+    arg_name = argument_create_string(offsetof(domain_record_argument_t, name), "<name>", NULL, NULL);
     arg_value = argument_create_string(offsetof(domain_record_argument_t, value), "<value>", NULL, NULL);
     arg_dnssec_on_off = argument_create_choices_disable_enable(offsetof(domain_record_argument_t, on_off), dnssec_enable_disable);
 
@@ -704,7 +758,10 @@ static void domain_regcomm(graph_t *g)
     // needs 2 distinct arg_type: 1 for record add command and 1 for record list?
 //     graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_add, arg_value, lit_record_type, arg_type, NULL);
     graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_delete, NULL);
-//     graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_update, NULL);
+
+//     graph_create_path(g, /*lit_domain*/arg_domain, lit_record_update, /*arg_domain, */lit_record, arg_record, NULL);
+    graph_create_path(g, arg_record, lit_record_update, NULL);
+    graph_create_all_path(g, lit_record_update, NULL, 2, lit_name, arg_name, 2, lit_target, arg_value, 2, lit_ttl, arg_ttl, 0);
 }
 
 #if 0

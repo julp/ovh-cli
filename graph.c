@@ -79,6 +79,16 @@ static bool complete_literal(void *UNUSED(parsed_arguments), const char *current
     return TRUE;
 }
 
+argument_t *argument_create_uint(size_t offset, const char *string)
+{
+    argument_t *node;
+
+    CREATE_ARG(node, ARG_TYPE_NUMBER, string);
+    node->offset = offset;
+
+    return node;
+}
+
 argument_t *argument_create_literal(const char *string, handle_t handle)
 {
     argument_t *node;
@@ -523,7 +533,7 @@ static graph_node_t *graph_node_find(graph_node_t *parent, const char *value)
             graph_node_t *child;
 
             child = dptrarray_at_unsafe(parent->children, i, graph_node_t);
-            if (descriptions[child->type].matcher(child, value)) {
+            if (NULL == descriptions[child->type].matcher || descriptions[child->type].matcher(child, value)) {
                 return child;
             }
         }
@@ -711,6 +721,8 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
                             *((bool *) (arguments + arg->offset)) = TRUE;
                         } else if (ARG_TYPE_CHOICES == arg->type) {
                             *((int *) (arguments + arg->offset)) = string_array_to_index(arg, argv[depth]);
+                        } else if (ARG_TYPE_NUMBER == arg->type) {
+                            *((uint32_t *) (arguments + arg->offset)) = (uint32_t) strtoull(argv[depth], NULL, 10);
                         } else {
                             *((const char **) (arguments + arg->offset)) = argv[depth];
                         }
@@ -801,6 +813,8 @@ command_status_t graph_run_command(graph_t *g, int args_count, const char **args
                     *((bool *) (arguments + arg->offset)) = TRUE;
                 } else if (ARG_TYPE_CHOICES == arg->type) {
                     *((int *) (arguments + arg->offset)) = string_array_to_index(arg, args[depth]);
+                } else if (ARG_TYPE_NUMBER == arg->type) {
+                    *((uint32_t *) (arguments + arg->offset)) = (uint32_t) strtoull(args[depth], NULL, 10);
                 } else {
                     *((const char **) (arguments + arg->offset)) = args[depth];
                 }
