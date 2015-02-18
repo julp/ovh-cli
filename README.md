@@ -70,9 +70,15 @@ ovh account <nickhandle> password "" <consumer key>
             * disable => disable DNSSEC for *domain*
         * record ("subdomain" may be more appropriate) (TODO: find a more convenient way to manage empty subdomain name - SPF, NS, ... ?)
             * list => display all subdomains of *domain*
+                * nocache => fetch data from OVH instead of using internel cache (avoid restarting ovh-cli shell)
+                * type \<one of: A, AAAA, CNAME, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT> => list only records of the given *type*
             * \<record name>
                 * add \<target> type \<one of: A, AAAA, CNAME, LOC, MX, NAPTR, NS, PTR, SPF, SRV, SSHFP, TXT> => add *subdomain* to *domain*
                 * delete => delete *subdomain* of *domain* (TODO: non unique subdomain names are all deleted)
+                * update => update *subdomain* of *domain* (TODO: can only update subdomains which are not ambiguous)
+                    * ttl \<ttl> => change TTL value (in minutes)
+                    * name \<name> => rename *subdomain*
+                    * value \<value> => alter value/target of *subdomain*
 * dedicated
     * check => list servers and when they expire
     * list => list all servers associated to the current account
@@ -103,5 +109,5 @@ ovh account <nickhandle> password "" <consumer key>
 * credentials
     * list => list all credentials used to connect to any OVH application with current account
     * flush => remove all credentials used with current account
-* help
+* help (TODO)
 * quit
