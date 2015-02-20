@@ -23,9 +23,8 @@ struct argument_t {
     const char *string;
     handle_t handle;
     DPtrArray *children;
-    void *data; // TODO: removal in favor of *_data
-    void *completion_data; // data for completion
     void *command_data; // data to run command
+    void *completion_data; // data for completion
 //     graph_t *owner;
 };
 
@@ -38,7 +37,8 @@ struct graph_t {
 #define CREATE_ARG(node, arg_type, string_or_hint) \
     do { \
         node = mem_new(*node); \
-        node->data = NULL; \
+        node->command_data = NULL; \
+        node->completion_data = NULL; \
         node->handle = NULL; \
         node->type = arg_type; \
         node->complete = NULL; \
@@ -95,7 +95,7 @@ argument_t *argument_create_literal(const char *string, handle_t handle)
 
     CREATE_ARG(node, ARG_TYPE_LITERAL, string);
     node->handle = handle;
-    node->data = (void *) string;
+    node->completion_data = (void *) string;
     node->complete = complete_literal;
 
     return node;
@@ -131,7 +131,7 @@ argument_t *argument_create_choices(size_t offset, const char *hint, const char 
     CREATE_ARG(node, ARG_TYPE_CHOICES, hint);
     node->offset = offset;
     node->complete = complete_choices;
-    node->data = (void *) values;
+    node->completion_data = (void *) values;
 
     return node;
 }
@@ -150,7 +150,7 @@ argument_t *argument_create_choices_off_on(size_t offset, handle_t handle)
     node->handle = handle;
     node->offset = offset;
     node->complete = complete_choices;
-    node->data = (void *) off_on;
+    node->completion_data = (void *) off_on;
 
     return node;
 }
@@ -169,7 +169,7 @@ argument_t *argument_create_choices_disable_enable(size_t offset, handle_t handl
     node->handle = handle;
     node->offset = offset;
     node->complete = complete_choices;
-    node->data = (void *) disable_enable;
+    node->completion_data = (void *) disable_enable;
 
     return node;
 }
@@ -181,7 +181,7 @@ argument_t *argument_create_string(size_t offset, const char *hint, complete_t c
     CREATE_ARG(node, ARG_TYPE_STRING, hint);
     node->offset = offset;
     node->complete = complete;
-    node->data = data;
+    node->completion_data = data;
 
     return node;
 }
@@ -497,7 +497,7 @@ static bool argument_choices_match(argument_t *arg, const char *value)
 {
     const char * const *v;
 
-    for (v = (const char * const *) arg->data; NULL != *v; v++) {
+    for (v = (const char * const *) arg->completion_data; NULL != *v; v++) {
         if (0 == strcmp(value, *v)) {
             return TRUE;
         }
@@ -659,7 +659,7 @@ static int string_array_to_index(argument_t *arg, const char *value)
     const char * const *values;
 
     assert(ARG_TYPE_CHOICES == arg->type);
-    values = (const char * const *) arg->data;
+    values = (const char * const *) arg->completion_data;
     for (v = values; NULL != *v; v++) {
         if (0 == strcmp(value, *v)) {
             return v - values;
@@ -736,7 +736,7 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
 
                         child = dptrarray_at_unsafe(arg->children, i, graph_node_t);
                         if (NULL != child->complete) {
-                            child->complete((void *) arguments, NULL == argv[cursorc] ? "" : argv[cursorc], cursoro, client_data->possibilities, child->data);
+                            child->complete((void *) arguments, NULL == argv[cursorc] ? "" : argv[cursorc], cursoro, client_data->possibilities, child->completion_data);
                         }
                     }
                 }
@@ -812,9 +812,9 @@ command_status_t graph_run_command(graph_t *g, int args_count, const char **args
                 if (ARG_TYPE_LITERAL == arg->type) {
                     *((bool *) (arguments + arg->offset)) = TRUE;
                 } else if (ARG_TYPE_CHOICES == arg->type) {
-                    *((int *) (arguments + arg->offset)) = string_array_to_index(arg, args[depth]);
+                    *((int *) (arguments + arg->offset)) = string_array_to_index(arg, args[depth]); // TODO: check this is a valid choice
                 } else if (ARG_TYPE_NUMBER == arg->type) {
-                    *((uint32_t *) (arguments + arg->offset)) = (uint32_t) strtoull(args[depth], NULL, 10);
+                    *((uint32_t *) (arguments + arg->offset)) = (uint32_t) strtoull(args[depth], NULL, 10); // TODO: check this is a valid integer
                 } else {
                     *((const char **) (arguments + arg->offset)) = args[depth];
                 }
@@ -827,7 +827,7 @@ command_status_t graph_run_command(graph_t *g, int args_count, const char **args
             error_set(error, NOTICE, "unknown command");
 //             traverse_graph_node(arg, 0, TRUE);
         } else {
-            ret = handle((void *) arguments, error);
+            ret = handle((void *) arguments, /* TODO: arg->command_data, */ error);
         }
     } else {
         graph_display(g);
