@@ -130,6 +130,117 @@ static void row_destroy(void *data)
     free(r);
 }
 
+void int_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
+{
+    int v;
+
+    v = va_arg(ap, int);
+    val->v = (uintptr_t) v;
+    val->l = snprintf(NULL, 0, "%d", v);
+    if (val->l > c->max_len) {
+        c->len = c->min_len = c->max_len = val->l;
+    }
+}
+
+void bool_store(table_t *t, va_list ap, column_t *c, value_t *val)
+{
+    bool v;
+
+    v = va_arg(ap, bool);
+    val->v = (uintptr_t) v;
+    val->l = t->max_false_true_len;
+    if (val->l > c->max_len) {
+        c->len = c->min_len = c->max_len = t->max_false_true_len;
+    }
+}
+
+void enum_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
+{
+    size_t v;
+
+    v = va_arg(ap, size_t);
+    val->v = (uintptr_t) /*c->enum_values[*/v/*]*/;
+    val->l = c->enum_values_len[v];
+    if (val->l > c->max_len) {
+        c->len = c->min_len = c->max_len = c->enum_max_value_len;
+    }
+}
+
+void string_store(table_t *t, va_list ap, column_t *c, value_t *val)
+{
+    char *s_local;
+    error_t *error;
+    const char *s_utf8;
+
+    // TODO: real error handling! Let caller handle this by adding a error_t **error in argument?
+error = NULL;
+    if (NULL == (s_utf8 = va_arg(ap, const char *))) {
+        s_local = (char *) "-";
+        val->f = FALSE;
+        val->l = STR_LEN("-");
+    } else {
+        if (HAS_FLAG(c->type, TABLE_TYPE_DELEGATE)) {
+            resource_t *r;
+
+            r = mem_new(*r);
+            r->next = t->strings;
+            r->ptr = s_utf8;
+            t->strings = r;
+        }
+        convert_string_utf8_to_local(s_utf8, strlen(s_utf8), &s_local, NULL, &error);
+print_error(error);
+error = NULL;
+        cplen(s_local, &val->l, &error);
+print_error(error);
+        val->f = s_local != s_utf8;
+    }
+    val->v = (uintptr_t) s_local; // TODO: conversion UTF-8 => local
+//     val->l = s_local_len;
+    if (val->l > c->max_len) {
+        c->max_len = val->l;
+    }
+}
+
+void datetime_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
+{
+    struct tm v;
+    char buffer[512];
+    struct tm ltm = { 0 };
+
+    v = va_arg(ap, struct tm);
+    if (0 == memcmp(&v, &ltm, sizeof(ltm))) {
+        val->v = (uintptr_t) "-";
+        val->l = STR_LEN("-");
+    } else {
+        val->l = strftime(buffer, ARRAY_SIZE(buffer), "%x %X", &v);
+        assert(val->l > 0);
+        val->v = (uintptr_t) strdup(buffer);
+        val->f = TRUE;
+    }
+    if (val->l > c->max_len) {
+        c->len = c->min_len = c->max_len = val->l;
+    }
+}
+
+static struct {
+#if 0
+    void (*initialize)(void); // callback for table_new
+#endif
+    void (*store)(table_t *, va_list, column_t *, value_t *); // callback for table_store
+#if 0
+    void (*display)(void); // callback for table_display
+    void (*free)(void); // callback for table_display (free after displaying)
+    int (*sort_asc)(const void *, const void *, void *); // callback for qsort_r in asc order
+    int (*sort_desc)(const void *, const void *, void *); // callback for qsort_r in desc order
+#endif
+} type_handlers[] = {
+    [ TABLE_TYPE_INT ] = { int_store },
+    [ TABLE_TYPE_BOOL ] = { bool_store },
+    [ TABLE_TYPE_ENUM ] = { enum_store },
+    [ TABLE_TYPE_STRING ] = { string_store },
+    [ TABLE_TYPE_DATETIME ] = { datetime_store }
+};
+
 table_t *table_new(size_t columns_count, ...)
 {
     size_t i;
@@ -222,6 +333,7 @@ void table_store(table_t *t, ...)
     r->values = mem_new_n(*r->values, t->columns_count);
     va_start(ap, t);
     for (i = 0; i < t->columns_count; i++) {
+#if 0
         switch (TABLE_TYPE(t->columns[i].type)) {
             case TABLE_TYPE_STRING:
             {
@@ -320,6 +432,10 @@ print_error(error);
                 assert(FALSE);
                 break;
         }
+#else
+        // TODO: assert type exists ?
+        type_handlers[TABLE_TYPE(t->columns[i].type)].store(t, ap, &t->columns[i], &r->values[i]);
+#endif
     }
     va_end(ap);
     dptrarray_push(t->rows, r);
