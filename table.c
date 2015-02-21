@@ -643,11 +643,9 @@ void table_display(table_t *t, uint32_t flags)
 
                         switch (TABLE_TYPE(t->columns[i].type)) {
                             case TABLE_TYPE_STRING:
-                            {
                                 fputs(breaks[i][j].part, stdout);
                                 written = breaks[i][j].charlen;
                                 break;
-                            }
                             case TABLE_TYPE_INT:
                                 written = printf("%*d", (int) t->columns[i].len, (int) r->values[i].v);
                                 break;
