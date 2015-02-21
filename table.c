@@ -637,8 +637,8 @@ void table_display(table_t *t, uint32_t flags)
             for (j =  0; j < lines_needed; j++) {
                 putchar('|');
                 for (i = 0; i < t->columns_count; i++) {
+                    putchar(' ');
                     if (0 == j || j < breaks_count[i]) {
-                        putchar(' ');
                         switch (TABLE_TYPE(t->columns[i].type)) {
                             case TABLE_TYPE_STRING:
                             {
@@ -673,10 +673,10 @@ void table_display(table_t *t, uint32_t flags)
                                 assert(FALSE);
                                 break;
                         }
-                        fputs(" |", stdout);
                     } else {
-                        printf(" %*c |", (int) t->columns[i].len, ' ');
+                        printf("%*c", (int) t->columns[i].len, ' ');
                     }
+                    fputs(" |", stdout);
                 }
                 putchar('\n');
             }
