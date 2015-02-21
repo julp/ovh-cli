@@ -19,7 +19,8 @@ typedef enum {
     TABLE_TYPE_STRING,
     TABLE_TYPE_BOOL,
     TABLE_TYPE_BOOLEAN = TABLE_TYPE_BOOL,
-    TABLE_TYPE_DATETIME
+    TABLE_TYPE_DATETIME,
+    _TABLE_TYPE_LAST = TABLE_TYPE_DATETIME
 } column_type_t;
 
 typedef struct table_t table_t;

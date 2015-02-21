@@ -433,7 +433,9 @@ print_error(error);
                 break;
         }
 #else
-        // TODO: assert type exists ?
+        assert(TABLE_TYPE(t->columns[i].type) <= _TABLE_TYPE_LAST);
+        assert(NULL != type_handlers[TABLE_TYPE(t->columns[i].type)].store);
+
         type_handlers[TABLE_TYPE(t->columns[i].type)].store(t, ap, &t->columns[i], &r->values[i]);
 #endif
     }
