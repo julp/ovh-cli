@@ -638,48 +638,42 @@ void table_display(table_t *t, uint32_t flags)
                 putchar('|');
                 for (i = 0; i < t->columns_count; i++) {
                     if (0 == j || j < breaks_count[i]) {
+                        putchar(' ');
                         switch (TABLE_TYPE(t->columns[i].type)) {
                             case TABLE_TYPE_STRING:
                             {
-                                putchar(' ');
                                 fputs(breaks[i][j].part, stdout);
                                 for (k = breaks[i][j].charlen; k < t->columns[i].len; k++) {
                                     putchar(' ');
                                 }
-                                fputs(" |", stdout);
                                 break;
                             }
                             case TABLE_TYPE_INT:
-                                printf(" %*d |", (int) t->columns[i].len, (int) r->values[i].v);
+                                printf("%*d", (int) t->columns[i].len, (int) r->values[i].v);
                                 break;
                             case TABLE_TYPE_ENUM:
-                                putchar(' ');
                                 fputs(t->columns[i].enum_values[r->values[i].v], stdout);
                                 for (k = t->columns[i].enum_values_len[r->values[i].v]; k < t->columns[i].len; k++) {
                                     putchar(' ');
                                 }
-                                fputs(" |", stdout);
                                 break;
                             case TABLE_TYPE_BOOL:
-                                putchar(' ');
                                 fputs(t->false_true_string[r->values[i].v], stdout);
                                 for (k = t->false_true_len[r->values[i].v]; k < t->columns[i].len; k++) {
                                     putchar(' ');
                                 }
-                                fputs(" |", stdout);
                                 break;
                             case TABLE_TYPE_DATETIME:
-                                putchar(' ');
                                 fputs((const char *) r->values[i].v, stdout);
                                 for (k = r->values[i].l; k < t->columns[i].len; k++) {
                                     putchar(' ');
                                 }
-                                fputs(" |", stdout);
                                 break;
                             default:
                                 assert(FALSE);
                                 break;
                         }
+                        fputs(" |", stdout);
                     } else {
                         printf(" %*c |", (int) t->columns[i].len, ' ');
                     }
