@@ -228,7 +228,7 @@ static struct {
 #endif
     void (*store)(table_t *, va_list, column_t *, value_t *); // callback for table_store
 #if 0
-    void (*display)(void); // callback for table_display
+    size_t (*display)(void); // callback for table_display
     void (*free)(void); // callback for table_display (free after displaying)
     int (*sort_asc)(const void *, const void *, void *); // callback for qsort_r in asc order
     int (*sort_desc)(const void *, const void *, void *); // callback for qsort_r in desc order
@@ -639,39 +639,36 @@ void table_display(table_t *t, uint32_t flags)
                 for (i = 0; i < t->columns_count; i++) {
                     putchar(' ');
                     if (0 == j || j < breaks_count[i]) {
+                        size_t written;
+
                         switch (TABLE_TYPE(t->columns[i].type)) {
                             case TABLE_TYPE_STRING:
                             {
                                 fputs(breaks[i][j].part, stdout);
-                                for (k = breaks[i][j].charlen; k < t->columns[i].len; k++) {
-                                    putchar(' ');
-                                }
+                                written = breaks[i][j].charlen;
                                 break;
                             }
                             case TABLE_TYPE_INT:
-                                printf("%*d", (int) t->columns[i].len, (int) r->values[i].v);
+                                written = printf("%*d", (int) t->columns[i].len, (int) r->values[i].v);
                                 break;
                             case TABLE_TYPE_ENUM:
                                 fputs(t->columns[i].enum_values[r->values[i].v], stdout);
-                                for (k = t->columns[i].enum_values_len[r->values[i].v]; k < t->columns[i].len; k++) {
-                                    putchar(' ');
-                                }
+                                written = t->columns[i].enum_values_len[r->values[i].v];
                                 break;
                             case TABLE_TYPE_BOOL:
                                 fputs(t->false_true_string[r->values[i].v], stdout);
-                                for (k = t->false_true_len[r->values[i].v]; k < t->columns[i].len; k++) {
-                                    putchar(' ');
-                                }
+                                written = t->false_true_len[r->values[i].v];
                                 break;
                             case TABLE_TYPE_DATETIME:
                                 fputs((const char *) r->values[i].v, stdout);
-                                for (k = r->values[i].l; k < t->columns[i].len; k++) {
-                                    putchar(' ');
-                                }
+                                written = k = r->values[i].l;
                                 break;
                             default:
                                 assert(FALSE);
                                 break;
+                        }
+                        for (k = written; k < t->columns[i].len; k++) {
+                            putchar(' ');
                         }
                     } else {
                         printf("%*c", (int) t->columns[i].len, ' ');
