@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <errno.h>
 #include <limits.h>
 #include <inttypes.h>
@@ -1119,7 +1120,6 @@ static const struct action_descr actions_map[] = {
 };
 
 #ifdef HAVE_STRTOD_L
-# define _GNU_SOURCE
 # include <locale.h>
 #endif /* HAVE_STRTOD_L */
 

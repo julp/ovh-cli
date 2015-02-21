@@ -40,9 +40,6 @@ bool request_execute(request_t *, int, void **, error_t **);
 # define REQUEST_XML_RESPONSE_WANTED(/* request_t * */ req) \
     request_add_header(req, "Accept: application/xml")
 
-# define __USE_XOPEN
-# include <time.h>
-
 const char *request_consumer_key(const char *, const char *, time_t *, error_t **);
 
 #endif /* API_H */

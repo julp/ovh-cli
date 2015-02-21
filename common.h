@@ -172,6 +172,7 @@ typedef enum {
     void f(void)
 #endif /* DEBUG */
 
+# define error_t xerror_t /* error_t is alredy used by glibc (?) when _GNU_SOURCE (?) is defined */
 # include "error.h"
 # include "graph.h"
 

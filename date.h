@@ -2,7 +2,6 @@
 
 # define DATE_H
 
-# define __USE_XOPEN
 # include <time.h>
 # include "common.h"
 
