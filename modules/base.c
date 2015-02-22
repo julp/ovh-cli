@@ -8,7 +8,10 @@ static command_status_t quit(void *UNUSED(arg), error_t **UNUSED(error))
 
 static command_status_t help(void *UNUSED(arg), error_t **UNUSED(error))
 {
+    extern graph_t *g;
+
     puts("Available commands:");
+    graph_display(g);
 
     return COMMAND_SUCCESS;
 }

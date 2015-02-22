@@ -31,7 +31,7 @@ extern module_t domain_module;
 extern module_t hosting_module;
 extern module_t dedicated_module;
 
-static graph_t *g = NULL;
+/*static */graph_t *g = NULL;
 
 static const module_t */*builtin_*/modules[] = {
     &openssl_module,
