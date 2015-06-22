@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include "common.h"
 
 static command_status_t quit(void *UNUSED(arg), error_t **UNUSED(error))
