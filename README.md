@@ -105,9 +105,15 @@ ovh account <nickhandle> password "" <consumer key>
         * database list => list databases associated to *hosting*
         * \<database>
             * delete => drop *database* associated to *hosting*
-* me => display personal informations associated to the current account (name, address, etc)
 * credentials
     * list => list all credentials used to connect to any OVH application with current account
     * flush => remove all credentials used with current account
+* key
+    * list => list global SSH keys
+    * \<name>
+        * delete => remove SSH key named *name*
+        * add \<ssh key> => register *ssh key* as *name*
+        * default <on/off> => (un)define SSH key named *name* as default (default = the one used in rescue mode)
+* me => display personal informations associated to the current account (name, address, etc)
 * help (TODO)
 * quit

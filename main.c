@@ -26,6 +26,7 @@ extern module_t account_module;
 extern module_t nls_module;
 #endif /* WITH_NLS */
 extern module_t me_module;
+extern module_t key_module;
 extern module_t vps_module;
 extern module_t domain_module;
 extern module_t hosting_module;
@@ -46,6 +47,7 @@ static const module_t */*builtin_*/modules[] = {
     &nls_module,
 #endif /* WITH_NLS */
     &me_module,
+    &key_module,
     &vps_module,
     &domain_module,
     &hosting_module,

@@ -556,6 +556,8 @@ const char *request_consumer_key(const char *account, const char *password, time
             json_object_set_property(root, "accessRules", rules);
 //             json_object_set_property(root, "redirection", json_string("https://www.mywebsite.com/"));
             JSON_ADD_RULE(rules, "GET", "/*");
+            JSON_ADD_RULE(rules, "PUT", "/me/*");
+            JSON_ADD_RULE(rules, "POST", "/me/*");
             JSON_ADD_RULE(rules, "DELETE", "/me/*");
             JSON_ADD_RULE(rules, "POST", "/ip/*");
             JSON_ADD_RULE(rules, "DELETE", "/ip/*");
