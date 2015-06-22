@@ -258,6 +258,7 @@ static command_status_t domain_check(void *UNUSED(arg), error_t **error)
                 json_document_destroy(doc);
             }
         }
+        iterator_close(&it);
     }
 
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
@@ -711,7 +712,8 @@ static void domain_regcomm(graph_t *g)
     argument_t *lit_ttl, *lit_name, *lit_target;
     argument_t *lit_dnssec, *lit_dnssec_status;
     argument_t *lit_domain, *lit_domain_list, *lit_domain_check, *lit_domain_refresh, *lit_domain_export, *lit_domain_nocache;
-    argument_t *lit_record, *lit_record_list, *lit_record_add, *lit_record_delete, *lit_record_update, *lit_record_type, *lit_record_nocache;
+    argument_t *lit_record, *lit_record_list, *lit_record_add, *lit_record_delete, *lit_record_update, /**lit_record_type, */*lit_record_nocache;
+    argument_t *lit_record_list_type, *lit_record_add_type;
 
     lit_ttl = argument_create_literal("ttl", NULL);
     lit_name = argument_create_literal("name", NULL);
@@ -732,7 +734,9 @@ static void domain_regcomm(graph_t *g)
     lit_record_add = argument_create_literal("add", record_add);
     lit_record_delete = argument_create_literal("delete", record_delete);
     lit_record_update = argument_create_literal("update", record_update);
-    lit_record_type = argument_create_literal("type", NULL);
+//     lit_record_type = argument_create_literal("type", NULL);
+    lit_record_add_type = argument_create_literal("type", NULL);
+    lit_record_list_type = argument_create_literal("type", NULL);
     lit_record_nocache = argument_create_relevant_literal(offsetof(domain_record_argument_t, nocache), "nocache", NULL);
 
     arg_ttl = argument_create_uint(offsetof(domain_record_argument_t, ttl), "<ttl>");
@@ -754,9 +758,9 @@ static void domain_regcomm(graph_t *g)
     graph_create_full_path(g, lit_domain, arg_domain, lit_dnssec, arg_dnssec_on_off, NULL);
     // domain X record ...
     graph_create_full_path(g, lit_domain, arg_domain, lit_record, lit_record_list, NULL);
-    graph_create_all_path(g, lit_record_list, NULL, 1, lit_record_nocache, 2, lit_record_type, arg_type, 0);
+    graph_create_all_path(g, lit_record_list, NULL, 1, lit_record_nocache, 2, /*lit_record_type*/lit_record_list_type, arg_type, 0);
     // needs 2 distinct arg_type: 1 for record add command and 1 for record list?
-//     graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_add, arg_value, lit_record_type, arg_type, NULL);
+    graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_add, arg_value, /*lit_record_type*/lit_record_add_type, arg_type, NULL);
     graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_delete, NULL);
 
 //     graph_create_path(g, /*lit_domain*/arg_domain, lit_record_update, /*arg_domain, */lit_record, arg_record, NULL);
