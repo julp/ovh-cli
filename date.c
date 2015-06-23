@@ -136,3 +136,122 @@ bool parse_duration(const char *duration, time_t *value)
         return 0 != *value && 0 == v; // nothing really parsed (eg: 0 days) && no pending number (eg: 3 days 12)
     }
 }
+
+typedef struct {
+    int64_t step;
+    time_t start, end, current;
+} time_state_t;
+
+static void time_iterator_first(const void *UNUSED(collection), void **state)
+{
+    time_state_t *t;
+
+    assert(NULL != state);
+
+    t = (time_state_t *) *state;
+    t->current = t->start;
+}
+
+static void time_iterator_last(const void *UNUSED(collection), void **state)
+{
+    time_state_t *t;
+
+    assert(NULL != state);
+
+    t = (time_state_t *) *state;
+    t->current = t->end;
+}
+
+static bool time_iterator_is_valid(const void *UNUSED(collection), void **state)
+{
+    time_state_t *t;
+
+    assert(NULL != state);
+
+    t = (time_state_t *) *state;
+
+    return t->current >= t->start && t->current <= t->end;
+}
+
+static void time_iterator_current(const void *UNUSED(collection), void **state, void **value, void **key)
+{
+    time_state_t *t;
+
+    assert(NULL != state);
+    assert(NULL != value);
+
+    t = (time_state_t *) *state;
+    if (NULL != key) {
+        *((time_t *) key) = t->current;
+    }
+    *value = &t->current;
+}
+
+static void time_iterator_next(const void *UNUSED(collection), void **state)
+{
+    time_state_t *t;
+
+    assert(NULL != state);
+
+    t = (time_state_t *) *state;
+    t->current += t->step;
+}
+
+static void time_iterator_previous(const void *UNUSED(collection), void **state)
+{
+    time_state_t *t;
+
+    assert(NULL != state);
+
+    t = (time_state_t *) *state;
+    t->current -= t->step;
+}
+
+void time_to_iterator(Iterator *it, time_t start, time_t end, int64_t step)
+{
+    time_state_t *state;
+
+    state = mem_new(*state);
+    state->start = start;
+    state->end = end;
+    state->step = step;
+    iterator_init(
+        it, NULL, state,
+        time_iterator_first, time_iterator_last,
+        time_iterator_current,
+        time_iterator_next, time_iterator_previous,
+        time_iterator_is_valid,
+        free
+    );
+}
+
+char *timestamp_to_localtime(time_t t)
+{
+    size_t used;
+    char buffer[512];
+    struct tm ltm = { 0 };
+
+    if (NULL == localtime_r(&t, &ltm)) {
+        return NULL;
+    } else {
+        used = strftime(buffer, ARRAY_SIZE(buffer), "%x %X", &ltm);
+        return strdup(buffer);
+    }
+}
+
+// INITIALIZER_DECL(date_test);
+INITIALIZER_P(date_test)
+{
+    Iterator it;
+
+    time_to_iterator(&it, (time_t) 1434986100, (time_t) 1435072200, 300);
+    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        time_t t;
+        char *s;
+
+        iterator_current(&it, &t);
+        printf("%s\n", s = timestamp_to_localtime(t));
+        free(s);
+    }
+    iterator_close(&it);
+}
