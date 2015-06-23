@@ -115,5 +115,5 @@ ovh account <nickhandle> password "" <consumer key>
         * add \<ssh key> => register *ssh key* as *name*
         * default <on/off> => (un)define SSH key named *name* as default (default = the one used in rescue mode)
 * me => display personal informations associated to the current account (name, address, etc)
-* help (TODO)
+* help
 * quit
