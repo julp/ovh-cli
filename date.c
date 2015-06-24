@@ -225,17 +225,15 @@ void time_to_iterator(Iterator *it, time_t start, time_t end, int64_t step)
     );
 }
 
-char *timestamp_to_localtime(time_t t)
+size_t timestamp_to_localtime(time_t t, char *buffer, size_t buffer_size)
 {
-    size_t used;
-    char buffer[512];
     struct tm ltm = { 0 };
 
+    *buffer = '\0';
     if (NULL == localtime_r(&t, &ltm)) {
-        return NULL;
+        return 0;
     } else {
-        used = strftime(buffer, ARRAY_SIZE(buffer), "%x %X", &ltm);
-        return strdup(buffer);
+        return strftime(buffer, buffer_size, "%x %X", &ltm);
     }
 }
 
@@ -243,15 +241,15 @@ char *timestamp_to_localtime(time_t t)
 INITIALIZER_P(date_test)
 {
     Iterator it;
+    char buffer[512];
 
     time_to_iterator(&it, (time_t) 1434986100, (time_t) 1435072200, 300);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         time_t t;
-        char *s;
 
-        iterator_current(&it, &t);
-        printf("%s\n", s = timestamp_to_localtime(t));
-        free(s);
+        iterator_current(&it, (void *) &t);
+        timestamp_to_localtime(t, buffer, ARRAY_SIZE(buffer));
+        printf("%s\n", buffer);
     }
     iterator_close(&it);
 }

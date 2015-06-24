@@ -10,7 +10,7 @@ bool date_parse(const char *, const char *, struct tm *, error_t **);
 bool date_parse_simple(const char *, const char *, time_t *, error_t **);
 bool parse_duration(const char *, time_t *);
 
-char *timestamp_to_localtime(time_t);
+size_t timestamp_to_localtime(time_t, char *, size_t);
 void time_to_iterator(Iterator *, time_t, time_t, int64_t);
 
 #endif /* !DATE_H */
