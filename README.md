@@ -26,7 +26,27 @@
 
 ## Install
 
-[Create your application](https://eu.api.ovh.com/createApp/)
+* OVH Europe (compile with `-DAPI_BASE_URL="https://eu.api.ovh.com/1.0"`)
+    + [Create your application](https://eu.api.ovh.com/createApp/)
+    + [Create a token](https://eu.api.ovh.com/createToken/)
+* OVH North America (compile with `-DAPI_BASE_URL="https://ca.api.ovh.com/1.0"`)
+    + [Create your application](https://ca.api.ovh.com/createApp/)
+    + [Create a token](https://ca.api.ovh.com/createToken/)
+* So you Start Europe (compile with `-DAPI_BASE_URL="https://eu.api.soyoustart.com/1.0"`)
+    + [Create your application](https://eu.api.soyoustart.com/createApp/)
+    + [Create a token](https://eu.api.soyoustart.com/createToken/)
+* So you Start North America (compile with `-DAPI_BASE_URL="https://ca.api.soyoustart.com/1.0"`)
+    + [Create your application](https://ca.api.soyoustart.com/createApp/)
+    + [Create a token](https://ca.api.soyoustart.com/createToken/)
+* Kimsufi Europe (compile with `-DAPI_BASE_URL="https://eu.api.kimsufi.com/1.0"`)
+    + [Create your application](https://eu.api.kimsufi.com/createApp/)
+    + [Create a token](https://eu.api.kimsufi.com/createToken/)
+* Kimsufi North America (compile with `-DAPI_BASE_URL="https://ca.api.kimsufi.com/1.0"`)
+    + [Create your application](https://ca.api.kimsufi.com/createApp/)
+    + [Create a token](https://ca.api.kimsufi.com/createToken/)
+* Runabove (compile with `-DAPI_BASE_URL="https://api.runabove.com/1.0"`)
+    + [Create your application](https://api.runabove.com/createApp/)
+    + [Create a token](https://api.runabove.com/createToken/)
 
 Fork/compile/install ovh-cli
 ```
@@ -43,9 +63,9 @@ make
 Register your account(s):
 ```
 # with your password instead of a valid consumer key
-ovh account <nickhandle> password <password>
+ovh account <nic-handle> password <password>
 # with a valid and unexpirable consumer key instead of a password
-ovh account <nickhandle> password "" <consumer key>
+ovh account <nic-handle> password "" <consumer key>
 ```
 
 ## Commands
@@ -53,7 +73,7 @@ ovh account <nickhandle> password "" <consumer key>
 * log on/off => enable/disable HTTP logging (file http.log in current directory)
 * account
     * list => list all known OVH accounts
-    * \<nickhandle>
+    * \<nic-handle>
         * add \<password or use empty string - "" - to not record it> (\<consumer key> expires in|at \<expiration date or delay>) => register a new account
         * delete => delete *account*
         * default => set default account
