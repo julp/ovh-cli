@@ -277,13 +277,16 @@ int main(int argc, char **argv)
         el_set(el, EL_HIST, history, hist);
         el_set(el, EL_ADDFN, "ed-complete", "Complete argument", graph_complete);
         el_set(el, EL_BIND, "^I", "ed-complete", NULL);
-        while (NULL != (line = el_gets(el, &count))/* && -1 != count*/) {
-            char **args;
+        while (NULL != (line = el_gets(el, &count)) && count > 0/* && -1 != count*/) {
+           char **args;
             int args_len;
             HistEvent ev;
             char *utf8_line;
 
             error = NULL; // reinitialize it
+            if ('\n' == *line) { // TODO: better fix? empty line \s*\n count as one argument?
+                continue;
+            }
             if (convert_string_local_to_utf8(line, count, &utf8_line, NULL, &error)) {
                 args_len = str_split(utf8_line, &args);
                 graph_run_command(g, args_len, (const char **) args, &error);
