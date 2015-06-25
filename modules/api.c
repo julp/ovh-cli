@@ -305,8 +305,18 @@ request_t *request_vnew(uint32_t flags, http_method_t method, const void *pdata,
             }
         }
     }
+    /**
+     * If you want to do a zero-byte POST, you need to set CURLOPT_POSTFIELDSIZE explicitly to zero,
+     * as simply setting CURLOPT_POSTFIELDS to NULL or "" just effectively disables the sending of
+     * the specified string. libcurl will instead assume that you'll send the POST data using the
+     * read callback!
+     **/
     if (NULL != req->pdata && '\0' != *req->pdata) {
         curl_easy_setopt(req->ch, CURLOPT_POSTFIELDS, req->pdata);
+    } else {
+        if (HTTP_POST == req->method) {
+            curl_easy_setopt(req->ch, CURLOPT_POSTFIELDSIZE, 0L);
+        }
     }
     if (0 == methods[method].curlconst) {
         curl_easy_setopt(req->ch, CURLOPT_CUSTOMREQUEST, methods[method].name);
