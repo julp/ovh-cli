@@ -113,8 +113,9 @@ static command_status_t fetch_keys(key_set_t *ks, bool force, error_t **error)
                 json_value_t root;
                 json_document_t *doc;
 
+                k = key_new();
                 v = (json_value_t) iterator_current(&it, NULL);
-                hashtable_put(ks->keys, (void *) json_get_string(v), k = key_new(), NULL); // ks->keys has strdup as key_duper, don't need to strdup it ourself
+                hashtable_put(ks->keys, 0, json_get_string(v), k, NULL); // ks->keys has strdup as key_duper, don't need to strdup it ourself
                 req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/me/sshKey/%s", json_get_string(v));
                 request_execute(req, RESPONSE_JSON, (void **) &doc, error);
                 request_destroy(req);
@@ -202,7 +203,7 @@ static command_status_t key_add(void *arg, error_t **error)
 
         k = key_new();
         k->key = strdup(args->value);
-        hashtable_put(ks->keys, (void *) args->name, (void *) k, NULL);
+        hashtable_put(ks->keys, 0, args->name, k, NULL);
     }
 
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
@@ -225,7 +226,7 @@ static command_status_t key_delete(void *arg, error_t **error)
         success = request_execute(req, RESPONSE_IGNORE, NULL, error);
         request_destroy(req);
         if (success) {
-            hashtable_delete(ks->keys, (void *) args->name, TRUE);
+            hashtable_delete(ks->keys, args->name, TRUE);
         }
     }
 
@@ -269,7 +270,7 @@ static command_status_t key_default(void *arg, error_t **error)
             }
             iterator_close(&it);
         }
-        hashtable_get(ks->keys, (void *) args->name, (void **) &k);
+        hashtable_get(ks->keys, args->name, &k);
         k->default_key = args->on_off;
     }
 

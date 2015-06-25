@@ -165,13 +165,13 @@ static service_t *fetch_single_hosting(service_set_t *ss, const char * const ser
     service_t *s;
 
     s = NULL;
-    if (!force && !ss->uptodate && !hashtable_get(ss->services, service_name, (void **) &s)) {
+    if (!force && !ss->uptodate && !hashtable_get(ss->services, service_name, &s)) {
         request_t *req;
         json_document_t *doc;
         bool request_success;
 
         s = service_new(service_name);
-        hashtable_put(ss->services, (void *) s->serviceName, s, NULL);
+        hashtable_put(ss->services, 0, s->serviceName, s, NULL);
         req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/hosting/web/%s", service_name);
         request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
@@ -302,7 +302,7 @@ static command_status_t hosting_domain_list(void *arg, error_t **error)
     args = (hosting_argument_t *) arg;
     assert(NULL != args->service_name);
     FETCH_ACCOUNT_HOSTING(ss);
-    if (!hashtable_get(ss->services, args->service_name, (void **) &s)) {
+    if (!hashtable_get(ss->services, args->service_name, &s)) {
         s = fetch_single_hosting(ss, args->service_name, FALSE, error);
         success = NULL != s;
     }
@@ -332,7 +332,7 @@ static command_status_t hosting_domain_list(void *arg, error_t **error)
                     root = json_document_get_root(doc);
                     JSON_GET_PROP_STRING(root, "path", path);
                     json_object_get_property(root, "domain", &v);
-                    hashtable_put(s->domains, (void *) json_get_string(v), path, NULL);
+                    hashtable_put(s->domains, 0, json_get_string(v), path, NULL);
                     json_document_destroy(doc);
                 }
             }
@@ -414,8 +414,8 @@ static command_status_t hosting_domain_create(void *arg, error_t **error)
         root = json_document_get_root(doc);
         JSON_GET_PROP_INT(root, "id", task_id);
         json_document_destroy(doc);
-        if (hashtable_get(ss->services, args->service_name, (void **) &s)) {
-            hashtable_put(s->domains, args->domain_name, strdup(args->domain_path), NULL); // check domain isn't already attached? (else we have a leak on previous path in hashtable?)
+        if (hashtable_get(ss->services, args->service_name, &s)) {
+            hashtable_put(s->domains, 0, args->domain_name, strdup(args->domain_path), NULL); // check domain isn't already attached? (else we have a leak on previous path in hashtable?)
         }
         printf("Request to link domain '%s' to hosting '%s' was successfully registered as task #%" PRIi64 "\n", args->domain_name, args->service_name, task_id);
     }
@@ -456,7 +456,7 @@ static command_status_t hosting_domain_delete(void *arg, error_t **error)
             root = json_document_get_root(doc);
             JSON_GET_PROP_INT(root, "id", task_id);
             json_document_destroy(doc);
-            if (hashtable_get(ss->services, args->service_name, (void **) &s)) {
+            if (hashtable_get(ss->services, args->service_name, &s)) {
                 hashtable_delete(s->domains, args->domain_name, TRUE);
             }
             printf("Request to unlink domain '%s' to hosting '%s' was successfully registered as task #%" PRIi64 "\n", args->domain_name, args->service_name, task_id);
@@ -480,7 +480,7 @@ static command_status_t hosting_cron_list(void *arg, error_t **error)
     assert(NULL != args->service_name);
 #if 0
     FETCH_ACCOUNT_HOSTING(ss);
-    if (!hashtable_get(ss->services, args->service_name, (void **) &s)) {
+    if (!hashtable_get(ss->services, args->service_name, &s)) {
         s = fetch_single_hosting(ss, args->service_name, FALSE, error);
         success = NULL != s;
     }
@@ -591,7 +591,7 @@ static command_status_t hosting_user_list(void *arg, error_t **error)
     assert(NULL != args->service_name);
 #if 0
     FETCH_ACCOUNT_HOSTING(ss);
-    if (!hashtable_get(ss->services, args->service_name, (void **) &s)) {
+    if (!hashtable_get(ss->services, args->service_name, &s)) {
         s = fetch_single_hosting(ss, args->service_name, FALSE, error);
         success = NULL != s;
     }
@@ -692,7 +692,7 @@ static command_status_t hosting_user_delete(void *arg, error_t **error)
             root = json_document_get_root(doc);
             JSON_GET_PROP_INT(root, "id", task_id);
             json_document_destroy(doc);
-            if (hashtable_get(ss->services, args->service_name, (void **) &s)) {
+            if (hashtable_get(ss->services, args->service_name, &s)) {
                 hashtable_delete(s->domains, args->domain_name, TRUE);
             }
             printf("Request to delete user '%s' to hosting '%s' was successfully registered as task #%" PRIi64 "\n", args->user_name, args->service_name, task_id);
@@ -721,7 +721,7 @@ static command_status_t hosting_database_list(void *arg, error_t **error)
     assert(NULL != args->service_name);
 #if 0
     FETCH_ACCOUNT_HOSTING(ss);
-    if (!hashtable_get(ss->services, args->service_name, (void **) &s)) {
+    if (!hashtable_get(ss->services, args->service_name, &s)) {
         s = fetch_single_hosting(ss, args->service_name, FALSE, error);
         success = NULL != s;
     }

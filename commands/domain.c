@@ -158,7 +158,7 @@ static int parse_record(HashTable *records, json_document_t *doc)
     JSON_GET_PROP_STRING(root, "subDomain", r->name);
     json_object_get_property(root, "fieldType", &v);
     r->type = json_get_enum(v, domain_record_types, RECORD_TYPE_ANY);
-    hashtable_quick_put_ex(records, 0, r->id, NULL, r, NULL);
+    hashtable_quick_put(records, 0, r->id, NULL, r, NULL);
     json_document_destroy(doc);
 
     return TRUE;
@@ -185,7 +185,7 @@ static command_status_t fetch_domains(domain_set_t *ds, bool force, error_t **er
                 json_value_t v;
 
                 v = (json_value_t) iterator_current(&it, NULL);
-                hashtable_put(ds->domains, (void *) json_get_string(v), domain_new(), NULL); // ds->domains has strdup as key_duper, don't need to strdup it ourself
+                hashtable_put(ds->domains, 0, json_get_string(v), domain_new(), NULL); // ds->domains has strdup as key_duper, don't need to strdup it ourself
             }
             iterator_close(&it);
             ds->uptodate = TRUE;
@@ -319,12 +319,13 @@ static bool get_domain_records(const char *domain, domain_t **d, bool force, err
     FETCH_ACCOUNT_DOMAINS(ds);
     request_success = TRUE;
     // TODO: hashtable_clear((*d)->records) if force
-    if (!hashtable_get(ds->domains, (void *) domain, (void **) d) || !(*d)->uptodate || force) {
+    if (!hashtable_get(ds->domains, domain, d) || !(*d)->uptodate || force) {
         request_t *req;
         json_document_t *doc;
 
         if (NULL == *d) {
-            hashtable_put(ds->domains, (void *) domain, *d = domain_new(), NULL);
+            *d = domain_new();
+            hashtable_put(ds->domains, 0, domain, *d, NULL);
         }
         req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/domain/zone/%s/record", domain);
         request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
@@ -442,14 +443,17 @@ static command_status_t record_add(void *arg, error_t **error)
     // result
     if (request_success) {
         domain_t *d;
+        ht_hash_t h;
         domain_set_t *ds;
 
         d = NULL;
         ds = NULL;
         account_current_get_data(MODULE_NAME, (void **) &ds);
         assert(NULL != ds);
-        if (!hashtable_get(ds->domains, (void *) args->domain, (void **) &d)) {
-            hashtable_put(ds->domains, (void *) args->domain, d = domain_new(), NULL);
+        h = hashtable_hash(ds->domains, args->domain);
+        if (!hashtable_quick_get(ds->domains, h, args->domain, &d)) {
+            d = domain_new();
+            hashtable_quick_put(ds->domains, 0, h, args->domain, d, NULL);
         }
         parse_record(d->records, doc);
     }
@@ -491,7 +495,7 @@ static command_status_t record_delete(void *arg, error_t **error)
     if ((request_success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, FALSE, error)))) {
 #if 0
         // what was the goal? If true, it is more the domain which does not exist!
-        if (!hashtable_get(domains, (void *) argv[0], (void **) &d)) {
+        if (!hashtable_get(domains, argv[0], &d)) {
             error_set(error, WARN, "Domain '%s' doesn't have any record named '%s'\n", argv[0], argv[3]);
             return COMMAND_FAILURE;
         }

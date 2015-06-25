@@ -439,7 +439,7 @@ void json_object_set_property(json_value_t object, const char *key, json_value_t
 
     node = (json_node_t *) object;
 
-    hashtable_put((HashTable *) node->value, (void *) key, (void *) value, NULL);
+    hashtable_put((HashTable *) node->value, 0, key, value, NULL);
 }
 
 bool json_object_get_property(json_value_t object, const char *key, json_value_t *value)
@@ -451,7 +451,7 @@ bool json_object_get_property(json_value_t object, const char *key, json_value_t
 
     node = (json_node_t *) object;
 
-    return hashtable_get((HashTable *) node->value, (void *) key, (void **) value);
+    return hashtable_get((HashTable *) node->value, key, value);
 }
 
 bool json_object_remove_property(json_value_t object, const char *key)
@@ -910,7 +910,7 @@ static void json_push(json_parser_t *jp, json_value_t value, json_type_t type)
                 json_node_t *node;
 
                 node = (json_node_t *) jp->values[jp->output_depth];
-                hashtable_put((HashTable *) node->value, (void *) jp->key_buffer, (void *) value, NULL);
+                hashtable_put((HashTable *) node->value, 0, jp->key_buffer, value, NULL);
                 RESET_BUFFER(jp, key_buffer, kp);
                 break;
             }

@@ -54,10 +54,10 @@ enum {
 
 #define JSON_GET_PROP_INT(object, property, lvalue) \
     do { \
-        json_value_t v; \
+        json_value_t __v; \
  \
-        json_object_get_property(object, property, &v); \
-        lvalue = json_get_integer(v); \
+        json_object_get_property(object, property, &__v); \
+        lvalue = json_get_integer(__v); \
     } while (0);
 
 #define JSON_GET_PROP_BOOL(object, property, lvalue) \
@@ -66,6 +66,14 @@ enum {
  \
         json_object_get_property(object, property, &v); \
         lvalue = json_true == v; \
+    } while (0);
+
+#define JSON_GET_PROP_DOUBLE(object, property, lvalue) \
+    do { \
+        json_value_t v; \
+ \
+        json_object_get_property(object, property, &v); \
+        lvalue = json_get_number(v); \
     } while (0);
 
 json_value_t json_array(void) WARN_UNUSED_RESULT;

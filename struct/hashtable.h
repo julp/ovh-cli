@@ -7,53 +7,80 @@
 
 typedef struct _HashTable HashTable;
 
-typedef uintptr_t hash_t;
-typedef hash_t (*HashFunc)(const void *);
-
-# define HT_FOREACH_ACCEPT   (1<<1)
-# define HT_FOREACH_REJECT   (1<<2)
-# define HT_FOREACH_CONTINUE (1<<3)
-# define HT_FOREACH_DELETE   (1<<4)
-# define HT_FOREACH_STOP     (1<<5)
+typedef uintptr_t ht_key_t; // key_t is defined for ftok
+typedef uintptr_t ht_hash_t;
+typedef ht_hash_t (*HashFunc)(ht_key_t);
+typedef bool (*EqualFunc)(ht_key_t, ht_key_t);
 
 # define HT_PUT_ON_DUP_KEY_PRESERVE (1<<1)
 /*# define HT_PUT_ON_DUP_KEY_NO_DTOR  (1<<2)*/
 
-hash_t ascii_hash_ci(const void *);
-hash_t ascii_hash_cs(const void *);
+bool _hashtable_contains(HashTable *, ht_key_t);
+bool _hashtable_delete(HashTable *, ht_key_t, bool);
+bool _hashtable_get(HashTable *, ht_key_t, void **);
+ht_hash_t _hashtable_hash(HashTable *, ht_key_t);
+bool _hashtable_put(HashTable *, uint32_t, ht_key_t, void *, void **);
+bool _hashtable_quick_contains(HashTable *, ht_hash_t, ht_key_t);
+bool _hashtable_quick_delete(HashTable *, ht_hash_t, ht_key_t, bool);
+bool _hashtable_quick_get(HashTable *, ht_hash_t, ht_key_t, void **);
+bool _hashtable_quick_put(HashTable *, uint32_t, ht_hash_t, ht_key_t, void *, void **);
+bool ascii_equal_ci(ht_key_t, ht_key_t);
+bool ascii_equal_cs(ht_key_t, ht_key_t);
+ht_hash_t ascii_hash_ci(ht_key_t);
+ht_hash_t ascii_hash_cs(ht_key_t);
+HashTable *hashtable_ascii_ci_new(DupFunc, DtorFunc, DtorFunc);
 HashTable *hashtable_ascii_cs_new(DupFunc, DtorFunc, DtorFunc);
 void hashtable_clear(HashTable *);
-bool hashtable_contains(HashTable *, const void *);
-bool hashtable_quick_contains(HashTable *, hash_t, const void *);
-bool hashtable_delete(HashTable *, const void *, bool);
-bool hashtable_quick_delete(HashTable *, hash_t, const void *, bool);
 void hashtable_destroy(HashTable *);
-bool hashtable_get(HashTable *, const void *, void **);
-bool hashtable_quick_get(HashTable *, hash_t, const void *, void **);
-hash_t hashtable_hash(HashTable *, const void *);
-bool ascii_equal_ci(const void *, const void *);
-bool ascii_equal_cs(const void *, const void *);
-HashTable *hashtable_value_new(DupFunc, DtorFunc, DtorFunc);
+bool _hashtable_direct_contains(HashTable *, ht_hash_t);
+bool _hashtable_direct_delete(HashTable *, ht_hash_t, bool);
+bool _hashtable_direct_get(HashTable *, ht_hash_t, void **);
+bool _hashtable_direct_put(HashTable *, uint32_t, ht_hash_t, void *, void **);
 HashTable *hashtable_new(HashFunc, EqualFunc, DupFunc, DtorFunc, DtorFunc);
-HashTable *hashtable_sized_new(size_t, HashFunc, EqualFunc, DupFunc, DtorFunc, DtorFunc);
-void hashtable_put(HashTable *, void *, void *, void **);
-bool hashtable_put_ex(HashTable *, uint32_t, void *, void *, void **);
-bool hashtable_quick_put_ex(HashTable *, uint32_t, hash_t, void *, void *, void **);
 size_t hashtable_size(HashTable *);
-bool value_equal(const void *, const void *);
-hash_t value_hash(const void *);
+bool value_equal(ht_key_t, ht_key_t);
+ht_hash_t value_hash(ht_key_t);
+
+#define hashtable_hash(ht, k) \
+    _hashtable_hash(ht, (ht_key_t) k)
+
+#define hashtable_direct_contains(ht, h) \
+    _hashtable_direct_contains(ht, (ht_hash_t) h)
+
+#define hashtable_contains(ht, k) \
+    _hashtable_contains(ht, (ht_key_t) k)
+
+#define hashtable_quick_contains(ht, h, k) \
+    _hashtable_quick_contains(ht, h, (ht_key_t) k)
+
+#define hashtable_direct_put(ht, f, h, nv, ov) \
+    _hashtable_direct_put(ht, f, (ht_hash_t) h, (void *) nv, (void **) ov)
+
+#define hashtable_put(ht, f, k, nv, ov) \
+    _hashtable_put(ht, f, (ht_key_t) k, (void *) nv, (void **) ov)
+
+#define hashtable_quick_put(ht, f, h, k, nv, ov) \
+    _hashtable_quick_put(ht, f, h, (ht_key_t) k, (void *) nv, (void **) ov)
+
+#define hashtable_direct_get(ht, h, v) \
+    _hashtable_direct_get(ht, (ht_hash_t) h, (void **) v)
+
+#define hashtable_get(ht, k, v) \
+    _hashtable_get(ht, (ht_key_t) k, (void **) v)
+
+#define hashtable_quick_get(ht, h, k, v) \
+    _hashtable_quick_get(ht, h, (ht_key_t) k, (void **) v)
+
+#define hashtable_direct_delete(ht, h, dtor) \
+    _hashtable_direct_delete(ht, (ht_hash_t) h, dtor)
+
+#define hashtable_delete(ht, k, dtor) \
+    _hashtable_delete(ht, (ht_key_t) k, dtor)
+
+#define hashtable_quick_delete(ht, h, k, dtor) \
+    _hashtable_quick_delete(ht, h, (ht_key_t) k, dtor)
+
 void *hashtable_first(HashTable *);
-
-#if 0
-typedef int (*ForeachFunc)();
-
-void hashtable_foreach(HashTable *, ForeachFunc);
-void hashtable_foreach_reverse(HashTable *, ForeachFunc);
-void hashtable_foreach_reverse_with_arg(HashTable *, ForeachFunc, void *);
-void hashtable_foreach_reverse_with_args(HashTable *, ForeachFunc, int, ...);
-void hashtable_foreach_with_arg(HashTable *, ForeachFunc, void *);
-#endif
-
 void hashtable_puts_keys(HashTable *);
 void hashtable_to_iterator(Iterator *, HashTable *);
 

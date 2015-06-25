@@ -78,7 +78,7 @@ static void account_notify_change(void)
             exists = hashtable_get(acd->current->modules_data, key, &data);
             mc->on_set_account(&data);
             if (!exists) {
-                hashtable_put(acd->current->modules_data, key, data, NULL);
+                hashtable_put(acd->current->modules_data, 0, key, data, NULL);
             }
         }
     }
@@ -98,7 +98,7 @@ void account_current_set_data(const char *name, void *data)
 {
     assert(NULL != acd->current);
 
-    hashtable_put(acd->current->modules_data, (void *) name, data, NULL);
+    hashtable_put(acd->current->modules_data, 0, name, data, NULL);
 }
 
 bool account_current_get_data(const char *name, void **data)
@@ -117,14 +117,16 @@ void account_register_module_callbacks(const char *name, DtorFunc dtor, void (*o
 
     if (NULL != dtor && NULL != on_set_account) { // nothing to do? Skip it!
         bool exists;
+        ht_hash_t h;
 
-        if (!(exists = hashtable_get(acd->modules_callbacks, name, (void **) &mc))) {
+        h = hashtable_hash(acd->modules_callbacks, name);
+        if (!(exists = hashtable_quick_get(acd->modules_callbacks, h, name, &mc))) {
             mc = mem_new(*mc);
         }
         mc->dtor = dtor;
         mc->on_set_account = on_set_account;
         if (!exists) {
-            hashtable_put(acd->modules_callbacks, (void *) name, mc, NULL);
+            hashtable_quick_put(acd->modules_callbacks, 0, h, name, mc, NULL);
         }
     }
 }
@@ -262,7 +264,7 @@ static int account_load(error_t **error)
                     free(expires_at);
                 }
             }
-            hashtable_put(acd->accounts, a->account, a, NULL);
+            hashtable_put(acd->accounts, 0, a->account, a, NULL);
             if (xmlHasProp(n, BAD_CAST "default")) {
                 acd->current = acd->autosel = a;
                 account_notify_change();
@@ -301,7 +303,7 @@ static void account_account_dtor(void *data)
                 module_callbacks_t *mc;
 
                 value = iterator_current(&it, &key);
-                if (hashtable_get(acd->modules_callbacks, key, (void **) &mc)) {
+                if (hashtable_get(acd->modules_callbacks, key, &mc)) {
                     mc->dtor(value);
                 }
             }
@@ -423,7 +425,7 @@ static command_status_t account_list(void *UNUSED(arg), error_t **UNUSED(error))
 }
 
 /**
- * account add [nickname] [password] ([consumer key] expires in|at [date])
+ * account add [nic-handle] [password] ([consumer key] expires in|at [date])
  *
  * NOTE:
  * - in order to not record password, use an empty string (with "")
@@ -431,7 +433,7 @@ static command_status_t account_list(void *UNUSED(arg), error_t **UNUSED(error))
  **/
 static command_status_t account_add(void *arg, error_t **error)
 {
-    hash_t h;
+    ht_hash_t h;
     time_t expires_at;
     account_argument_t *args;
 
@@ -478,8 +480,8 @@ static command_status_t account_add(void *arg, error_t **error)
         a->consumer_key = strdup(args->consumer_key);
         a->expires_at = expires_at;
         a->modules_data = hashtable_ascii_cs_new(NULL, NULL, NULL);
-//         hashtable_quick_put_ex(acd->accounts, HT_PUT_ON_DUP_KEY_PRESERVE, h, (void *) account, a, NULL);
-        hashtable_quick_put_ex(acd->accounts, 0, h, (void *) a->account, a, NULL); // TODO: old value (overwrite) is not freed!
+//         hashtable_quick_put(acd->accounts, HT_PUT_ON_DUP_KEY_PRESERVE, h, account, a, NULL);
+        hashtable_quick_put(acd->accounts, 0, h, a->account, a, NULL); // TODO: old value (overwrite) is not freed!
         // TODO: if this is the first account, set it as current?
         account_save(error);
     }
@@ -529,7 +531,7 @@ static command_status_t account_switch(void *arg, error_t **error)
 
     args = (account_argument_t *) arg;
     assert(NULL != args->account);
-    if ((ret = hashtable_get(acd->accounts, args->account, (void **) &ptr))) {
+    if ((ret = hashtable_get(acd->accounts, args->account, &ptr))) {
         const char *consumer_key;
 
         acd->current = ptr;

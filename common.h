@@ -50,6 +50,18 @@
 #  define WARN_UNUSED_RESULT
 # endif /* WARN_UNUSED_RESULT */
 
+# ifndef __has_builtin
+#  define __has_builtin(x) 0
+# endif /* !__has_builtin */
+
+# if __has_builtin(__builtin_expect)
+#  define EXPECTED(condition)   __builtin_expect(!!(condition), 1)
+#  define UNEXPECTED(condition) __builtin_expect(!!(condition), 0)
+# else
+#  define EXPECTED(condition)   (condition)
+#  define UNEXPECTED(condition) (condition)
+# endif /* __builtin_expect */
+
 # include "config.h"
 # define DIRECTORY_SEPARATOR '/'
 # define OVH_SHELL_CONFIG_FILE ".ovh"
@@ -126,7 +138,7 @@ typedef enum {
 # endif /* WITH_NLS */
 
 typedef int (*CmpFunc)(const void *, const void *);
-typedef bool (*EqualFunc)(const void *, const void *);
+// typedef bool (*EqualFunc)(const void *, const void *);
 typedef void (*DtorFunc)(void *);
 typedef void *(*DupFunc)(const void *);
 

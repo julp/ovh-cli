@@ -28,7 +28,7 @@ struct table_t {
     column_t *columns;
     resource_t *strings;
     size_t columns_count;
-    char *false_true_string[2];
+    const char *false_true_string[2];
     size_t false_true_len[2], max_false_true_len;
 };
 
@@ -69,7 +69,7 @@ const char * const false_true[] = {
  **/
 
 #define DEFAULT_WIDTH 80
-static int console_width(void)
+int console_width(void)
 {
     int columns;
 

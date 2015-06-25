@@ -209,10 +209,10 @@ static command_status_t me_credential_list(void *UNUSED(arg), error_t **error)
                         jrules = (json_value_t) iterator_current(&it, NULL);
                         JSON_GET_PROP_STRING_EX(jrules, "path", path, FALSE);
                         JSON_GET_PROP_STRING_EX(jrules, "method", method, FALSE);
-                        if (!hashtable_get(rules, path, (void **) &methods)) {
+                        if (!hashtable_get(rules, path, &methods)) {
                             methods = mem_new(*methods);
                             *methods = 0;
-                            hashtable_put(rules, path, methods, NULL);
+                            hashtable_put(rules, 0, path, methods, NULL);
                         }
                         for (i = 0; i < ARRAY_SIZE(rule_methods); i++) {
                             if (0 == strcmp(rule_methods[i].name, method)) {
@@ -250,7 +250,7 @@ static command_status_t me_credential_list(void *UNUSED(arg), error_t **error)
                     stringified_rules = string_orphan(buffer);
                 }
                 json_document_destroy(doc);
-                if (!hashtable_quick_get(applications, (hash_t) applicationId, (void *) applicationId, (void **) &app)) {
+                if (!hashtable_direct_get(applications, applicationId, &app)) {
                     req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_IGNORE_404, HTTP_GET, NULL, API_BASE_URL "/me/api/credential/%" PRIu32 "/application", credentialId);
                     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error); // if the application doesn't exist anymore, we get a 404
                     request_destroy(req);
@@ -265,7 +265,7 @@ static command_status_t me_credential_list(void *UNUSED(arg), error_t **error)
                             json_document_destroy(doc);
                         }
                     }
-                    hashtable_quick_put_ex(applications, 0, (hash_t) applicationId, (void *) applicationId, app, NULL);
+                    hashtable_direct_put(applications, 0, applicationId, app, NULL);
                 }
                 table_store(
                     t,

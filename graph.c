@@ -220,7 +220,7 @@ static void graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, grap
     current = NULL;
     if (NULL == parent->children) {
         parent->children = dptrarray_new(NULL, NULL, NULL);
-        hashtable_put_ex(g->nodes, HT_PUT_ON_DUP_KEY_PRESERVE, (void *) child, child, NULL);
+        hashtable_direct_put(g->nodes, HT_PUT_ON_DUP_KEY_PRESERVE, child, child, NULL);
         dptrarray_push(parent->children, child);
     } else {
         for (i = 0, l = dptrarray_length(parent->children); i < l; i++) {
@@ -235,7 +235,7 @@ static void graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, grap
 //             }
             return;
         }
-        hashtable_put_ex(g->nodes, HT_PUT_ON_DUP_KEY_PRESERVE, (void *) child, child, NULL);
+        hashtable_direct_put(g->nodes, HT_PUT_ON_DUP_KEY_PRESERVE, child, child, NULL);
         if (NULL == current) {
             dptrarray_push(parent->children, child);
         } else {
@@ -255,7 +255,7 @@ void /*_*/graph_create_full_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *g, graph_n
     assert(ARG_TYPE_LITERAL == start->type);
 
     parent = start;
-    hashtable_put_ex(g->roots, HT_PUT_ON_DUP_KEY_PRESERVE, (void *) start->string, start, NULL);
+    hashtable_put(g->roots, HT_PUT_ON_DUP_KEY_PRESERVE, start->string, start, NULL);
     va_start(nodes, start);
     while (NULL != (node = va_arg(nodes, graph_node_t *))) {
         graph_node_insert_child(/*UGREP_FILE_LINE_FUNC_RELAY_CC */g, parent, node);
@@ -396,7 +396,7 @@ static void traverse_graph_node_ex(graph_node_t *node, HashTable *visited, int d
     size_t children_count;
     graph_node_t *current;
 
-    if (ARG_TYPE_LITERAL == node->type && !hashtable_put_ex(visited, HT_PUT_ON_DUP_KEY_PRESERVE, node, NULL, NULL)) {
+    if (ARG_TYPE_LITERAL == node->type && !hashtable_direct_put(visited, HT_PUT_ON_DUP_KEY_PRESERVE, node, node, NULL)) {
         return;
     }
     has_end = FALSE;
@@ -708,7 +708,7 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
             }
             iterator_close(&it);
         } else {
-            if (hashtable_get(client_data->graph->roots, argv[0], (void **) &arg)) {
+            if (hashtable_get(client_data->graph->roots, argv[0], &arg)) {
                 int depth;
 
                 for (depth = 1; depth < cursorc && NULL != arg; depth++) {
@@ -795,7 +795,7 @@ command_status_t graph_run_command(graph_t *g, int args_count, const char **args
         return 0;
     }
     bzero(arguments, ARRAY_SIZE(arguments));
-    if (hashtable_get(g->roots, args[0], (void **) &arg)) {
+    if (hashtable_get(g->roots, args[0], &arg)) {
         int depth;
         handle_t handle;
 

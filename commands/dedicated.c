@@ -71,6 +71,23 @@ typedef struct {
     const char *description;
 } boot_t;
 
+static const char *mrtg_periods[] = {
+    "daily",
+    "hourly",
+    "monthly",
+    "weekly",
+    "yearly"
+};
+
+static const char *mrtg_types[] = {
+    "errors:download",
+    "errors:upload",
+    "packets:download",
+    "packets:upload",
+    "traffic:download",
+    "traffic:upload",
+};
+
 static void server_destroy(void *data)
 {
     server_t *s;
@@ -161,6 +178,8 @@ typedef struct {
     char *boot_name;
     char *server_name;
     char *reverse;
+    uint32_t mrtg_period;
+    uint32_t mrtg_type;
 } dedicated_argument_t;
 
 static server_t *fetch_server(server_set_t *ss, const char * const server_name, bool force, error_t **error)
@@ -168,12 +187,13 @@ static server_t *fetch_server(server_set_t *ss, const char * const server_name, 
     server_t *s;
 
     s = NULL;
-    if (!force && !ss->uptodate && !hashtable_get(ss->servers, server_name, (void **) &s)) {
+    if (!force && !ss->uptodate && !hashtable_get(ss->servers, server_name, &s)) {
         request_t *req;
         json_document_t *doc;
         bool request_success;
 
-        hashtable_put(ss->servers, (void *) server_name, s = server_new(), NULL);
+        s = server_new();
+        hashtable_put(ss->servers, 0, server_name, s, NULL);
         req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s", server_name);
         request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
@@ -251,7 +271,7 @@ static int parse_boot(HashTable *boots, json_document_t *doc)
     JSON_GET_PROP_STRING(root, "description", b->description);
     json_object_get_property(root, "bootType", &v);
     b->type = json_get_enum(v, boot_types, -1);
-    hashtable_put(boots, (void *) b->kernel, b, NULL);
+    hashtable_put(boots, 0, b->kernel, b, NULL);
     json_document_destroy(doc);
 
     return TRUE;
@@ -265,12 +285,13 @@ static command_status_t fetch_server_boots(const char *server_name, server_t **s
     *s = NULL;
     FETCH_ACCOUNT_SERVERS(ss);
     request_success = TRUE;
-    if (!hashtable_get(ss->servers, (void *) server_name, (void **) s) || !(*s)->boots_uptodate) {
+    if (!hashtable_get(ss->servers, server_name, s) || !(*s)->boots_uptodate) {
         request_t *req;
         json_document_t *doc;
 
         if (NULL == *s) {
-            hashtable_put(ss->servers, (void *) server_name, *s = server_new(), NULL);
+            *s = server_new();
+            hashtable_put(ss->servers, 0, server_name, *s, NULL);
         }
         req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s/boot", server_name);
         request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
@@ -546,7 +567,7 @@ static command_status_t dedicated_boot_set(void *arg, error_t **error)
     if ((success = (COMMAND_SUCCESS == fetch_server_boots(args->server_name, &s, error)))) {
         boot_t *b;
 
-        if ((success = hashtable_get(s->boots, args->boot_name, (void **) &b))) {
+        if ((success = hashtable_get(s->boots, args->boot_name, &b))) {
             request_t *req;
             json_document_t *reqdoc;
 
@@ -654,6 +675,54 @@ static command_status_t dedicated_reverse_set(void *arg, error_t **error)
     return dedicated_reverse_set_delete(arg, TRUE, error);
 }
 
+#include "graphic.h"
+static command_status_t dedicated_mrtg(void *arg, error_t **error)
+{
+    bool success;
+    request_t *req;
+    json_document_t *doc;
+    dedicated_argument_t *args;
+
+    args = (dedicated_argument_t *) arg;
+    assert(NULL != args->server_name);
+#if 1
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s/mrtg?period=%s&type=%s", args->server_name, mrtg_periods[args->mrtg_period], mrtg_types[args->mrtg_type]);
+    success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+    request_destroy(req);
+#else
+    success = TRUE;
+    doc = json_document_parse("[{\"timestamp\":1435140540,\"value\":{\"unit\":\"bps\",\"value\":2281.533}},{\"timestamp\":1435140600,\"value\":{\"unit\":\"bps\",\"value\":1981.95}},{\"timestamp\":1435140660,\"value\":{\"unit\":\"bps\",\"value\":1922.11}},{\"timestamp\":1435140720,\"value\":{\"unit\":\"bps\",\"value\":2215.201}},{\"timestamp\":1435140780,\"value\":{\"unit\":\"bps\",\"value\":1824.761}},{\"timestamp\":1435140840,\"value\":{\"unit\":\"bps\",\"value\":1856.88}},{\"timestamp\":1435140900,\"value\":{\"unit\":\"bps\",\"value\":1962.336}},{\"timestamp\":1435140960,\"value\":{\"unit\":\"bps\",\"value\":1702.629}},{\"timestamp\":1435141020,\"value\":{\"unit\":\"bps\",\"value\":2194.6}},{\"timestamp\":1435141080,\"value\":{\"unit\":\"bps\",\"value\":2003.756}},{\"timestamp\":1435141140,\"value\":{\"unit\":\"bps\",\"value\":1941.444}},{\"timestamp\":1435141200,\"value\":{\"unit\":\"bps\",\"value\":1888.647}},{\"timestamp\":1435141260,\"value\":{\"unit\":\"bps\",\"value\":1877.333}},{\"timestamp\":
+1435141320,\"value\":{\"unit\":\"bps\",\"value\":1980.607}},{\"timestamp\":1435141380,\"value\":{\"unit\":\"bps\",\"value\":3732.604}}]", NULL);
+#endif
+    if (success) {
+        Iterator it;
+        graphic_t *g;
+        json_value_t root;
+
+        g = graphic_new();
+        root = json_document_get_root(doc);
+        json_array_to_iterator(&it, root);
+        for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+            time_t sse;
+            double value;
+            json_value_t v, sv;
+
+            v = (json_value_t) iterator_current(&it, NULL);
+// debug("json_get_type(v) == JSON_TYPE_OBJECT : %d", json_get_type(v));
+            JSON_GET_PROP_INT(v, "timestamp", sse);
+            json_object_get_property(v, "value", &sv);
+            JSON_GET_PROP_DOUBLE(sv, "value", value);
+            graphic_store(g, sse, value);
+        }
+        iterator_close(&it);
+        json_document_destroy(doc);
+        graphic_display(g);
+        graphic_destroy(g);
+    }
+
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
 static bool complete_servers(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *UNUSED(data))
 {
     server_set_t *ss;
@@ -694,13 +763,15 @@ static bool complete_boots(void *parsed_arguments, const char *current_argument,
 
 static void dedicated_regcomm(graph_t *g)
 {
+    argument_t *arg_period, *arg_type;
     argument_t *arg_server, *arg_boot, *arg_reverse;
     argument_t *lit_boot, *lit_boot_list, *lit_boot_show;
     argument_t *lit_reverse, *lit_rev_set, *lit_rev_delete;
-    argument_t *lit_dedicated, *lit_dedi_reboot, *lit_dedi_list, *lit_dedi_check;
+    argument_t *lit_dedicated, *lit_dedi_reboot, *lit_dedi_list, *lit_dedi_check, *lit_dedi_mrtg;
 
     // dedicated ...
     lit_dedicated = argument_create_literal("dedicated", NULL);
+    lit_dedi_mrtg = argument_create_literal("mrtg", dedicated_mrtg);
     lit_dedi_list = argument_create_literal("list", dedicated_list);
     lit_dedi_check = argument_create_literal("check", dedicated_check);
     lit_dedi_reboot = argument_create_literal("reboot", dedicated_reboot);
@@ -716,11 +787,14 @@ static void dedicated_regcomm(graph_t *g)
     arg_server = argument_create_string(offsetof(dedicated_argument_t, server_name), "<server>", complete_servers, NULL);
     arg_boot = argument_create_string(offsetof(dedicated_argument_t, boot_name), "<boot>", complete_boots, NULL);
     arg_reverse = argument_create_string(offsetof(dedicated_argument_t, reverse), "<reverse>", NULL, NULL);
+    arg_type = argument_create_choices(offsetof(dedicated_argument_t, mrtg_type), "<types>",  mrtg_types);
+    arg_period = argument_create_choices(offsetof(dedicated_argument_t, mrtg_period), "<period>",  mrtg_periods);
 
     // dedicated ...
     graph_create_full_path(g, lit_dedicated, lit_dedi_list, NULL);
     graph_create_full_path(g, lit_dedicated, lit_dedi_check, NULL);
     graph_create_full_path(g, lit_dedicated, arg_server, lit_dedi_reboot, NULL);
+    graph_create_full_path(g, lit_dedicated, arg_server, lit_dedi_mrtg, arg_type, arg_period, NULL);
     // dedicated <server> boot ...
     graph_create_full_path(g, lit_dedicated, arg_server, lit_boot, lit_boot_list, NULL);
     graph_create_full_path(g, lit_dedicated, arg_server, lit_boot, lit_boot_show, NULL);
