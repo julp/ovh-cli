@@ -60,6 +60,8 @@ complete -F _ovh ovh");
         error_set(error, WARN, "unsupported shell %s", shell);
         return COMMAND_FAILURE;
     }
+
+    return COMMAND_SUCCESS;
 }
 
 static void base_regcomm(graph_t *g)
