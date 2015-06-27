@@ -239,13 +239,15 @@ static command_status_t fetch_all_hosting(service_set_t *ss, bool force, error_t
     return COMMAND_SUCCESS;
 }
 
-static command_status_t hosting_list(void *UNUSED(arg), error_t **error)
+static command_status_t hosting_list(COMMAND_ARGS)
 {
     table_t *t;
     Iterator it;
     service_set_t *ss;
     command_status_t ret;
 
+    USED(arg);
+    USED(mainopts);
     FETCH_ACCOUNT_HOSTING(ss);
     // populate
     if ((COMMAND_SUCCESS != (ret = fetch_all_hosting(ss, FALSE /*args->nocache*/, error)))) {
@@ -291,13 +293,14 @@ static command_status_t hosting_list(void *UNUSED(arg), error_t **error)
     return COMMAND_SUCCESS;
 }
 
-static command_status_t hosting_domain_list(void *arg, error_t **error)
+static command_status_t hosting_domain_list(COMMAND_ARGS)
 {
     bool success;
     service_t *s;
     service_set_t *ss;
     hosting_argument_t *args;
 
+    USED(mainopts);
     success = TRUE;
     args = (hosting_argument_t *) arg;
     assert(NULL != args->service_name);
@@ -380,7 +383,7 @@ static void parse_and_display_task(json_document_t *doc, const char *msgf, ...)
 }
 #endif
 
-static command_status_t hosting_domain_create(void *arg, error_t **error)
+static command_status_t hosting_domain_create(COMMAND_ARGS)
 {
     bool success;
     request_t *req;
@@ -388,6 +391,7 @@ static command_status_t hosting_domain_create(void *arg, error_t **error)
     hosting_argument_t *args;
     json_document_t *doc, *reqdoc;
 
+    USED(mainopts);
     FETCH_ACCOUNT_HOSTING(ss);
     args = (hosting_argument_t *) arg;
     assert(NULL != args->domain_path);
@@ -424,13 +428,13 @@ static command_status_t hosting_domain_create(void *arg, error_t **error)
 }
 
 #if 0
-static command_status_t hosting_domain_update(void *arg, error_t **error)
+static command_status_t hosting_domain_update(COMMAND_ARGS)
 {
     //
 }
 #endif
 
-static command_status_t hosting_domain_delete(void *arg, error_t **error)
+static command_status_t hosting_domain_delete(COMMAND_ARGS)
 {
     bool success;
     service_set_t *ss;
@@ -441,7 +445,7 @@ static command_status_t hosting_domain_delete(void *arg, error_t **error)
     args = (hosting_argument_t *) arg;
     assert(NULL != args->domain_name);
     assert(NULL != args->service_name);
-    if (confirm(_("Confirm unlinking domain '%s' to hosting '%s'"), args->domain_name, args->service_name)) {
+    if (confirm(mainopts, _("Confirm unlinking domain '%s' to hosting '%s'"), args->domain_name, args->service_name)) {
         request_t *req;
         json_document_t *doc;
 
@@ -466,7 +470,7 @@ static command_status_t hosting_domain_delete(void *arg, error_t **error)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static command_status_t hosting_cron_list(void *arg, error_t **error)
+static command_status_t hosting_cron_list(COMMAND_ARGS)
 {
     bool success;
 #if 0
@@ -475,6 +479,7 @@ static command_status_t hosting_cron_list(void *arg, error_t **error)
 #endif
     hosting_argument_t *args;
 
+    USED(mainopts);
     success = TRUE;
     args = (hosting_argument_t *) arg;
     assert(NULL != args->service_name);
@@ -557,17 +562,17 @@ static command_status_t hosting_cron_list(void *arg, error_t **error)
 }
 
 #if 0
-static command_status_t hosting_cron_create(void *arg, error_t **error)
+static command_status_t hosting_cron_create(COMMAND_ARGS)
 {
     //
 }
 
-static command_status_t hosting_cron_update(void *arg, error_t **error)
+static command_status_t hosting_cron_update(COMMAND_ARGS)
 {
     //
 }
 
-static command_status_t hosting_cron_delete(void *arg, error_t **error)
+static command_status_t hosting_cron_delete(COMMAND_ARGS)
 {
     //
 }
@@ -577,7 +582,7 @@ static command_status_t hosting_cron_delete(void *arg, error_t **error)
 state: _("off"), _("rw")
 iisRemoteRights, webDavRights: _("off"), _("read"), _("rw")
 #endif
-static command_status_t hosting_user_list(void *arg, error_t **error)
+static command_status_t hosting_user_list(COMMAND_ARGS)
 {
     bool success;
 #if 0
@@ -586,6 +591,7 @@ static command_status_t hosting_user_list(void *arg, error_t **error)
 #endif
     hosting_argument_t *args;
 
+    USED(mainopts);
     success = TRUE;
     args = (hosting_argument_t *) arg;
     assert(NULL != args->service_name);
@@ -655,18 +661,18 @@ static command_status_t hosting_user_list(void *arg, error_t **error)
 }
 
 #if 0
-static command_status_t hosting_user_create(void *arg, error_t **error)
+static command_status_t hosting_user_create(COMMAND_ARGS)
 {
     //
 }
 
-static command_status_t hosting_user_update(void *arg, error_t **error)
+static command_status_t hosting_user_update(COMMAND_ARGS)
 {
     //
 }
 #endif
 
-static command_status_t hosting_user_delete(void *arg, error_t **error)
+static command_status_t hosting_user_delete(COMMAND_ARGS)
 {
     bool success;
     service_set_t *ss;
@@ -677,7 +683,7 @@ static command_status_t hosting_user_delete(void *arg, error_t **error)
     args = (hosting_argument_t *) arg;
     assert(NULL != args->user_name);
     assert(NULL != args->service_name);
-    if (confirm(_("Confirm deletion of user '%s' for hosting '%s'"), args->user_name, args->service_name)) {
+    if (confirm(mainopts, _("Confirm deletion of user '%s' for hosting '%s'"), args->user_name, args->service_name)) {
         request_t *req;
         json_document_t *doc;
 
@@ -707,7 +713,7 @@ mode: _("besteffort"), _("classic")
 state: _("close"), _("ok"), _("readonly")
 type: _("mysql"), _("postgresql")
 #endif
-static command_status_t hosting_database_list(void *arg, error_t **error)
+static command_status_t hosting_database_list(COMMAND_ARGS)
 {
     bool success;
 #if 0
@@ -716,6 +722,7 @@ static command_status_t hosting_database_list(void *arg, error_t **error)
 #endif
     hosting_argument_t *args;
 
+    USED(mainopts);
     success = TRUE;
     args = (hosting_argument_t *) arg;
     assert(NULL != args->service_name);
@@ -796,13 +803,14 @@ static const char *database_dates[] = {
     NULL
 };
 
-static command_status_t hosting_database_dump(void *arg, error_t **error)
+static command_status_t hosting_database_dump(COMMAND_ARGS)
 {
     bool success;
     request_t *req;
     hosting_argument_t *args;
     json_document_t *doc, *reqdoc;
 
+    USED(mainopts);
     args = (hosting_argument_t *) arg;
     assert(NULL != args->service_name);
     assert(NULL != args->database_name);
@@ -832,13 +840,13 @@ static command_status_t hosting_database_dump(void *arg, error_t **error)
 }
 
 #if 0
-static command_status_t hosting_database_create(void *arg, error_t **error)
+static command_status_t hosting_database_create(COMMAND_ARGS)
 {
     //
 }
 #endif
 
-static command_status_t hosting_database_delete(void *arg, error_t **error)
+static command_status_t hosting_database_delete(COMMAND_ARGS)
 {
     bool success;
     request_t *req;
@@ -849,7 +857,7 @@ static command_status_t hosting_database_delete(void *arg, error_t **error)
     args = (hosting_argument_t *) arg;
     assert(NULL != args->service_name);
     assert(NULL != args->database_name);
-    if (confirm(_("Confirm drop database '%s' for hosting '%s'"), args->database_name, args->service_name)) {
+    if (confirm(mainopts, _("Confirm drop database '%s' for hosting '%s'"), args->database_name, args->service_name)) {
         req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/hosting/web/%s/database/%s", args->service_name, args->database_name);
         success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);

@@ -323,13 +323,15 @@ static command_status_t fetch_server_boots(const char *server_name, server_t **s
     return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static command_status_t dedicated_list(void *UNUSED(arg), error_t **error)
+static command_status_t dedicated_list(COMMAND_ARGS)
 {
     table_t *t;
     Iterator it;
     server_set_t *ss;
     command_status_t ret;
 
+    USED(arg);
+    USED(mainopts);
     FETCH_ACCOUNT_SERVERS(ss);
     // populate
     if ((COMMAND_SUCCESS != (ret = fetch_servers(ss, FALSE /*args->nocache*/, error)))) {
@@ -398,11 +400,13 @@ static command_status_t dedicated_list(void *UNUSED(arg), error_t **error)
     return COMMAND_SUCCESS;
 }
 
-static command_status_t dedicated_check(void *UNUSED(arg), error_t **error)
+static command_status_t dedicated_check(COMMAND_ARGS)
 {
     bool success;
     server_set_t *ss;
 
+    USED(arg);
+    USED(mainopts);
     FETCH_ACCOUNT_SERVERS(ss);
     // populate
     if ((success = (COMMAND_SUCCESS == fetch_servers(ss, FALSE, error)))) {
@@ -445,18 +449,19 @@ static command_status_t dedicated_check(void *UNUSED(arg), error_t **error)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static command_status_t dedicated_reboot(void *arg, error_t **error)
+static command_status_t dedicated_reboot(COMMAND_ARGS)
 {
     request_t *req;
     bool request_success;
     json_document_t *doc;
     dedicated_argument_t *args;
 
+    USED(mainopts);
     request_success = TRUE;
     args = (dedicated_argument_t *) arg;
     assert(NULL != args->server_name);
     // TODO: check server exists?
-    if (confirm(_("Confirm hard reboot of %s"), args->server_name)) {
+    if (confirm(mainopts, _("Confirm hard reboot of %s"), args->server_name)) {
         req = request_new(REQUEST_FLAG_SIGN, HTTP_POST, NULL, API_BASE_URL "/dedicated/server/%s/reboot", args->server_name);
         request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
@@ -469,13 +474,14 @@ static command_status_t dedicated_reboot(void *arg, error_t **error)
     return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static command_status_t dedicated_boot_list(void *arg, error_t **error)
+static command_status_t dedicated_boot_list(COMMAND_ARGS)
 {
     server_t *s;
     Iterator it;
     command_status_t ret;
     dedicated_argument_t *args;
 
+    USED(mainopts);
     args = (dedicated_argument_t *) arg;
     assert(NULL != args->server_name);
     if (COMMAND_SUCCESS == (ret = fetch_server_boots(args->server_name, &s, error))) {
@@ -519,12 +525,13 @@ static json_document_t *fetch_server_details(const char *server_name, error_t **
     return request_success ? doc : NULL;
 }
 
-static command_status_t dedicated_boot_get(void *arg, error_t **error)
+static command_status_t dedicated_boot_get(COMMAND_ARGS)
 {
     server_t *s;
     bool success;
     dedicated_argument_t *args;
 
+    USED(mainopts);
     args = (dedicated_argument_t *) arg;
     assert(NULL != args->server_name);
     if ((success = (COMMAND_SUCCESS == fetch_server_boots(args->server_name, &s, error)))) {
@@ -555,12 +562,13 @@ static command_status_t dedicated_boot_get(void *arg, error_t **error)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static command_status_t dedicated_boot_set(void *arg, error_t **error)
+static command_status_t dedicated_boot_set(COMMAND_ARGS)
 {
     server_t *s;
     bool success;
     dedicated_argument_t *args;
 
+    USED(mainopts);
     args = (dedicated_argument_t *) arg;
     assert(NULL != args->server_name);
     assert(NULL != args->boot_name);
@@ -615,7 +623,7 @@ static bool fetch_ip_block(const char * const server_ip, char **ip, error_t **er
     return success;
 }
 
-static command_status_t dedicated_reverse_set_delete(void *arg, bool set, error_t **error)
+static command_status_t dedicated_reverse_set_delete(void *arg, const main_options_t *mainopts, bool set, error_t **error)
 {
     char *ip;
     server_t *s;
@@ -623,6 +631,7 @@ static command_status_t dedicated_reverse_set_delete(void *arg, bool set, error_
     server_set_t *ss;
     dedicated_argument_t *args;
 
+    USED(mainopts);
     args = (dedicated_argument_t *) arg;
     assert(NULL != args->server_name);
     if (set) {
@@ -665,24 +674,25 @@ static command_status_t dedicated_reverse_set_delete(void *arg, bool set, error_
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static command_status_t dedicated_reverse_delete(void *arg, error_t **error)
+static command_status_t dedicated_reverse_delete(COMMAND_ARGS)
 {
-    return dedicated_reverse_set_delete(arg, FALSE, error);
+    return dedicated_reverse_set_delete(arg, mainopts, FALSE, error);
 }
 
-static command_status_t dedicated_reverse_set(void *arg, error_t **error)
+static command_status_t dedicated_reverse_set(COMMAND_ARGS)
 {
-    return dedicated_reverse_set_delete(arg, TRUE, error);
+    return dedicated_reverse_set_delete(arg, mainopts, TRUE, error);
 }
 
 #include "graphic.h"
-static command_status_t dedicated_mrtg(void *arg, error_t **error)
+static command_status_t dedicated_mrtg(COMMAND_ARGS)
 {
     bool success;
     request_t *req;
     json_document_t *doc;
     dedicated_argument_t *args;
 
+    USED(mainopts);
     args = (dedicated_argument_t *) arg;
     assert(NULL != args->server_name);
 #if 1

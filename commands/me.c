@@ -50,12 +50,14 @@ _("legalform")
 _("male")
 _("female")
 #endif
-static command_status_t me(void *UNUSED(arg), error_t **error)
+static command_status_t me(COMMAND_ARGS)
 {
     bool success;
     request_t *req;
     json_document_t *doc;
 
+    USED(arg);
+    USED(mainopts);
     req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/me");
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
@@ -126,12 +128,14 @@ static const char *application_status[] = {
     N_("trusted")
 };
 
-static command_status_t me_credential_list(void *UNUSED(arg), error_t **error)
+static command_status_t me_credential_list(COMMAND_ARGS)
 {
     bool success;
     request_t *req;
     json_document_t *doc;
 
+    USED(arg);
+    USED(mainopts);
     req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/me/api/credential");
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
@@ -294,12 +298,14 @@ static command_status_t me_credential_list(void *UNUSED(arg), error_t **error)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static command_status_t me_credential_flush(void *UNUSED(arg), error_t **error)
+static command_status_t me_credential_flush(COMMAND_ARGS)
 {
     bool success;
     request_t *req;
     json_document_t *doc;
 
+    USED(arg);
+    USED(mainopts);
     // TODO: find a way to not invalidate ourselves
     req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/me/api/credential");
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);

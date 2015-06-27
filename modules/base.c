@@ -2,15 +2,21 @@
 #include <string.h>
 #include "common.h"
 
-static command_status_t quit(void *UNUSED(arg), error_t **UNUSED(error))
+static command_status_t quit(COMMAND_ARGS)
 {
+    USED(arg);
+    USED(error);
+    USED(mainopts);
     exit(EXIT_SUCCESS);
 }
 
-static command_status_t help(void *UNUSED(arg), error_t **UNUSED(error))
+static command_status_t help(COMMAND_ARGS)
 {
     extern graph_t *g;
 
+    USED(arg);
+    USED(error);
+    USED(mainopts);
     puts("Available commands:");
     graph_display(g);
 
@@ -31,10 +37,12 @@ static bool str_endswith(const char *string, const char *suffix)
 }
 
 // source < ./ovh complete
-static command_status_t complete(void *UNUSED(arg), error_t **error)
+static command_status_t complete(COMMAND_ARGS)
 {
     char *shell;
 
+    USED(arg);
+    USED(mainopts);
     shell = getenv("SHELL");
     if (NULL == shell) {
         error_set(error, WARN, "undefined shell");

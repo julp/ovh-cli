@@ -198,12 +198,13 @@ static command_status_t fetch_domains(domain_set_t *ds, bool force, error_t **er
     return COMMAND_SUCCESS;
 }
 
-static command_status_t domain_list(void *arg, error_t **error)
+static command_status_t domain_list(COMMAND_ARGS)
 {
     domain_set_t *ds;
     command_status_t ret;
     domain_record_argument_t *args;
 
+    USED(mainopts);
     args = (domain_record_argument_t *) arg;
     FETCH_ACCOUNT_DOMAINS(ds);
     // populate
@@ -216,11 +217,13 @@ static command_status_t domain_list(void *arg, error_t **error)
     return COMMAND_SUCCESS;
 }
 
-static command_status_t domain_check(void *UNUSED(arg), error_t **error)
+static command_status_t domain_check(COMMAND_ARGS)
 {
     bool success;
     domain_set_t *ds;
 
+    USED(arg);
+    USED(mainopts);
     FETCH_ACCOUNT_DOMAINS(ds);
     // populate
     if ((success = (COMMAND_SUCCESS == fetch_domains(ds, FALSE, error)))) {
@@ -265,7 +268,7 @@ static command_status_t domain_check(void *UNUSED(arg), error_t **error)
 }
 
 #include <libxml/parser.h>
-static command_status_t domain_export(void *arg, error_t **error)
+static command_status_t domain_export(COMMAND_ARGS)
 {
     xmlDocPtr doc;
     request_t *req;
@@ -273,6 +276,7 @@ static command_status_t domain_export(void *arg, error_t **error)
     bool request_success;
     domain_record_argument_t *args;
 
+    USED(mainopts);
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
 
@@ -294,12 +298,13 @@ static command_status_t domain_export(void *arg, error_t **error)
     return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static command_status_t domain_refresh(void *arg, error_t **error)
+static command_status_t domain_refresh(COMMAND_ARGS)
 {
     request_t *req;
     bool request_success;
     domain_record_argument_t *args;
 
+    USED(mainopts);
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
 
@@ -358,13 +363,14 @@ static bool get_domain_records(const char *domain, domain_t **d, bool force, err
 }
 
 // TODO: optionnal arguments fieldType and subDomain in query string
-static command_status_t record_list(void *arg, error_t **error)
+static command_status_t record_list(COMMAND_ARGS)
 {
     domain_t *d;
     Iterator it;
     command_status_t ret;
     domain_record_argument_t *args;
 
+    USED(mainopts);
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
     if (COMMAND_SUCCESS == (ret = get_domain_records(args->domain, &d, args->nocache, error))) {
@@ -406,12 +412,13 @@ static command_status_t record_list(void *arg, error_t **error)
 
 // ./ovh domain domain.ext record toto add www type CNAME
 // TODO: ttl (optionnal)
-static command_status_t record_add(void *arg, error_t **error)
+static command_status_t record_add(COMMAND_ARGS)
 {
     bool request_success;
     json_document_t *doc;
     domain_record_argument_t *args;
 
+    USED(mainopts);
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
     assert(NULL != args->record);
@@ -482,7 +489,7 @@ static size_t find_record(HashTable *records, const char *name, record_t **match
     return matches;
 }
 
-static command_status_t record_delete(void *arg, error_t **error)
+static command_status_t record_delete(COMMAND_ARGS)
 {
     domain_t *d;
     record_t *match;
@@ -507,7 +514,7 @@ static command_status_t record_delete(void *arg, error_t **error)
             switch (matches) {
                 case 1:
                 {
-                    if (!confirm(_("Confirm deletion of '%s.%s'"), match->name, args->domain)) {
+                    if (!confirm(mainopts, _("Confirm deletion of '%s.%s'"), match->name, args->domain)) {
                         return COMMAND_SUCCESS; // yeah, success because *we* canceled it
                     }
                     break;
@@ -540,13 +547,14 @@ static command_status_t record_delete(void *arg, error_t **error)
 // arguments: [ttl <int>] [name <string>] [target <string>]
 // (in any order)
 // if we change record's name (subDomain), we need to update records cache
-static command_status_t record_update(void *arg, error_t **error)
+static command_status_t record_update(COMMAND_ARGS)
 {
     domain_t *d;
     record_t *r;
     bool success;
     domain_record_argument_t *args;
 
+    USED(mainopts);
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
     assert(NULL != args->record);
@@ -652,13 +660,14 @@ static bool complete_records(void *parsed_arguments, const char *current_argumen
     return request_success;
 }
 
-static command_status_t dnssec_status(void *arg, error_t **error)
+static command_status_t dnssec_status(COMMAND_ARGS)
 {
     request_t *req;
     bool request_success;
     json_document_t *doc;
     domain_record_argument_t *args;
 
+    USED(mainopts);
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
     req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
@@ -683,12 +692,13 @@ static command_status_t dnssec_status(void *arg, error_t **error)
     return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static command_status_t dnssec_enable_disable(void *arg, error_t **error)
+static command_status_t dnssec_enable_disable(COMMAND_ARGS)
 {
     request_t *req;
     bool request_success;
     domain_record_argument_t *args;
 
+    USED(mainopts);
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
     if (args->on_off) {

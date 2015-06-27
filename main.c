@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <string.h>
+#include <getopt.h>
 #include <libxml/parser.h>
 #include "common.h"
+#include "endpoints.h"
 #include <histedit.h>
 #include "modules/api.h"
 #include "modules/conv.h"
@@ -34,6 +36,44 @@ extern module_t dedicated_module;
 
 /*static */graph_t *g = NULL;
 
+static char optstr[] = "y";
+
+enum {
+    NOCONFIRM_OPT = 0x80,
+};
+
+static struct option long_options[] =
+{
+    { "no-confirm", no_argument, NULL, NOCONFIRM_OPT },
+    { "yes",        no_argument, NULL, 'y' },
+    { NULL,         no_argument, NULL, 0 }
+};
+
+const endpoint_t endpoints[] = {
+    { "ovh-eu",        "https://eu.api.ovh.com/1.0",        (const module_t * const []) { &me_module, &key_module, &vps_module, &domain_module, &hosting_module, &dedicated_module, NULL } },
+    { "ovh-ca",        "https://ca.api.ovh.com/1.0",        (const module_t * const []) { &me_module, &key_module, &vps_module, &domain_module, &hosting_module, &dedicated_module, NULL } },
+    { "soyoustart-eu", "https://eu.api.soyoustart.com/1.0", (const module_t * const []) { &me_module, &key_module, &dedicated_module, NULL } },
+    { "soyoustart-ca", "https://ca.api.soyoustart.com/1.0", (const module_t * const []) { &me_module, &key_module, &dedicated_module, NULL } },
+    { "kimsufi-eu",    "https://eu.api.kimsufi.com/1.0",    (const module_t * const []) { &me_module, &key_module, &dedicated_module, NULL } },
+    { "kimsufi-ca",    "https://ca.api.kimsufi.com/1.0",    (const module_t * const []) { &me_module, &key_module, &dedicated_module, NULL } },
+    { "runabove-ca",   "https://api.runabove.com/1.0",      (const module_t * const []) { &me_module, NULL } },
+    { NULL, NULL, NULL }
+};
+
+const endpoint_t *endpoint_by_name(const char *name/*, error_t **error*/)
+{
+    const endpoint_t *e;
+
+    for (e = endpoints; NULL != e->name; e++) {
+        if (0 == strcmp(e->name, name)) {
+            return e;
+        }
+    }
+
+//     error_set();
+    return NULL;
+}
+
 static const module_t */*builtin_*/modules[] = {
     &openssl_module,
     &curl_module,
@@ -53,6 +93,27 @@ static const module_t */*builtin_*/modules[] = {
     &hosting_module,
     &dedicated_module
 };
+
+#ifndef EUSAGE
+# define EUSAGE -2
+#endif /* !EUSAGE */
+
+#ifdef _MSC_VER
+extern char __progname[];
+#else
+extern char *__progname;
+#endif /* _MSC_VER */
+
+static void usage(void)
+{
+    fprintf(
+        stderr,
+        "usage: %s [-%s]\n",
+        __progname,
+        optstr
+    );
+    exit(EUSAGE);
+}
 
 void print_error(error_t *error)
 {
@@ -114,9 +175,9 @@ void report(int type, const char *format, ...)
 //     }
 }
 
-#if 1
+#if 0
 // TODO: remove backslash before " characters
-int str_split(const char *string, char ***args)
+static int str_split(const char *string, char ***args)
 {
     char *dup;
     int count, i;
@@ -193,7 +254,7 @@ static int str_split(const char *string, Tokenizer *tokenizer, char ***argv)
     int argc;
 
     tok_reset(tokenizer);
-    if (-1 == tok_str(tokenizer, string, &argc, argv)) {
+    if (-1 == tok_str(tokenizer, string, &argc, (const char ***) argv)) {
         return -1;
     } else {
         return argc;
@@ -230,13 +291,15 @@ extern unsigned char graph_complete(EditLine *, int);
 // LANG="fr_FR.ISO-8859-1" ./ovh domain $'\xE9' record list
 int main(int argc, char **argv)
 {
-    int ret;
     size_t i;
+    int c, ret;
     error_t *error;
+    main_options_t mainopts;
 
     error = NULL;
-    ret = EXIT_SUCCESS;
     g = graph_new();
+    ret = EXIT_SUCCESS;
+    bzero(&mainopts, sizeof(mainopts));
     for (i = 0; i < ARRAY_SIZE(modules); i++) {
         if (NULL != modules[i]->early_init) {
             modules[i]->early_init();
@@ -253,7 +316,21 @@ int main(int argc, char **argv)
             modules[i]->register_commands(g);
         }
     }
-    if (1 == argc) {
+
+    while (-1 != (c = getopt_long(argc, argv, optstr, long_options, NULL))) {
+        switch (c) {
+            case 'y':
+                mainopts.yes = TRUE;
+                break;
+            case NOCONFIRM_OPT:
+                mainopts.noconfirm = TRUE;
+                break;
+            default:
+                usage();
+        }
+    }
+
+    if (optind == argc) {
         int count;
         EditLine *el;
         History *hist;
@@ -288,8 +365,8 @@ int main(int argc, char **argv)
                 continue;
             }
             if (convert_string_local_to_utf8(line, count, &utf8_line, NULL, &error)) {
-                args_len = str_split(utf8_line, &args);
-                graph_run_command(g, args_len, (const char **) args, &error);
+                args_len = str_split(utf8_line, client_data.tokenizer, &args);
+                graph_run_command(g, args_len, (const char **) args, (const main_options_t *) &mainopts, &error);
                 convert_string_free(line, &utf8_line);
                 free(args[0]);
                 free(args);
@@ -305,10 +382,10 @@ int main(int argc, char **argv)
     } else {
         char **utf8_argv;
 
-        --argc;
-        ++argv;
+        argc -= optind;
+        argv += optind;
         convert_array_local_to_utf8(argc, argv, &utf8_argv, &error);
-        ret = graph_run_command(g, argc, (const char **) utf8_argv, &error) ? EXIT_SUCCESS : EXIT_FAILURE;
+        ret = graph_run_command(g, argc, (const char **) utf8_argv, (const main_options_t *) &mainopts, &error) ? EXIT_SUCCESS : EXIT_FAILURE;
         print_error(error);
         convert_array_free(argc, argv, utf8_argv);
     }

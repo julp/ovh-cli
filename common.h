@@ -151,6 +151,9 @@ typedef enum {
     COMMAND_USAGE
 } command_status_t;
 
+#define USED(x) (void) x
+#define COMMAND_ARGS void *arg, const main_options_t *mainopts, error_t **error
+
 # ifdef DEBUG
 #  define RED(str)    "\33[1;31m" str "\33[0m"
 #  define GREEN(str)  "\33[1;32m" str "\33[0m"
@@ -186,6 +189,12 @@ typedef enum {
 
 # define error_t xerror_t /* error_t is alredy used by glibc (?) when _GNU_SOURCE (?) is defined */
 # include "error.h"
+
+typedef struct {
+    bool yes;
+    bool noconfirm;
+} main_options_t;
+
 # include "graph.h"
 
 typedef struct {

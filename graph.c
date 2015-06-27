@@ -784,7 +784,7 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
     return res;
 }
 
-command_status_t graph_run_command(graph_t *g, int args_count, const char **args, error_t **error)
+command_status_t graph_run_command(graph_t *g, int args_count, const char **args, const main_options_t *mainopts, error_t **error)
 {
     char arguments[8192];
     command_status_t ret;
@@ -827,7 +827,7 @@ command_status_t graph_run_command(graph_t *g, int args_count, const char **args
             error_set(error, NOTICE, "unknown command");
 //             traverse_graph_node(arg, 0, TRUE);
         } else {
-            ret = handle((void *) arguments, /* TODO: arg->command_data, */ error);
+            ret = handle((void *) arguments, /* TODO: arg->command_data, */ mainopts, error);
         }
     } else {
         graph_display(g);

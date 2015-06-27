@@ -453,7 +453,7 @@ static void hashtable_iterator_current(const void *UNUSED(collection), void **st
 
     n = (HashNode *) *state;
     if (NULL != key) {
-        *key = n->key;
+        *((ht_key_t *) key) = n->key;
     }
     *value = n->data;
 }
@@ -496,7 +496,7 @@ void hashtable_print(HashTable *this)
         n = this->nodes[i];
         printf("%zu/%zu:\n", i, this->capacity);
         while (NULL != n) {
-            printf("    %p <==> %p (%" PRIuPTR ")\n", n->key, n->data, n->hash);
+            printf("    %" PRIXPTR " <==> %p (%" PRIuPTR ")\n", n->key, n->data, n->hash);
             n = n->nNext;
         }
     }

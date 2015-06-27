@@ -8,6 +8,7 @@
 
 #include "common.h"
 #include "date.h"
+#include "endpoints.h"
 #include "table.h"
 #include "modules/api.h"
 #include "modules/libxml.h"
@@ -24,17 +25,24 @@ enum {
 };
 
 typedef struct {
+    char *application_key;
+    char *application_secret;
+    const endpoint_t *endpoint;
+} application_t;
+
+typedef struct {
     char *account;
     char *password;
     time_t expires_at;
     const char *consumer_key;
     HashTable *modules_data;
-    // TODO: application_key + application_secret?
+//     application_t *application;
 } account_t;
 
 typedef struct {
     char path[MAXPATHLEN];
     HashTable *accounts;
+//     HashTable *applications;
     account_t *autosel;
     account_t *current;
     HashTable *modules_callbacks;
@@ -366,6 +374,11 @@ static bool account_early_init(void)
 static bool account_late_init(void)
 {
     error_t *error;
+    /**
+     * TODO:
+     * temporary "fix" to remove warning due to usage of print_error in this function: add an error_t as argument?
+     **/
+    extern void print_error(error_t *);
 
     error = NULL;
     account_load(&error);
@@ -383,6 +396,11 @@ typedef struct {
     char *consumer_key;
 } account_argument_t;
 
+typedef struct {
+    int endpoint;
+} application_argument_t;
+
+
 static void account_dtor(void)
 {
     if (NULL != acd) {
@@ -397,11 +415,14 @@ static void account_dtor(void)
     acd = NULL;
 }
 
-static command_status_t account_list(void *UNUSED(arg), error_t **UNUSED(error))
+static command_status_t account_list(COMMAND_ARGS)
 {
     table_t *t;
     Iterator it;
 
+    USED(arg);
+    USED(error);
+    USED(mainopts);
     t = table_new(4, "account", TABLE_TYPE_STRING, "expiration", TABLE_TYPE_DATETIME, "current", TABLE_TYPE_BOOLEAN, "default", TABLE_TYPE_BOOLEAN);
     hashtable_to_iterator(&it, acd->accounts);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
@@ -431,12 +452,13 @@ static command_status_t account_list(void *UNUSED(arg), error_t **UNUSED(error))
  * - in order to not record password, use an empty string (with "")
  * - default expiration of consumer key is 0 (unlimited)
  **/
-static command_status_t account_add(void *arg, error_t **error)
+static command_status_t account_add(COMMAND_ARGS)
 {
     ht_hash_t h;
     time_t expires_at;
     account_argument_t *args;
 
+    USED(mainopts);
     expires_at = (time_t) 0;
     args = (account_argument_t *) arg;
 
@@ -489,12 +511,13 @@ static command_status_t account_add(void *arg, error_t **error)
     return COMMAND_SUCCESS;
 }
 
-static command_status_t account_default_set(void *arg, error_t **error)
+static command_status_t account_default_set(COMMAND_ARGS)
 {
     int ret;
     void *ptr;
     account_argument_t *args;
 
+    USED(mainopts);
     args = (account_argument_t *) arg;
     assert(NULL != args->account);
     if ((ret = hashtable_get(acd->accounts, args->account, &ptr))) {
@@ -507,11 +530,12 @@ static command_status_t account_default_set(void *arg, error_t **error)
     return ret ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static command_status_t account_delete(void *arg, error_t **error)
+static command_status_t account_delete(COMMAND_ARGS)
 {
     int ret;
     account_argument_t *args;
 
+    USED(mainopts);
     args = (account_argument_t *) arg;
     assert(NULL != args->account);
     if ((ret = hashtable_delete(acd->accounts, args->account, DTOR_CALL))) {
@@ -523,12 +547,13 @@ static command_status_t account_delete(void *arg, error_t **error)
     return ret ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static command_status_t account_switch(void *arg, error_t **error)
+static command_status_t account_switch(COMMAND_ARGS)
 {
     int ret;
     account_t *ptr;
     account_argument_t *args;
 
+    USED(mainopts);
     args = (account_argument_t *) arg;
     assert(NULL != args->account);
     if ((ret = hashtable_get(acd->accounts, args->account, &ptr))) {
@@ -547,40 +572,65 @@ static command_status_t account_switch(void *arg, error_t **error)
 }
 
 #if TODO
-static command_status_t account_update(void *arg, error_t **error)
+static command_status_t account_update(COMMAND_ARGS)
 {
+    return COMMAND_SUCCESS;
+}
+#endif
+
+#if 0
+static command_status_t application_add(COMMAND_ARGS)
+{
+    USED(arg);
+    USED(error);
+
     return COMMAND_SUCCESS;
 }
 #endif
 
 static void account_regcomm(graph_t *g)
 {
-    argument_t *arg_account, *arg_password, *arg_consumer_key, *arg_expiration;
-    argument_t *lit_account, *lit_list, *lit_delete, *lit_add, *lit_switch, *lit_default, *lit_expires, *lit_in, *lit_at;
+    {
+        argument_t *arg_account, *arg_password, *arg_consumer_key, *arg_expiration;
+        argument_t *lit_account, *lit_list, *lit_delete, *lit_add, *lit_switch, *lit_default, *lit_expires, *lit_in, *lit_at;
 
-    lit_account = argument_create_literal("account", NULL);
-    lit_list = argument_create_literal("list", account_list);
-    lit_add = argument_create_literal("add", account_add);
-    lit_delete = argument_create_literal("delete", account_delete);
-    lit_default = argument_create_literal("default", account_default_set);
-    lit_switch = argument_create_literal("switch", account_switch);
-    lit_expires = argument_create_literal("expires", NULL);
-    lit_in = argument_create_relevant_literal(offsetof(account_argument_t, expires_in), "in", NULL);
-    lit_at = argument_create_relevant_literal(offsetof(account_argument_t, expires_at), "at", NULL);
+        lit_account = argument_create_literal("account", NULL);
+        lit_list = argument_create_literal("list", account_list);
+        lit_add = argument_create_literal("add", account_add);
+        lit_delete = argument_create_literal("delete", account_delete);
+        lit_default = argument_create_literal("default", account_default_set);
+        lit_switch = argument_create_literal("switch", account_switch);
+        lit_expires = argument_create_literal("expires", NULL);
+        lit_in = argument_create_relevant_literal(offsetof(account_argument_t, expires_in), "in", NULL);
+        lit_at = argument_create_relevant_literal(offsetof(account_argument_t, expires_at), "at", NULL);
 
-    arg_password = argument_create_string(offsetof(account_argument_t, password), "<password>", NULL, NULL);
-    arg_expiration = argument_create_string(offsetof(account_argument_t, expiration), "<expiration>", NULL, NULL);
-    arg_consumer_key = argument_create_string(offsetof(account_argument_t, consumer_key), "<consumer key>", NULL, NULL);
-    arg_account = argument_create_string(offsetof(account_argument_t, account), "<account>", complete_from_hashtable_keys, acd->accounts);
+        arg_password = argument_create_string(offsetof(account_argument_t, password), "<password>", NULL, NULL);
+        arg_expiration = argument_create_string(offsetof(account_argument_t, expiration), "<expiration>", NULL, NULL);
+        arg_consumer_key = argument_create_string(offsetof(account_argument_t, consumer_key), "<consumer key>", NULL, NULL);
+        arg_account = argument_create_string(offsetof(account_argument_t, account), "<account>", complete_from_hashtable_keys, acd->accounts);
 
-    graph_create_full_path(g, lit_account, lit_list, NULL);
-    graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, NULL);
-    graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, arg_consumer_key, NULL);
-    graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, arg_consumer_key, lit_expires, lit_at, arg_expiration, NULL);
-    graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, arg_consumer_key, lit_expires, lit_in, arg_expiration, NULL);
-    graph_create_full_path(g, lit_account, arg_account, lit_delete, NULL);
-    graph_create_full_path(g, lit_account, arg_account, lit_default, NULL);
-    graph_create_full_path(g, lit_account, arg_account, lit_switch, NULL);
+        graph_create_full_path(g, lit_account, lit_list, NULL);
+        graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, NULL);
+        graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, arg_consumer_key, NULL);
+        graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, arg_consumer_key, lit_expires, lit_at, arg_expiration, NULL);
+        graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, arg_consumer_key, lit_expires, lit_in, arg_expiration, NULL);
+        graph_create_full_path(g, lit_account, arg_account, lit_delete, NULL);
+        graph_create_full_path(g, lit_account, arg_account, lit_default, NULL);
+        graph_create_full_path(g, lit_account, arg_account, lit_switch, NULL);
+    }
+#if 0
+    {
+        argument_t *arg_app_key, *arg_app_secret, *arg_endpoint;
+        argument_t *lit_application, *lit_add;
+
+        lit_application = argument_create_literal("application", NULL);
+        lit_add = argument_create_literal("add", application_add);
+
+        arg_endpoint = argument_create_choices(offsetof(application_argument_t, endpoint), "<endpoint>", (const char * const *) endpoints);
+
+        graph_create_full_path(g, lit_application, arg_endpoint, NULL);
+    }
+#endif
 }
 
 DECLARE_MODULE(account) = {

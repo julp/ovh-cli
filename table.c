@@ -1,9 +1,8 @@
-#include <sys/ioctl.h>
-#include <unistd.h>
 #include <string.h>
 
 #include "common.h"
 #include "table.h"
+#include "util.h"
 #include "date.h"
 #include "modules/conv.h"
 #include "struct/dptrarray.h"
@@ -53,6 +52,29 @@ const char * const false_true[] = {
     NULL
 };
 
+#if 0
+// https://en.wikipedia.org/wiki/Box-drawing_character
+
+{
+    "═", "║", // HORIZONTAL ; VERTICAL
+    { "╔", "╦", "╗", }, // TOP | HORIZONTAL | VERTICAL | LEFT ; TOP | HORIZONTAL | VERTICAL ; TOP | HORIZONTAL | VERTICAL | RIGHT
+
+    { "╠", "╬", "╣", }, // HORIZONTAL | VERTICAL | LEFT ; HORIZONTAL | VERTICAL ; HORIZONTAL | VERTICAL | RIGHT
+
+    { "╚", "╩", "╝", },
+
+    "─", "│",
+    { "┌", "┬", "┐", },
+    { "├", "┼", "┤", },
+    { "└", "┴", "┘", },
+
+    "-", "|",
+    { "+", "+", "+" },
+    { "+", "+", "+" },
+    { "+", "+", "+" },
+},
+#endif
+
 /**
  * NOTE:
  * - column titles are expected to be already in "local" charset (gettext, if they are translated, will do it for us)
@@ -67,28 +89,6 @@ const char * const false_true[] = {
  * - pipe to PAGER if too much lines
  * - map TABLE_TYPE_BOOL on TABLE_TYPE_ENUM ? (copy t->false_true* to t->columns[i].enum*)
  **/
-
-#define DEFAULT_WIDTH 80
-int console_width(void)
-{
-    int columns;
-
-    if (isatty(STDOUT_FILENO)) {
-        struct winsize w;
-
-        if (NULL != getenv("COLUMNS") && 0 != atoi(getenv("COLUMNS"))) {
-            columns = atoi(getenv("COLUMNS"));
-        } else if (-1 != ioctl(STDOUT_FILENO, TIOCGWINSZ, &w)) {
-            columns = w.ws_col;
-        } else {
-            columns = DEFAULT_WIDTH;
-        }
-    } else {
-        columns = -1; // unlimited
-    }
-
-    return columns;
-}
 
 #include <wchar.h>
 #include <locale.h>
@@ -171,6 +171,7 @@ void string_store(table_t *t, va_list ap, column_t *c, value_t *val)
     char *s_local;
     error_t *error;
     const char *s_utf8;
+    extern print_error(error_t *); // TODO: temporary "fix" to remove warnings due to usage of print_error in this function
 
     // TODO: real error handling! Let caller handle this by adding a error_t **error in argument?
 error = NULL;

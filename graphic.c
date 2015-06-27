@@ -1,6 +1,7 @@
 #include <float.h>
 #include "common.h"
 #include "date.h"
+#include "util.h"
 #include "graphic.h"
 
 typedef struct graphic_link_t {

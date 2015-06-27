@@ -12,12 +12,14 @@
 
 #define MODULE_NAME "vps"
 
-static command_status_t vps_list(void *UNUSED(arg), error_t **error)
+static command_status_t vps_list(COMMAND_ARGS)
 {
     request_t *req;
     bool success;
     json_document_t *doc;
 
+    USED(arg);
+    USED(mainopts);
     req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/vps");
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);

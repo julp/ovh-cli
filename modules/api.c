@@ -686,11 +686,13 @@ const char *request_consumer_key(const char *account, const char *password, time
     return consumerKey;
 }
 
-static command_status_t log_on_off(void *raw_args, error_t **UNUSED(error))
+static command_status_t log_on_off(COMMAND_ARGS)
 {
     api_argument_t *args;
 
-    args = (api_argument_t *) raw_args;
+    USED(error);
+    USED(mainopts);
+    args = (api_argument_t *) arg;
     http_log = args->on_off;
 
     return COMMAND_SUCCESS;

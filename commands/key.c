@@ -136,7 +136,7 @@ static command_status_t fetch_keys(key_set_t *ks, bool force, error_t **error)
 }
 
 // key list
-static command_status_t key_list(void *arg, error_t **error)
+static command_status_t key_list(COMMAND_ARGS)
 {
     table_t *t;
     Iterator it;
@@ -144,6 +144,7 @@ static command_status_t key_list(void *arg, error_t **error)
     command_status_t ret;
     key_argument_t *args;
 
+    USED(mainopts);
     args = (key_argument_t *) arg;
     FETCH_ACCOUNT_KEYS(ks);
     // populate
@@ -173,7 +174,7 @@ static command_status_t key_list(void *arg, error_t **error)
 }
 
 // key <name> add <value>
-static command_status_t key_add(void *arg, error_t **error)
+static command_status_t key_add(COMMAND_ARGS)
 {
     bool success;
     key_set_t *ks;
@@ -181,6 +182,7 @@ static command_status_t key_add(void *arg, error_t **error)
     key_argument_t *args;
     json_document_t *reqdoc;
 
+    USED(mainopts);
     FETCH_ACCOUNT_KEYS(ks);
     args = (key_argument_t *) arg;
     assert(NULL != args->name);
@@ -210,7 +212,7 @@ static command_status_t key_add(void *arg, error_t **error)
 }
 
 // key <name> delete
-static command_status_t key_delete(void *arg, error_t **error)
+static command_status_t key_delete(COMMAND_ARGS)
 {
     bool success;
     key_set_t *ks;
@@ -221,7 +223,7 @@ static command_status_t key_delete(void *arg, error_t **error)
     FETCH_ACCOUNT_KEYS(ks);
     args = (key_argument_t *) arg;
     assert(NULL != args->name);
-    if (confirm(_("Confirm deletion of global SSH key named '%s'"), args->name)) {
+    if (confirm(mainopts, _("Confirm deletion of global SSH key named '%s'"), args->name)) {
         req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/me/sshKey/%s", args->name);
         success = request_execute(req, RESPONSE_IGNORE, NULL, error);
         request_destroy(req);
@@ -234,7 +236,7 @@ static command_status_t key_delete(void *arg, error_t **error)
 }
 
 // key <name> default <on/off>
-static command_status_t key_default(void *arg, error_t **error)
+static command_status_t key_default(COMMAND_ARGS)
 {
     bool success;
     key_set_t *ks;
@@ -242,6 +244,7 @@ static command_status_t key_default(void *arg, error_t **error)
     key_argument_t *args;
     json_document_t *reqdoc;
 
+    USED(mainopts);
     success = TRUE;
     FETCH_ACCOUNT_KEYS(ks);
     args = (key_argument_t *) arg;
@@ -254,9 +257,10 @@ static command_status_t key_default(void *arg, error_t **error)
         json_object_set_property(root, "default", args->on_off ? json_true : json_false);
         json_document_set_root(reqdoc, root);
     }
-    req = request_new(REQUEST_FLAG_SIGN, HTTP_PUT, NULL, API_BASE_URL "/me/sshKey/%s", args->name);
+    req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_PUT, reqdoc, API_BASE_URL "/me/sshKey/%s", args->name);
     success = request_execute(req, RESPONSE_IGNORE, NULL, error);
     request_destroy(req);
+    json_document_destroy(reqdoc);
     if (success) {
         ssh_key_t *k;
 
@@ -270,8 +274,9 @@ static command_status_t key_default(void *arg, error_t **error)
             }
             iterator_close(&it);
         }
-        hashtable_get(ks->keys, args->name, &k);
-        k->default_key = args->on_off;
+        if (hashtable_get(ks->keys, args->name, &k)) {
+            k->default_key = args->on_off;
+        }
     }
 
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;

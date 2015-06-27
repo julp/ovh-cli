@@ -9,7 +9,7 @@ typedef struct argument_t argument_t;
 typedef argument_t graph_node_t;
 typedef struct graph_t graph_t;
 
-typedef command_status_t (*handle_t)(void *, error_t **);
+typedef command_status_t (*handle_t)(COMMAND_ARGS);
 typedef bool (*complete_t)(void *, const char *, size_t, DPtrArray *, void *);
 
 /*
@@ -33,7 +33,7 @@ void /*_*/graph_create_all_path(/*UGREP_FILE_LINE_FUNC_DC */graph_t *, graph_nod
 void graph_destroy(graph_t *);
 void graph_display(graph_t *);
 graph_t *graph_new(void);
-command_status_t graph_run_command(graph_t *, int, const char **, error_t **);
+command_status_t graph_run_command(graph_t *, int, const char **, const main_options_t *, error_t **);
 
 argument_t *argument_create_choices_off_on(size_t, handle_t);
 argument_t *argument_create_choices_disable_enable(size_t, handle_t);

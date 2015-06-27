@@ -4,6 +4,7 @@
 
 # include "common.h"
 
-bool confirm(const char *, ...);
+int console_width(void);
+bool confirm(const main_options_t *, const char *, ...);
 
 #endif /* !UTIL_H */
