@@ -52,17 +52,25 @@ static command_status_t complete(COMMAND_ARGS)
         puts("_ovh()\n\
 {\n\
     local cur=${COMP_WORDS[COMP_CWORD]}\n\
-    if [ ${COMP_CWORD} -eq 1 ]; then\n\
-        # roots\n\
-        COMPREPLY=( $(compgen -W \"help log quit complete account me credentials key vps domain hosting dedicated\" -- $cur) )\n\
-    else\n\
-        if [ ${COMP_CWORD} -eq 2 -a ${COMP_WORDS[$((COMP_CWORD - 1))]} = \"credentials\" ]; then\n\
-            COMPREPLY=( $(compgen -W \"flush list\" -- $cur) )\n\
-        else\n\
-            # TODO\n\
-            COMPREPLY=( $(compgen -W \"fooOption barOption\" -- $cur) )\n\
-        fi\n\
-    fi\n\
+    case ${COMP_CWORD} in\n\
+        1)\n\
+            COMPREPLY=( $(compgen -W \"help log quit complete account me credentials key vps domain hosting dedicated\" -- $cur) )\n\
+        ;;\n\
+        2)\n\
+            case ${COMP_WORDS[$((COMP_CWORD - 1))]} in\n\
+                log)\n\
+                    COMPREPLY=( $(compgen -W \"on off\" -- $cur) )\n\
+                ;;\n\
+                credentials)\n\
+                    COMPREPLY=( $(compgen -W \"flush list\" -- $cur) )\n\
+                ;;\n\
+                dedicated)\n\
+                    # `ovh dedicated list`\n\
+                    COMPREPLY=( $(compgen -W \"check list\" -- $cur) )\n\
+                ;;\n\
+            esac\n\
+        ;;\n\
+    esac\n\
 }\n\
 \n\
 complete -F _ovh ovh");
