@@ -36,7 +36,7 @@ static bool str_endswith(const char *string, const char *suffix)
     return 0 == strcmp(string + string_len - suffix_len, suffix);
 }
 
-// source < ./ovh complete
+// source <(./ovh complete)
 static command_status_t complete(COMMAND_ARGS)
 {
     char *shell;
@@ -54,16 +54,23 @@ static command_status_t complete(COMMAND_ARGS)
     local cur=${COMP_WORDS[COMP_CWORD]}\n\
     if [ ${COMP_CWORD} -eq 1 ]; then\n\
         # roots\n\
-        COMPREPLY=( $(compgen -W \"help log quit complete account me credentials vps domain hosting dedicated\" -- $cur) )\n\
+        COMPREPLY=( $(compgen -W \"help log quit complete account me credentials key vps domain hosting dedicated\" -- $cur) )\n\
     else\n\
-        # TODO\n\
-        COMPREPLY=( $(compgen -W \"fooOption barOption\" -- $cur) )\n\
+        if [ ${COMP_CWORD} -eq 2 -a ${COMP_WORDS[$((COMP_CWORD - 1))]} = \"credentials\" ]; then\n\
+            COMPREPLY=( $(compgen -W \"flush list\" -- $cur) )\n\
+        else\n\
+            # TODO\n\
+            COMPREPLY=( $(compgen -W \"fooOption barOption\" -- $cur) )\n\
+        fi\n\
     fi\n\
 }\n\
 \n\
 complete -F _ovh ovh");
-//     } else if (str_endswith(shell, "/tcsh")) {
-        // TODO
+    } else if (str_endswith(shell, "/tcsh")) {
+        puts(
+            "complete ovh \
+                'p/1/(help log quit complete account me credentials key vps domain hosting dedicated)/' \
+        ");
     } else {
         error_set(error, WARN, "unsupported shell %s", shell);
         return COMMAND_FAILURE;
