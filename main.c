@@ -175,7 +175,7 @@ void report(int type, const char *format, ...)
 //     }
 }
 
-#if 0
+#if WITHOUT_LIBEDIT_TOKENIZER
 // TODO: remove backslash before " characters
 static int str_split(const char *string, char ***args)
 {
@@ -260,7 +260,7 @@ static int str_split(const char *string, Tokenizer *tokenizer, char ***argv)
         return argc;
     }
 }
-#endif
+#endif /* WITHOUT_LIBEDIT_TOKENIZER */
 
 void cleanup(void)
 {
@@ -368,8 +368,10 @@ int main(int argc, char **argv)
                 args_len = str_split(utf8_line, client_data.tokenizer, &args);
                 graph_run_command(g, args_len, (const char **) args, (const main_options_t *) &mainopts, &error);
                 convert_string_free(line, &utf8_line);
+#if WITHOUT_LIBEDIT_TOKENIZER
                 free(args[0]);
                 free(args);
+#endif /* WITHOUT_LIBEDIT_TOKENIZER */
             }
             print_error(error);
             history(hist, &ev, H_ENTER, line);
