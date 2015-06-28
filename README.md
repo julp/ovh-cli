@@ -116,17 +116,20 @@ ovh account <nic-handle> password "" <consumer key>
 * hosting
     * list => list all hosted website
     * \<hosting>
-        * user list => list (FTP & SSH) users of *hosting*
-        * \<user>
-            * delete => remove *user* from *hosting*
+        * user
+            * list => list (FTP & SSH) users of *hosting*
+            * \<user>
+                * delete => remove *user* from *hosting*
         * cron list => list cron jobs for *hosting*
-        * domain list => list domains associated to *hosting*
-        * \<domain>
-            * delete => unlink *domain* to *hosting*
-            * add \<path> => link *domain* to *hosting* through *path*
-        * database list => list databases associated to *hosting*
-        * \<database>
-            * delete => drop *database* associated to *hosting*
+        * domain
+            * list => list domains associated to *hosting*
+            * \<domain>
+                * delete => unlink *domain* to *hosting*
+                * add \<path> => link *domain* to *hosting* through *path*
+        * database
+            * list => list databases associated to *hosting*
+            * \<database>
+                * delete => drop *database* associated to *hosting*
 * credentials
     * list => list all credentials used to connect to any OVH application with current account
     * flush => remove all credentials used with current account
