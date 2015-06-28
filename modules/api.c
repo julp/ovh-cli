@@ -420,9 +420,9 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
             for (e = req->headers; NULL != e; e = e->next) {
                 fprintf(fp, "- %s\n", e->data);
             }
-            if (NULL != req->data) {
+            if (NULL != req->pdata) {
                 fputs("Body:\n", fp);
-                fputs(req->data, fp);
+                fputs(req->pdata, fp);
                 fputc('\n', fp);
             }
             fprintf(fp, "\n>>> (reponse) URL = %s\n", url);
