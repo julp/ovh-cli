@@ -520,8 +520,8 @@ static command_status_t record_delete(COMMAND_ARGS)
                     break;
                 }
                 case 0:
-                    error_set(error, WARN, "Abort, no record match '%s'", args->record);
-                    return COMMAND_FAILURE;
+                    error_set(error, INFO, "No record match '%s'", args->record);
+                    return COMMAND_SUCCESS;
                 default:
                     error_set(error, WARN, "Abort, more than one record match '%s'", args->record);
                     return COMMAND_FAILURE;
