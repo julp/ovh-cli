@@ -64,8 +64,10 @@ Register your account(s):
 ```
 # with your password instead of a valid consumer key
 ovh account <nic-handle> password <password>
-# with a valid and unexpirable consumer key instead of a password
+
+# with a valid consumer key instead of a password (use link "Create a token" above)
 ovh account <nic-handle> password "" <consumer key>
+# (if your consumer key is not unlimited, append "expires in X days" to the command)
 ```
 
 ## Commands
@@ -133,7 +135,7 @@ ovh account <nic-handle> password "" <consumer key>
     * \<name>
         * delete => remove SSH key named *name*
         * add \<ssh key> => register *ssh key* as *name*
-        * default <on/off> => (un)define SSH key named *name* as default (default = the one used in rescue mode)
+        * default \<on/off> => (un)define SSH key named *name* as default (default = the one used in rescue mode)
 * me => display personal informations associated to the current account (name, address, etc)
 * help
 * quit
