@@ -38,4 +38,6 @@ command_status_t graph_run_command(graph_t *, int, const char **, const main_opt
 argument_t *argument_create_choices_off_on(size_t, handle_t);
 argument_t *argument_create_choices_disable_enable(size_t, handle_t);
 
+char *graph_bash(graph_t *);
+
 #endif /* !GRAPH_H */

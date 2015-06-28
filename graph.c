@@ -4,6 +4,7 @@
 #include <histedit.h>
 
 #include "common.h"
+#include "struct/xtring.h"
 #include "struct/hashtable.h"
 
 typedef enum {
@@ -852,4 +853,132 @@ void graph_display(graph_t *g)
     }
     iterator_close(&it);
     hashtable_destroy(visited);
+}
+
+#define STRING_APPEND_STRING(dest, suffix) \
+    do { \
+        string_append_string_len(dest, suffix, STR_LEN(suffix)); \
+    } while (0);
+
+static void traverse_graph_node_for_bash(graph_node_t *node, HashTable *visited, String *content, String *path)
+{
+    bool has_end;
+    size_t i, l, path_len;
+    size_t children_count;
+    graph_node_t *current;
+
+    if (ARG_TYPE_LITERAL == node->type && !hashtable_direct_put(visited, HT_PUT_ON_DUP_KEY_PRESERVE, node, node, NULL)) {
+        return;
+    }
+    has_end = FALSE;
+    children_count = 0;
+    for (i = 0, l = dptrarray_length(node->children); i < l; i++) {
+        current = dptrarray_at_unsafe(node->children, i, graph_node_t);
+        ++children_count;
+        has_end |= ARG_TYPE_END == current->type;
+    }
+//     if (indent) {
+//         printf("%*c", depth * 4, ' ');
+//     }
+//     putchar(' ');
+//     fputs(node->string, stdout);
+//     if (children_count > 1 || has_end) {
+//         putchar('\n');
+//     }
+    if (has_end) {
+        return;
+    }
+    path_len = path->len;
+    STRING_APPEND_STRING(content, "        [\"");
+    if (ARG_TYPE_STRING == node->type) {
+        string_append_char(path, '*');
+    } else {
+//         string_append_string(content, node->string);
+        string_append_string(path, node->string);
+    }
+    string_append_char(path, '/');
+    string_append_string_len(content, path->ptr, path->len);
+    STRING_APPEND_STRING(content, /*"/"*/"\"]=\"");
+    for (i = 0/*, l = dptrarray_length(node->children)*/; i < l; i++) {
+        current = dptrarray_at_unsafe(node->children, i, graph_node_t);
+        switch (current->type) {
+            case ARG_TYPE_CHOICES:
+            {
+                const char * const *v;
+
+                for (v = (const char * const *) current->completion_data; NULL != *v; v++) {
+                    string_append_string(content, *v);
+                    string_append_char(content, ' ');
+                }
+                break;
+            }
+            case ARG_TYPE_LITERAL:
+                string_append_string(content, current->string);
+                string_append_char(content, ' ');
+                break;
+        }
+    }
+    STRING_APPEND_STRING(content, "\"\n");
+    for (i = 0/*, l = dptrarray_length(node->children)*/; i < l; i++) {
+        current = dptrarray_at_unsafe(node->children, i, graph_node_t);
+        if (ARG_TYPE_END != current->type) {
+            traverse_graph_node_for_bash(current, visited, content, path);
+        }
+    }
+    path->ptr[path->len = path_len] = '\0';
+}
+
+char *graph_bash(graph_t *g)
+{
+    Iterator it;
+    HashTable *visited;
+    String *content, *path;
+
+    content = string_new();
+    path = string_dup_string_len("/", STR_LEN("/"));
+    STRING_APPEND_STRING(content, "_ovh() {\n\
+    declare -rA X=(\n");
+    visited = hashtable_new(value_hash, value_equal, NULL, NULL, NULL);
+    hashtable_to_iterator(&it, g->roots);
+    STRING_APPEND_STRING(content, "        [\"/\"]=\"");
+    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        argument_t *arg;
+
+        arg = iterator_current(&it, NULL);
+        string_append_string(content, arg->string);
+        string_append_char(content, ' ');
+    }
+    STRING_APPEND_STRING(content, "\"\n");
+    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        argument_t *arg;
+
+        arg = iterator_current(&it, NULL);
+        traverse_graph_node_for_bash(arg, visited, content, path);
+    }
+    iterator_close(&it);
+    hashtable_destroy(visited);
+    STRING_APPEND_STRING(content, "\
+    )\n\
+    local cur=${COMP_WORDS[COMP_CWORD]}\n\
+\n\
+    i=1\n\
+    COMP_PATH=\"/\"\n\
+    while [ $i -lt $COMP_CWORD ]; do\n\
+        if [ -n \"${X[${COMP_PATH}${COMP_WORDS[i]}/]}\" ]; then\n\
+            COMP_PATH=\"${COMP_PATH}${COMP_WORDS[i]}/\"\n\
+        else\n\
+            COMP_PATH=\"${COMP_PATH}*/\"\n\
+        fi\n\
+        let i=i+1\n\
+    done\n\
+\n\
+    if [ -n \"${X[$COMP_PATH]}\" ]; then\n\
+        COMPREPLY=( $(compgen -W \"${X[$COMP_PATH]}\" -- $cur) )\n\
+    fi\n\
+}\n\
+\n\
+complete -F _ovh ovh");
+    string_destroy(path);
+
+    return string_orphan(content);
 }

@@ -2,6 +2,8 @@
 #include <string.h>
 #include "common.h"
 
+extern graph_t *g;
+
 static command_status_t quit(COMMAND_ARGS)
 {
     USED(arg);
@@ -12,8 +14,6 @@ static command_status_t quit(COMMAND_ARGS)
 
 static command_status_t help(COMMAND_ARGS)
 {
-    extern graph_t *g;
-
     USED(arg);
     USED(error);
     USED(mainopts);
@@ -39,7 +39,7 @@ static bool str_endswith(const char *string, const char *suffix)
 // source <(./ovh complete)
 static command_status_t complete(COMMAND_ARGS)
 {
-    char *shell;
+    char *shell, *content;
 
     USED(arg);
     USED(mainopts);
@@ -49,31 +49,9 @@ static command_status_t complete(COMMAND_ARGS)
         return COMMAND_FAILURE;
     }
     if (str_endswith(shell, "/bash")) {
-        puts("_ovh()\n\
-{\n\
-    local cur=${COMP_WORDS[COMP_CWORD]}\n\
-    case ${COMP_CWORD} in\n\
-        1)\n\
-            COMPREPLY=( $(compgen -W \"help log quit complete account me credentials key vps domain hosting dedicated\" -- $cur) )\n\
-        ;;\n\
-        2)\n\
-            case ${COMP_WORDS[$((COMP_CWORD - 1))]} in\n\
-                log)\n\
-                    COMPREPLY=( $(compgen -W \"on off\" -- $cur) )\n\
-                ;;\n\
-                credentials)\n\
-                    COMPREPLY=( $(compgen -W \"flush list\" -- $cur) )\n\
-                ;;\n\
-                dedicated)\n\
-                    # `ovh dedicated list`\n\
-                    COMPREPLY=( $(compgen -W \"check list\" -- $cur) )\n\
-                ;;\n\
-            esac\n\
-        ;;\n\
-    esac\n\
-}\n\
-\n\
-complete -F _ovh ovh");
+        content = graph_bash(g);
+        puts(content);
+        free(content);
     } else if (str_endswith(shell, "/tcsh")) {
         puts(
             "complete ovh \
