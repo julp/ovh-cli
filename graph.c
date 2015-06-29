@@ -670,6 +670,18 @@ static int string_array_to_index(argument_t *arg, const char *value)
     return -1;
 }
 
+static size_t longest_prefix(const char *s, char *prefix)
+{
+    char *p;
+//     const char *s;
+
+    for (/*s = string, */p = prefix; *s++ == *p && '\0' != *p; ++p)
+        ;
+    *p = '\0';
+
+    return p - prefix;
+}
+
 // TODO:
 // - separate completion (2 DPtrArray ?) to distinguish commands to values (eg: domain<tab> will propose "bar.tld", "foo.tld", "list", "xxx.tld")
 // - indicate the command is complete? (eg: domain list<tab>)
@@ -767,15 +779,40 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
         default:
         {
             Iterator it;
+            char prefix[1024];
+            size_t prefix_len;
+            const char *v;
 
             puts("");
+            *prefix = '\0';
+            prefix_len = 0;
             dptrarray_sort(client_data->possibilities, strcmpp, NULL);
             dptrarray_to_iterator(&it, client_data->possibilities);
+#if 1
+            iterator_first(&it);
+            v = iterator_current(&it, NULL); // this is safe because if we are here, we know client_data->possibilities has at least 2 entries
+            prefix_len = strlen(v);
+            strncpy(prefix, v, ARRAY_SIZE(prefix));
+            do {
+                fputc('\t', stdout);
+                v = iterator_current(&it, NULL);
+                if (0 != prefix_len) { // if there is no common prefix, don't continue to look for one
+                    prefix_len = longest_prefix(v, prefix);
+                }
+                fputs(v, stdout);
+                fputc('\n', stdout);
+                iterator_next(&it);
+            } while (iterator_is_valid(&it));
+            if (prefix_len) {
+                el_insertstr(el, prefix + cursoro);
+            }
+#else
             for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
                 fputc('\t', stdout);
                 fputs(iterator_current(&it, NULL), stdout);
                 fputc('\n', stdout);
             }
+#endif
             iterator_close(&it);
             res = CC_REDISPLAY;
             break;
