@@ -559,8 +559,8 @@ static command_status_t account_add(COMMAND_ARGS)
         a->consumer_key = strdup(args->consumer_key);
         a->expires_at = expires_at;
         a->modules_data = hashtable_ascii_cs_new(NULL, NULL, NULL);
-//         hashtable_quick_put(acd->accounts, HT_PUT_ON_DUP_KEY_PRESERVE, h, account, a, NULL);
-        hashtable_quick_put(acd->accounts, 0, h, a->account, a, NULL); // TODO: old value (overwrite) is not freed!
+//         hashtable_quick_put(acd->accounts, HT_PUT_ON_DUP_KEY_PRESERVE, h, a->account, a, NULL);
+        hashtable_quick_put(acd->accounts, 0, h, a->account, a, NULL);
         // TODO: if this is the first account, set it as current?
         account_save(error);
     }
