@@ -25,8 +25,8 @@ enum {
 };
 
 typedef struct {
-    char *application_key;
-    char *application_secret;
+    char *key;
+    char *secret;
     const endpoint_t *endpoint;
 } application_t;
 
@@ -42,7 +42,7 @@ typedef struct {
 typedef struct {
     char path[MAXPATHLEN];
     HashTable *accounts;
-//     HashTable *applications;
+    HashTable *applications; // int (index in endpoints - see endpoints.h) => application_t *
     account_t *autosel;
     account_t *current;
     HashTable *modules_callbacks;
@@ -147,6 +147,15 @@ static bool account_save(error_t **error)
     xmlNodePtr root;
     mode_t old_umask;
 
+#define CREATE_NODE(node, name) \
+    do { \
+        if (NULL == (node = xmlNewNode(NULL, BAD_CAST name))) { \
+            xmlFreeDoc(doc); \
+            error_set(error, WARN, "Unable to create XML node '%s'", name); \
+            return FALSE; \
+        } \
+    } while (0);
+
 #define SET_PROP(node, name, value) \
     do { \
         if (NULL == xmlSetProp(node, BAD_CAST name, BAD_CAST value)) { \
@@ -157,11 +166,25 @@ static bool account_save(error_t **error)
         } \
     } while (0);
 
+#define LINK_TO_ROOT(node) \
+    do { \
+        if (NULL == xmlAddChild(root, node)) { \
+            xmlFreeNode(node); \
+            xmlFreeDoc(doc); \
+            error_set(error, WARN, "Unable to add '%s' to document root", (const char *) node->name); \
+            return FALSE; \
+        } \
+    } while (0);
+
     doc = xmlNewDoc(BAD_CAST "1.0");
+#if 0
     if (NULL == (root = xmlNewNode(NULL, BAD_CAST "ovh"))) {
         error_set(error, WARN, "Unable to create XML node 'ovh'");
         return FALSE;
     }
+#else
+    CREATE_NODE(root, "ovh");
+#endif
     xmlDocSetRootElement(doc, root);
     hashtable_to_iterator(&it, acd->accounts);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
@@ -169,11 +192,15 @@ static bool account_save(error_t **error)
         account_t *account;
 
         account = (account_t *) iterator_current(&it, NULL);
+#if 0
         if (NULL == (node = xmlNewNode(NULL, BAD_CAST "account"))) {
             xmlFreeDoc(doc);
             error_set(error, WARN, "Unable to create XML node 'account'");
             return FALSE;
         }
+#else
+        CREATE_NODE(node, "account");
+#endif
         SET_PROP(node, "account", account->account);
         SET_PROP(node, "password", account->password);
         if (account == acd->autosel) {
@@ -190,12 +217,29 @@ static bool account_save(error_t **error)
             }
             SET_PROP(node, "expires_at", buffer);
         }
+#if 0
         if (NULL == xmlAddChild(root, node)) {
             xmlFreeNode(node);
             xmlFreeDoc(doc);
             error_set(error, WARN, "Unable to add 'account' to document root");
             return FALSE;
         }
+#else
+        LINK_TO_ROOT(node);
+#endif
+    }
+    iterator_close(&it);
+    hashtable_to_iterator(&it, acd->applications);
+    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        xmlNodePtr node;
+        application_t *app;
+
+        app = (application_t *) iterator_current(&it, NULL);
+        CREATE_NODE(node, "application");
+        SET_PROP(node, "key", app->key);
+        SET_PROP(node, "secret", app->secret);
+        SET_PROP(node, "endpoint", app->endpoint->name);
+        LINK_TO_ROOT(node);
     }
     iterator_close(&it);
     old_umask = umask(077);
@@ -322,12 +366,23 @@ static void account_account_dtor(void *data)
     free(account);
 }
 
+static void application_dtor(void *data)
+{
+    application_t *app;
+
+    app = (application_t *) data;
+    FREE(app, key);
+    FREE(app, secret);
+    free(app);
+}
+
 static bool account_early_init(void)
 {
     char *home;
 
     acd = mem_new(*acd);
     acd->autosel = acd->current = NULL;
+    acd->applications = hashtable_new(value_hash, value_equal, NULL, NULL, application_dtor);
     acd->accounts = hashtable_ascii_cs_new(NULL, NULL /* no dtor for key as it is also part of the value */, account_account_dtor);
     acd->modules_callbacks = hashtable_ascii_cs_new(NULL, NULL /* no dtor for key as it is also part of the value */, free);
     if (NULL == (home = getenv("HOME"))) {
@@ -398,6 +453,8 @@ typedef struct {
 
 typedef struct {
     int endpoint;
+    char *key;
+    char *secret;
 } application_argument_t;
 
 
@@ -578,15 +635,65 @@ static command_status_t account_update(COMMAND_ARGS)
 }
 #endif
 
-#if 0
-static command_status_t application_add(COMMAND_ARGS)
+static command_status_t application_list(COMMAND_ARGS)
 {
+    table_t *t;
+    Iterator it;
+
     USED(arg);
     USED(error);
+    USED(mainopts);
+    t = table_new(
+        3,
+        _("endpoint"), TABLE_TYPE_ENUM, endpoint_names,
+        _("key"), TABLE_TYPE_STRING,
+        _("secret"), TABLE_TYPE_STRING
+    );
+    hashtable_to_iterator(&it, acd->applications);
+    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        application_t *app;
+
+        app = iterator_current(&it, NULL);
+        table_store(t, app->endpoint - endpoints, app->key, app->secret);
+    }
+    iterator_close(&it);
+    table_display(t, TABLE_FLAG_NONE);
+    table_destroy(t);
 
     return COMMAND_SUCCESS;
 }
-#endif
+
+static command_status_t application_add(COMMAND_ARGS)
+{
+    application_t *app;
+    application_argument_t *args;
+
+    USED(mainopts);
+    args = (application_argument_t *) arg;
+    assert(NULL != args->key);
+    assert(NULL != args->secret);
+
+    app = mem_new(*app);
+    app->key = strdup(args->secret);
+    app->secret = strdup(args->secret);
+    app->endpoint = &endpoints[args->endpoint];
+    hashtable_direct_put(acd->applications, 0, args->endpoint, app, NULL);
+    account_save(error);
+
+    return COMMAND_SUCCESS;
+}
+
+static command_status_t application_delete(COMMAND_ARGS)
+{
+    application_argument_t *args;
+
+    USED(mainopts);
+    args = (application_argument_t *) arg;
+    hashtable_direct_delete(acd->applications, args->endpoint, TRUE);
+    account_save(error);
+
+    return COMMAND_SUCCESS;
+}
 
 static void account_regcomm(graph_t *g)
 {
@@ -618,19 +725,23 @@ static void account_regcomm(graph_t *g)
         graph_create_full_path(g, lit_account, arg_account, lit_default, NULL);
         graph_create_full_path(g, lit_account, arg_account, lit_switch, NULL);
     }
-#if 0
     {
         argument_t *arg_app_key, *arg_app_secret, *arg_endpoint;
-        argument_t *lit_application, *lit_add;
+        argument_t *lit_application, *lit_add, *lit_list, *lit_delete;
 
         lit_application = argument_create_literal("application", NULL);
         lit_add = argument_create_literal("add", application_add);
+        lit_list = argument_create_literal("list", application_list);
+        lit_delete = argument_create_literal("delete", application_delete);
 
-        arg_endpoint = argument_create_choices(offsetof(application_argument_t, endpoint), "<endpoint>", (const char * const *) endpoints);
+        arg_endpoint = argument_create_choices(offsetof(application_argument_t, endpoint), "<endpoint>", endpoint_names);
+        arg_app_key = argument_create_string(offsetof(application_argument_t, key), "<key>", NULL, NULL);
+        arg_app_secret = argument_create_string(offsetof(application_argument_t, secret), "<secret>", NULL, NULL);
 
-        graph_create_full_path(g, lit_application, arg_endpoint, NULL);
+        graph_create_full_path(g, lit_application, lit_list, NULL);
+        graph_create_full_path(g, lit_application, arg_endpoint, lit_add, arg_app_key, arg_app_secret, NULL);
+        graph_create_full_path(g, lit_application, arg_endpoint, lit_delete, NULL);
     }
-#endif
 }
 
 DECLARE_MODULE(account) = {
