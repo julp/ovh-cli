@@ -558,12 +558,6 @@ static command_status_t record_update(COMMAND_ARGS)
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
     assert(NULL != args->record);
-#if 0
-    if (NULL == args->value && NULL == args->name && 0 == args->ttl) {
-        // nothing to do
-        return COMMAND_USAGE;
-    }
-#endif
     if ((success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, FALSE, error)))) {
         json_document_t *reqdoc;
 
