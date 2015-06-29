@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2014-12-10 19:18+0100\n"
+"POT-Creation-Date: 2015-06-29 18:31+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,152 +17,561 @@ msgstr ""
 "Content-Type: text/plain; charset=CHARSET\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: /home/julp/ovh-cli/main.c:257
+#: /home/julp/ovh-cli/main.c:356
 msgid "needs help? Type help!"
 msgstr ""
 
-#: /home/julp/ovh-cli/table.c:35 /home/julp/ovh-cli/table.c:115
+#: /home/julp/ovh-cli/table.c:45 /home/julp/ovh-cli/table.c:50
+#: /home/julp/ovh-cli/table.c:254
 msgid "false"
 msgstr ""
 
-#: /home/julp/ovh-cli/table.c:36 /home/julp/ovh-cli/table.c:117
+#: /home/julp/ovh-cli/table.c:46 /home/julp/ovh-cli/table.c:51
+#: /home/julp/ovh-cli/table.c:256
 msgid "true"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:453
+#: /home/julp/ovh-cli/table.c:758 /home/julp/ovh-cli/commands/domain.c:676
+msgid "enabled"
+msgstr ""
+
+#: /home/julp/ovh-cli/table.c:759 /home/julp/ovh-cli/commands/domain.c:677
+msgid "disabled"
+msgstr ""
+
+#: /home/julp/ovh-cli/table.c:760 /home/julp/ovh-cli/commands/domain.c:678
+msgid "enableInProgress"
+msgstr ""
+
+#: /home/julp/ovh-cli/table.c:761 /home/julp/ovh-cli/commands/domain.c:679
+msgid "disableInProgress"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/account.c:528
 #, c-format
 msgid "Command aborted: unable to parse duration '%s'"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:462
+#: /home/julp/ovh-cli/commands/account.c:537
 #, c-format
 msgid "Command aborted: unable to parse expiration date '%s'"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:288
+#: /home/julp/ovh-cli/commands/account.c:648
+msgid "endpoint"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/account.c:649
+#: /home/julp/ovh-cli/commands/key.c:159
+msgid "key"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/account.c:650
+msgid "secret"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/dedicated.c:343
 msgid "serverId"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:292
+#: /home/julp/ovh-cli/commands/dedicated.c:347
+#: /home/julp/ovh-cli/commands/hosting.c:755
+#: /home/julp/ovh-cli/commands/key.c:157 /home/julp/ovh-cli/commands/me.c:44
 msgid "name"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:293
+#: /home/julp/ovh-cli/commands/dedicated.c:348
 msgid "ip"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:294
+#: /home/julp/ovh-cli/commands/dedicated.c:349
 msgid "os"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:295
+#: /home/julp/ovh-cli/commands/dedicated.c:350
 msgid "reverse"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:296
-msgid "bootId"
+#: /home/julp/ovh-cli/commands/dedicated.c:352
+msgid "boot"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:298
+#: /home/julp/ovh-cli/commands/dedicated.c:353
 msgid "datacenter"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:299
+#: /home/julp/ovh-cli/commands/dedicated.c:354
 msgid "professionalUse"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:300
+#: /home/julp/ovh-cli/commands/dedicated.c:355
 msgid "supportLevel"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:301
+#: /home/julp/ovh-cli/commands/dedicated.c:356
 msgid "commercialRange"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:302
+#: /home/julp/ovh-cli/commands/dedicated.c:357
+#: /home/julp/ovh-cli/commands/hosting.c:265
+#: /home/julp/ovh-cli/commands/hosting.c:624
+#: /home/julp/ovh-cli/commands/hosting.c:757
+#: /home/julp/ovh-cli/commands/me.c:33
 msgid "state"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:303
+#: /home/julp/ovh-cli/commands/dedicated.c:358
 msgid "monitoring"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:304
+#: /home/julp/ovh-cli/commands/dedicated.c:359
 msgid "rack"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:305
+#: /home/julp/ovh-cli/commands/dedicated.c:360
 msgid "rootDevice"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:306
+#: /home/julp/ovh-cli/commands/dedicated.c:361
 msgid "linkSpeed"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:405
+#: /home/julp/ovh-cli/commands/dedicated.c:464
 #, c-format
 msgid "Confirm hard reboot of %s"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:495
+#: /home/julp/ovh-cli/commands/dedicated.c:490
 #, c-format
 msgid "Available boots for '%s':\n"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:562
+#: /home/julp/ovh-cli/commands/dedicated.c:557
 #, c-format
 msgid "Current boot for %s is:  %s (%s): %s\n"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:614
+#: /home/julp/ovh-cli/commands/dedicated.c:596
 #, c-format
 msgid "This new boot will only be effective on the next (re)boot of '%s'"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:616
+#: /home/julp/ovh-cli/commands/dedicated.c:598
 #, c-format
 msgid "Any boot named '%s' was found for server '%s'"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/domain.c:396
+#: /home/julp/ovh-cli/commands/domain.c:382
+#: /home/julp/ovh-cli/commands/hosting.c:510
 msgid "id"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/domain.c:400
+#: /home/julp/ovh-cli/commands/domain.c:386
 msgid "subdomain"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/domain.c:400
+#: /home/julp/ovh-cli/commands/domain.c:387
+#: /home/julp/ovh-cli/commands/hosting.c:759
 msgid "type"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/domain.c:400
+#: /home/julp/ovh-cli/commands/domain.c:388
 msgid "TTL"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/domain.c:400
+#: /home/julp/ovh-cli/commands/domain.c:389
 msgid "target"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/domain.c:527
+#: /home/julp/ovh-cli/commands/domain.c:517
 #, c-format
 msgid "Confirm deletion of '%s.%s'"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/domain.c:656
-msgid "enabled"
+#: /home/julp/ovh-cli/commands/hosting.c:159
+#: /home/julp/ovh-cli/commands/me.c:125
+msgid "active"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/domain.c:657
-msgid "disabled"
+#: /home/julp/ovh-cli/commands/hosting.c:159
+msgid "bloqued"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/domain.c:658
-msgid "enableInProgress"
+#: /home/julp/ovh-cli/commands/hosting.c:159
+msgid "maintenance"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/domain.c:659
-msgid "disableInProgress"
+#: /home/julp/ovh-cli/commands/hosting.c:160
+msgid "linux"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:160
+msgid "windows"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:161
+msgid "bestEffort"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:161
+msgid "dedicated"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:161
+msgid "shared"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:259
+msgid "serviceName"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:260
+msgid "offer"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:261
+msgid "hostingIp"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:262
+msgid "hostingIpv6"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:263
+msgid "primaryLogin"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:264
+msgid "filer"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:266
+msgid "hasCdn"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:267
+msgid "operatingSystem"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:268
+#: /home/julp/ovh-cli/commands/hosting.c:622
+msgid "home"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:270
+msgid "resourceType"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:271
+msgid "cluster"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:272
+msgid "clusterIp"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:273
+msgid "clusterIpv6"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:278
+msgid "boostOffer"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:279
+msgid "hasHostedSsl"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:354
+msgid "domain"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:354
+msgid "path"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:448
+#, c-format
+msgid "Confirm unlinking domain '%s' to hosting '%s'"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:514
+#: /home/julp/ovh-cli/commands/me.c:42
+msgid "language"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:515
+msgid "frequency"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:516
+msgid "description"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:517
+msgid "command"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:518
+#: /home/julp/ovh-cli/commands/me.c:34
+msgid "email"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:582
+#: /home/julp/ovh-cli/commands/hosting.c:583
+msgid "off"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:582
+#: /home/julp/ovh-cli/commands/hosting.c:583
+msgid "rw"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:583
+msgid "read"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:621
+msgid "login"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:623
+msgid "isPrimaryAccount"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:625
+msgid "iisRemoteRights"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:626
+msgid "webDavRights"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:686
+#, c-format
+msgid "Confirm deletion of user '%s' for hosting '%s'"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:712
+msgid "besteffort"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:712
+msgid "classic"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:713
+msgid "close"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:713
+msgid "ok"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:713
+msgid "readonly"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:714
+msgid "mysql"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:714
+msgid "postgresql"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:753
+msgid "mode"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:754
+msgid "version"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:756
+msgid "port"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:758
+msgid "user"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:760
+msgid "server"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/hosting.c:860
+#, c-format
+msgid "Confirm drop database '%s' for hosting '%s'"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/key.c:158
+msgid "default"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/key.c:226
+#, c-format
+msgid "Confirm deletion of global SSH key named '%s'"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:25
+msgid "firstname"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:26
+msgid "vat"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:27
+msgid "ovhSubsidiary"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:28
+msgid "area"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:29
+msgid "birthDay"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:30
+msgid "nationalIdentificationNumber"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:31
+msgid "spareEmail"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:32
+msgid "ovhCompany"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:35
+msgid "city"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:36
+msgid "fax"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:37
+msgid "nichandle"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:38
+msgid "address"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:39
+msgid "companyNationalIdentificationNumber"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:40
+msgid "birthCity"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:41
+msgid "country"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:43
+msgid "organisation"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:45
+msgid "phone"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:46
+msgid "sex"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:47
+msgid "zip"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:48
+msgid "corporationType"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:49
+msgid "legalform"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:50
+msgid "male"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:51
+msgid "female"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:118
+msgid "expired"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:119
+msgid "pendingValidation"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:120
+msgid "refused"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:121
+msgid "validated"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:126
+msgid "blocked"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:127
+msgid "inactive"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:128
+msgid "trusted"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:150
+msgid "credentialId"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:154
+msgid "creation"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:155
+msgid "expiration"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:156
+msgid "last used"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:157
+msgid "ovhSupport"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:158
+msgid "credential status"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:159
+msgid "rules"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:160
+msgid "application status"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:161
+msgid "application name"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:162
+msgid "application description"
 msgstr ""
 
 #: /home/julp/ovh-cli/modules/conv.c:66
