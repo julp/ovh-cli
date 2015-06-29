@@ -7,11 +7,16 @@
 #include "struct/xtring.h"
 #include "struct/hashtable.h"
 
+#define STRING_APPEND_STRING(dest, suffix) \
+    do { \
+        string_append_string_len(dest, suffix, STR_LEN(suffix)); \
+    } while (0);
+
 typedef enum {
     ARG_TYPE_END, // dummy
     ARG_TYPE_LITERAL, // "list", "add", ...
     ARG_TYPE_NUMBER,
-    ARG_TYPE_CHOICES, // comme le type de record dns
+    ARG_TYPE_CHOICES, // a value among predefined choices (like a DNS record type, on/off, ...)
     ARG_TYPE_STRING // free string (eventually with help of completion)
 } argument_type_t;
 
@@ -20,7 +25,7 @@ typedef enum {
 struct argument_t {
     size_t offset; // offsetof
     argument_type_t type;
-    complete_t complete; // spécifique à ARG_TYPE_STRING et ARG_TYPE_CHOICES
+    complete_t complete; // ARG_TYPE_STRING and ARG_TYPE_CHOICES specific
     const char *string;
     handle_t handle;
     DPtrArray *children;
@@ -543,6 +548,65 @@ static graph_node_t *graph_node_find(graph_node_t *parent, const char *value)
     return NULL;
 }
 
+#define SEPARATOR ", "
+static graph_node_t *graph_node_find_ex(graph_node_t *parent, const char *value, error_t **error)
+{
+    if (NULL != parent->children) {
+        size_t i, l;
+
+        for (i = 0, l = dptrarray_length(parent->children); i < l; i++) {
+            graph_node_t *child;
+
+            child = dptrarray_at_unsafe(parent->children, i, graph_node_t);
+            if (NULL == descriptions[child->type].matcher || descriptions[child->type].matcher(child, value)) {
+                return child;
+            }
+        }
+        if (1 == l) {
+            graph_node_t *child;
+
+            child = dptrarray_at_unsafe(parent->children, 0, graph_node_t);
+            if (ARG_TYPE_END == child->type) {
+                error_set(error, NOTICE, "too many arguments (%s)", value);
+                return NULL;
+            }
+        }/* else */
+        {
+            String *buffer;
+
+            buffer = string_new();
+            for (i = 0/*, l = dptrarray_length(parent->children)*/; i < l; i++) {
+                graph_node_t *child;
+
+                child = dptrarray_at_unsafe(parent->children, i, graph_node_t);
+                switch (child->type) {
+                    case ARG_TYPE_LITERAL:
+                        STRING_APPEND_STRING(buffer, SEPARATOR);
+                        string_append_string(buffer, child->string);
+                        break;
+                    case ARG_TYPE_CHOICES:
+                    {
+                        const char * const *v;
+
+                        for (v = (const char * const *) child->completion_data; NULL != *v; v++) {
+                            STRING_APPEND_STRING(buffer, SEPARATOR);
+                            string_append_string(buffer, *v);
+                        }
+                        break;
+                    }
+                    default:
+                        // NOP?
+                        break;
+                }
+            }
+            error_set(error, NOTICE, "got %s, expect one of: %s", value, buffer->ptr + STR_LEN(SEPARATOR));
+            string_destroy(buffer);
+        }
+    }
+
+    return NULL;
+}
+
 static bool graph_node_end_in_children(graph_node_t *node)
 {
     if (NULL != node->children) {
@@ -840,8 +904,8 @@ command_status_t graph_run_command(graph_t *g, int args_count, const char **args
         handle = arg->handle;
         for (depth = 1; depth < args_count && NULL != arg; depth++) {
             prev_arg = arg;
-            if (NULL == (arg = graph_node_find(arg, args[depth]))) {
-                error_set(error, NOTICE, "too many arguments"); // also a literal or a choice does not match what is planned (eg: domain foo.tld dnssec on - "on" instead of status/enable/disable)
+            if (NULL == (arg = graph_node_find_ex(arg, args[depth], error))) {
+//                 error_set(error, NOTICE, "too many arguments"); // also a literal or a choice does not match what is planned (eg: domain foo.tld dnssec on - "on" instead of status/enable/disable)
 //                 traverse_graph_node(prev_arg, 0, TRUE);
                 handle = NULL;
                 return COMMAND_USAGE;
@@ -850,7 +914,7 @@ command_status_t graph_run_command(graph_t *g, int args_count, const char **args
                 if (ARG_TYPE_LITERAL == arg->type) {
                     *((bool *) (arguments + arg->offset)) = TRUE;
                 } else if (ARG_TYPE_CHOICES == arg->type) {
-                    *((int *) (arguments + arg->offset)) = string_array_to_index(arg, args[depth]); // TODO: check this is a valid choice
+                    *((int *) (arguments + arg->offset)) = string_array_to_index(arg, args[depth]); // this is safe: graph_node_find_ex already checked that the value is one among the values we predefined
                 } else if (ARG_TYPE_NUMBER == arg->type) {
                     *((uint32_t *) (arguments + arg->offset)) = (uint32_t) strtoull(args[depth], NULL, 10); // TODO: check this is a valid integer
                 } else {
@@ -862,8 +926,8 @@ command_status_t graph_run_command(graph_t *g, int args_count, const char **args
             }
         }
         if (NULL == handle || !graph_node_end_in_children(arg)) {
-            error_set(error, NOTICE, "unknown command");
-//             traverse_graph_node(arg, 0, TRUE);
+            error_set(error, NOTICE, "unterminated command: argument(s) missing");
+            traverse_graph_node(arg, 0, TRUE);
         } else {
             ret = handle((void *) arguments, /* TODO: arg->command_data, */ mainopts, error);
         }
@@ -891,11 +955,6 @@ void graph_display(graph_t *g)
     iterator_close(&it);
     hashtable_destroy(visited);
 }
-
-#define STRING_APPEND_STRING(dest, suffix) \
-    do { \
-        string_append_string_len(dest, suffix, STR_LEN(suffix)); \
-    } while (0);
 
 static void traverse_graph_node_for_bash(graph_node_t *node, HashTable *visited, String *content, String *path)
 {
