@@ -34,9 +34,10 @@ extern module_t domain_module;
 extern module_t hosting_module;
 extern module_t dedicated_module;
 
+static int verbosity = 0;
 /*static */graph_t *g = NULL;
 
-static char optstr[] = "y";
+static char optstr[] = "qy";
 
 enum {
     NOCONFIRM_OPT = 0x80,
@@ -44,9 +45,21 @@ enum {
 
 static struct option long_options[] =
 {
-    { "no-confirm", no_argument, NULL, NOCONFIRM_OPT },
     { "yes",        no_argument, NULL, 'y' },
+    { "silent",     no_argument, NULL, 'q' },
+    { "no-confirm", no_argument, NULL, NOCONFIRM_OPT },
     { NULL,         no_argument, NULL, 0 }
+};
+
+const char *endpoint_names[] = {
+    "ovh-eu",
+    "ovh-ca",
+    "soyoustart-eu",
+    "soyoustart-ca",
+    "kimsufi-eu",
+    "kimsufi-ca",
+    "runabove-ca",
+    NULL
 };
 
 const endpoint_t endpoints[] = {
@@ -117,7 +130,7 @@ static void usage(void)
 
 void print_error(error_t *error)
 {
-    if (NULL != error/* && error->type >= verbosity*/) {
+    if (NULL != error && error->type >= verbosity) {
         int type;
 
         type = error->type;
@@ -149,7 +162,7 @@ void print_error(error_t *error)
 
 void report(int type, const char *format, ...)
 {
-//     if (type >= verbosity) {
+    if (type >= verbosity) {
         va_list args;
 
         switch (type) {
@@ -172,7 +185,7 @@ void report(int type, const char *format, ...)
         if (FATAL == type) {
             exit(EXIT_FAILURE);
         }
-//     }
+    }
 }
 
 #if WITHOUT_LIBEDIT_TOKENIZER
@@ -319,6 +332,9 @@ int main(int argc, char **argv)
 
     while (-1 != (c = getopt_long(argc, argv, optstr, long_options, NULL))) {
         switch (c) {
+            case 'q':
+                verbosity = WARN;
+                break;
             case 'y':
                 mainopts.yes = TRUE;
                 break;
