@@ -56,6 +56,15 @@ check_function_exists("strncasecmp" HAVE_STRNCASECMP)
 check_function_exists("strtod_l" HAVE_STRTOD_L)
 check_library_exists("iconv" "iconvctl" ${ICONV_LIBRARIES} HAVE_ICONVCTL)
 
+include(FeatureSummary)
+set_package_properties(CURL PROPERTIES TYPE REQUIRED)
+set_package_properties(LibXml2 PROPERTIES TYPE REQUIRED)
+set_package_properties(OpenSSL PROPERTIES TYPE REQUIRED)
+set_package_properties(EditLine PROPERTIES TYPE REQUIRED)
+set_package_properties(Gettext PROPERTIES TYPE OPTIONAL)
+set_package_properties(Intl PROPERTIES TYPE OPTIONAL)
+feature_summary(INCLUDE_QUIET_PACKAGES WHAT ALL)
+
 include_directories(
     ${Intl_INCLUDE_DIRS}
     ${CURL_INCLUDE_DIRS}
@@ -78,12 +87,12 @@ if(NOT API_BASE_URL)
     set(API_BASE_URL "https://eu.api.ovh.com/1.0")
 endif(NOT API_BASE_URL)
 
-if(Intl_FOUND)
+if(INTL_FOUND)
     set(WITH_NLS true)
     set(LOCALEDIR "${CMAKE_INSTALL_PREFIX}/share/locale/")
     add_subdirectory(i18n)
     list(APPEND MISC_SOURCES "modules/nls.c")
-endif(Intl_FOUND)
+endif(INTL_FOUND)
 
 option(DEBUG "Enable/disable debugging" OFF)
 option(PRINT_OVH_ID "Enable/disable display of internal OVH identifiers" OFF)

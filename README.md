@@ -72,7 +72,12 @@ ovh account <nic-handle> password "" <consumer key>
 
 ## Commands
 
-* log on/off => enable/disable HTTP logging (file http.log in current directory)
+* log \<on/off> => enable/disable HTTP logging (file http.log in current directory)
+* application
+    * list => list all known OVH applications
+    * \<endpoint> (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runabove-ca, soyoustart-ca, soyoustart-eu)
+        * add \<application key> \<application secret> => register an application for the given *endpoint*
+        * delete => remove the application associated to *endpoint*
 * account
     * list => list all known OVH accounts
     * \<nic-handle>
@@ -142,3 +147,5 @@ ovh account <nic-handle> password "" <consumer key>
 * me => display personal informations associated to the current account (name, address, etc)
 * help
 * quit
+
+For partial bash completion (in current shell), run: `source <(ovh complete)`

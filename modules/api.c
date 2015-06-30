@@ -605,8 +605,8 @@ const char *request_consumer_key(const char *account, const char *password, time
         error_set(
             error,
             NOTICE,
-            "you have not registered your password so you have to confirm the current consumer key %s yourself by validating it at: %s\n" \
-            "Once done, if you choose to set a limited validity, don't forget to run: ovh account %s update expires in \"<duration>\"",
+            _("you have not registered your password so you have to confirm the current consumer key %s yourself by validating it at: %s\n" \
+            "Once done, if you choose to set a limited validity, don't forget to run: ovh account %s update expires in \"<duration>\""),
             consumerKey,
             validationUrl,
             account

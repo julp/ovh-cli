@@ -35,7 +35,7 @@ char *xmlGetPropAsString(xmlNodePtr node, const char *name)
         /**
         * prefer to return a new "standard" copy to:
         * 1) avoid mixing xmlFree and free
-        * 2) stay independant of libxml2/xmlFree internal implemtation
+        * 2) stay independant of libxml2/xmlFree internal implementation
         **/
         ret = strdup((char *) value);
         xmlFree(value);

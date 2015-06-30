@@ -567,7 +567,7 @@ static graph_node_t *graph_node_find_ex(graph_node_t *parent, const char *value,
 
             child = dptrarray_at_unsafe(parent->children, 0, graph_node_t);
             if (ARG_TYPE_END == child->type) {
-                error_set(error, NOTICE, "too many arguments (%s)", value);
+                error_set(error, NOTICE, _("too many arguments (%s)"), value);
                 return NULL;
             }
         }/* else */
@@ -599,7 +599,7 @@ static graph_node_t *graph_node_find_ex(graph_node_t *parent, const char *value,
                         break;
                 }
             }
-            error_set(error, NOTICE, "got %s, expect one of: %s", value, buffer->ptr + STR_LEN(SEPARATOR));
+            error_set(error, NOTICE, _("got %s, expect one of: %s"), value, buffer->ptr + STR_LEN(SEPARATOR));
             string_destroy(buffer);
         }
     }
@@ -926,14 +926,14 @@ command_status_t graph_run_command(graph_t *g, int args_count, const char **args
             }
         }
         if (NULL == handle || !graph_node_end_in_children(arg)) {
-            error_set(error, NOTICE, "unterminated command: argument(s) missing");
+            error_set(error, NOTICE, _("unterminated command: argument(s) missing"));
             traverse_graph_node(arg, 0, TRUE);
         } else {
             ret = handle((void *) arguments, /* TODO: arg->command_data, */ mainopts, error);
         }
     } else {
         graph_display(g);
-        error_set(error, NOTICE, "unknown command");
+        error_set(error, NOTICE, _("unknown command"));
     }
 
     return ret;

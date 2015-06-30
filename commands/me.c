@@ -66,7 +66,10 @@ static command_status_t me(COMMAND_ARGS)
         Iterator it;
         json_value_t root;
 
-        t = table_new(2, "Attribute", TABLE_TYPE_STRING, "Value", TABLE_TYPE_STRING);
+        t = table_new(2,
+            _("Attribute"), TABLE_TYPE_STRING,
+            _("Value"), TABLE_TYPE_STRING
+        );
         root = json_document_get_root(doc);
         json_object_to_iterator(&it, root);
         for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
@@ -74,7 +77,7 @@ static command_status_t me(COMMAND_ARGS)
             json_value_t v;
 
             v = (json_value_t) iterator_current(&it, (void **) &key);
-            table_store(t, key, v == json_null ? NULL : json_get_string(v));
+            table_store(t, gettext(key), v == json_null ? NULL : json_get_string(v));
         }
         iterator_close(&it);
         table_sort(t, 0);

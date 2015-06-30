@@ -37,6 +37,9 @@ typedef struct {
     const char *consumer_key;
     HashTable *modules_data;
 //     application_t *application;
+//     or
+//     const endpoint_t *endpoint;
+//     ?
 } account_t;
 
 typedef struct {
@@ -151,7 +154,7 @@ static bool account_save(error_t **error)
     do { \
         if (NULL == (node = xmlNewNode(NULL, BAD_CAST name))) { \
             xmlFreeDoc(doc); \
-            error_set(error, WARN, "Unable to create XML node '%s'", name); \
+            error_set(error, WARN, _("Unable to create XML node '%s'"), name); \
             return FALSE; \
         } \
     } while (0);
@@ -161,7 +164,7 @@ static bool account_save(error_t **error)
         if (NULL == xmlSetProp(node, BAD_CAST name, BAD_CAST value)) { \
             xmlFreeNode(node); \
             xmlFreeDoc(doc); \
-            error_set(error, WARN, "Unable to set attribute '%s' to value '%s'", name, value); \
+            error_set(error, WARN, _("Unable to set attribute '%s' to value '%s'"), name, value); \
             return FALSE; \
         } \
     } while (0);
@@ -171,20 +174,13 @@ static bool account_save(error_t **error)
         if (NULL == xmlAddChild(root, node)) { \
             xmlFreeNode(node); \
             xmlFreeDoc(doc); \
-            error_set(error, WARN, "Unable to add '%s' to document root", (const char *) node->name); \
+            error_set(error, WARN, _("Unable to add child '%s' to document root"), (const char *) node->name); \
             return FALSE; \
         } \
     } while (0);
 
     doc = xmlNewDoc(BAD_CAST "1.0");
-#if 0
-    if (NULL == (root = xmlNewNode(NULL, BAD_CAST "ovh"))) {
-        error_set(error, WARN, "Unable to create XML node 'ovh'");
-        return FALSE;
-    }
-#else
     CREATE_NODE(root, "ovh");
-#endif
     xmlDocSetRootElement(doc, root);
     hashtable_to_iterator(&it, acd->accounts);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
@@ -192,15 +188,7 @@ static bool account_save(error_t **error)
         account_t *account;
 
         account = (account_t *) iterator_current(&it, NULL);
-#if 0
-        if (NULL == (node = xmlNewNode(NULL, BAD_CAST "account"))) {
-            xmlFreeDoc(doc);
-            error_set(error, WARN, "Unable to create XML node 'account'");
-            return FALSE;
-        }
-#else
         CREATE_NODE(node, "account");
-#endif
         SET_PROP(node, "account", account->account);
         SET_PROP(node, "password", account->password);
         if (account == acd->autosel) {
@@ -212,21 +200,12 @@ static bool account_save(error_t **error)
             SET_PROP(node, "consumer_key", account->consumer_key);
             ret = snprintf(buffer, ARRAY_SIZE(buffer), "%lld", (long long) account->expires_at);
             if (ret < 0 || ((size_t) ret) >= ARRAY_SIZE(buffer)) {
-                error_set(error, WARN, "error or buffer overflow");
+                error_set(error, WARN, _("error or buffer overflow"));
                 return FALSE;
             }
             SET_PROP(node, "expires_at", buffer);
         }
-#if 0
-        if (NULL == xmlAddChild(root, node)) {
-            xmlFreeNode(node);
-            xmlFreeDoc(doc);
-            error_set(error, WARN, "Unable to add 'account' to document root");
-            return FALSE;
-        }
-#else
         LINK_TO_ROOT(node);
-#endif
     }
     iterator_close(&it);
     hashtable_to_iterator(&it, acd->applications);
@@ -247,12 +226,14 @@ static bool account_save(error_t **error)
     umask(old_umask);
     if (-1 == ret) {
         xmlFreeDoc(doc);
-        error_set(error, WARN, "Could not save file into '%s'", acd->path);
+        error_set(error, WARN, _("Could not save file into '%s'"), acd->path);
         return FALSE;
     }
     xmlFreeDoc(doc);
 
 #undef SET_PROP
+#undef CREATE_NODE
+#undef LINK_TO_ROOT
 
     return TRUE;
 }
@@ -262,7 +243,7 @@ const char *account_key(error_t **error)
     assert(NULL != acd->current);
 
     if (NULL == acd->current) {
-        error_set(error, WARN, "There is no current account");
+        error_set(error, WARN, _("There is no current account"));
         return NULL;
     }
     if (NULL == acd->current->consumer_key || (0 != acd->current->expires_at && acd->current->expires_at < time(NULL))) {
@@ -272,6 +253,16 @@ const char *account_key(error_t **error)
     }
 
     return acd->current->consumer_key;
+}
+
+static void application_dtor(void *data)
+{
+    application_t *app;
+
+    app = (application_t *) data;
+    FREE(app, key);
+    FREE(app, secret);
+    free(app);
 }
 
 static int account_load(error_t **error)
@@ -284,42 +275,52 @@ static int account_load(error_t **error)
 
         xmlKeepBlanksDefault(0);
         if (NULL == (doc = xmlParseFile(acd->path))) {
-            // TODO
-            error_set(error, WARN, "");
+            error_set(error, WARN, _("parsing of '%s' failed"), acd->path);
             return COMMAND_FAILURE;
         }
         if (NULL == (root = xmlDocGetRootElement(doc))) {
-            // TODO
-            error_set(error, WARN, "");
+            error_set(error, WARN, _("unable to retrieve document root"));
             return COMMAND_FAILURE;
         }
         for (n = root->children; n != NULL; n = n->next) {
-            account_t *a;
+            if (0 == xmlStrcmp(n->name, BAD_CAST "account")) {
+                account_t *a;
 
-            if (0 != xmlStrcmp(n->name, BAD_CAST "account")) {
-                continue;
-            }
-            a = mem_new(*a);
-            a->account = xmlGetPropAsString(n, "account");
-            a->password = xmlGetPropAsString(n, "password");
-            a->consumer_key = NULL;
-            a->modules_data = hashtable_ascii_cs_new(NULL, NULL, NULL); // no dup/dtor for keys as they are "static" strings ; no dtor for values, we need to do it ourselves
-            if (NULL != xmlHasProp(n, BAD_CAST "consumer_key")) {
-                char *expires_at;
+                a = mem_new(*a);
+                a->account = xmlGetPropAsString(n, "account");
+                a->password = xmlGetPropAsString(n, "password");
+                a->consumer_key = NULL;
+                a->modules_data = hashtable_ascii_cs_new(NULL, NULL, NULL); // no dup/dtor for keys as they are "static" strings ; no dtor for values, we need to do it ourselves
+                if (NULL != xmlHasProp(n, BAD_CAST "consumer_key")) {
+                    char *expires_at;
 
-                a->consumer_key = xmlGetPropAsString(n, "consumer_key");
-                if ('\0' == *a->consumer_key) {
-                    FREE(a, consumer_key);
-                } else {
-                    expires_at = xmlGetPropAsString(n, "expires_at");
-                    a->expires_at = (time_t) atol(expires_at);
-                    free(expires_at);
+                    a->consumer_key = xmlGetPropAsString(n, "consumer_key");
+                    if ('\0' == *a->consumer_key) {
+                        FREE(a, consumer_key);
+                    } else {
+                        expires_at = xmlGetPropAsString(n, "expires_at");
+                        a->expires_at = (time_t) atol(expires_at);
+                        free(expires_at);
+                    }
                 }
-            }
-            hashtable_put(acd->accounts, 0, a->account, a, NULL);
-            if (xmlHasProp(n, BAD_CAST "default")) {
-                acd->current = acd->autosel = a;
-                account_notify_change();
+                hashtable_put(acd->accounts, 0, a->account, a, NULL);
+                if (xmlHasProp(n, BAD_CAST "default")) {
+                    acd->current = acd->autosel = a;
+                    account_notify_change();
+                }
+            } else if (0 == xmlStrcmp(n->name, BAD_CAST "application")) {
+                int endpoint;
+                application_t *app;
+
+                app = mem_new(*app);
+                app->key = xmlGetPropAsString(n, "key");
+                app->secret = xmlGetPropAsString(n, "secret");
+                if (-1 == (endpoint = xmlGetPropAsCollectionIndex(n, "endpoint", endpoint_names, -1))) {
+                    application_dtor(app);
+                } else {
+                    app->endpoint = &endpoints[endpoint];
+                    hashtable_direct_put(acd->applications, 0, endpoint, app, NULL);
+                }
             }
         }
         if (hashtable_size(acd->accounts) > 0) {
@@ -364,16 +365,6 @@ static void account_account_dtor(void *data)
         hashtable_destroy(account->modules_data);
     }
     free(account);
-}
-
-static void application_dtor(void *data)
-{
-    application_t *app;
-
-    app = (application_t *) data;
-    FREE(app, key);
-    FREE(app, secret);
-    free(app);
 }
 
 static bool account_early_init(void)
@@ -581,7 +572,7 @@ static command_status_t account_default_set(COMMAND_ARGS)
         acd->autosel = ptr;
         account_save(error);
     } else {
-        error_set(error, NOTICE, "Any account named '%s' was found", args->account);
+        error_set(error, NOTICE, _("Any account named '%s' was found"), args->account);
     }
 
     return ret ? COMMAND_SUCCESS : COMMAND_FAILURE;
@@ -598,7 +589,7 @@ static command_status_t account_delete(COMMAND_ARGS)
     if ((ret = hashtable_delete(acd->accounts, args->account, DTOR_CALL))) {
         account_save(error);
     } else {
-        error_set(error, NOTICE, "Any account named '%s' was found", args->account);
+        error_set(error, NOTICE, _("Any account named '%s' was found"), args->account);
     }
 
     return ret ? COMMAND_SUCCESS : COMMAND_FAILURE;
@@ -622,7 +613,7 @@ static command_status_t account_switch(COMMAND_ARGS)
         }
         account_notify_change();
     } else {
-        error_set(error, NOTICE, "Any account named '%s' was found", args->account);
+        error_set(error, NOTICE, _("Any account named '%s' was found"), args->account);
     }
 
     return ret ? COMMAND_SUCCESS : COMMAND_FAILURE;

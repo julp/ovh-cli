@@ -47,20 +47,29 @@ find_path(Intl_INCLUDE_DIR
           NAMES "libintl.h"
           DOC "libintl include directory")
 mark_as_advanced(Intl_INCLUDE_DIR)
+# message("Intl_INCLUDE_DIR = ${Intl_INCLUDE_DIR}")
 
 # Find all Intl libraries
-find_library(Intl_LIBRARY "intl"
-  DOC "libintl libraries (if not in the C library)")
+# ln -s /usr/lib/preloadable_libintl.so /usr/lib/libgnuintl.so.8
+# message("CMAKE_FIND_LIBRARY_PREFIXES = ${CMAKE_FIND_LIBRARY_PREFIXES}")
+# set(OLD_CMAKE_FIND_LIBRARY_PREFIXES ${CMAKE_FIND_LIBRARY_PREFIXES})
+# set(CMAKE_FIND_LIBRARY_PREFIXES ";lib")
+find_library(Intl_LIBRARY
+    NAMES intl #preloadable_libintl
+    DOC "libintl libraries (if not in the C library)")
 mark_as_advanced(Intl_LIBRARY)
+# set(CMAKE_FIND_LIBRARY_PREFIXES ${OLD_CMAKE_FIND_LIBRARY_PREFIXES})
+# message("Intl_LIBRARY = ${Intl_LIBRARY}")
 
 # include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
 include(FindPackageHandleStandardArgs)
 FIND_PACKAGE_HANDLE_STANDARD_ARGS(Intl
-                                  FOUND_VAR Intl_FOUND
+#                                   FOUND_VAR Intl_FOUND # deprecated / cmake create it automatically in uppercase
                                   REQUIRED_VARS Intl_INCLUDE_DIR
                                   FAIL_MESSAGE "Failed to find Gettext libintl")
+# message("INTL_FOUND = ${INTL_FOUND}")
 
-if(Intl_FOUND)
+if(INTL_FOUND)
   set(Intl_INCLUDE_DIRS "${Intl_INCLUDE_DIR}")
   if(Intl_LIBRARY)
     set(Intl_LIBRARIES "${Intl_LIBRARY}")
