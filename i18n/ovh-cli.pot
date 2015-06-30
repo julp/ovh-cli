@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2015-06-29 23:41+0200\n"
+"POT-Creation-Date: 2015-06-30 19:35+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -67,17 +67,17 @@ msgstr ""
 
 #: /home/julp/ovh-cli/commands/account.c:157
 #, c-format
-msgid "Unable to create XML node '%s'"
+msgid "unable to create XML node '%s'"
 msgstr ""
 
 #: /home/julp/ovh-cli/commands/account.c:167
 #, c-format
-msgid "Unable to set attribute '%s' to value '%s'"
+msgid "unable to set attribute '%s' to value '%s'"
 msgstr ""
 
 #: /home/julp/ovh-cli/commands/account.c:177
 #, c-format
-msgid "Unable to add child '%s' to document root"
+msgid "unable to add child '%s' to document root"
 msgstr ""
 
 #: /home/julp/ovh-cli/commands/account.c:203
@@ -86,11 +86,11 @@ msgstr ""
 
 #: /home/julp/ovh-cli/commands/account.c:229
 #, c-format
-msgid "Could not save file into '%s'"
+msgid "could not save file into '%s'"
 msgstr ""
 
 #: /home/julp/ovh-cli/commands/account.c:246
-msgid "There is no current account"
+msgid "no current account"
 msgstr ""
 
 #: /home/julp/ovh-cli/commands/account.c:278
@@ -102,34 +102,42 @@ msgstr ""
 msgid "unable to retrieve document root"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:519
+#: /home/julp/ovh-cli/commands/account.c:468
 #, c-format
-msgid "Command aborted: unable to parse duration '%s'"
+msgid "no account named '%s'"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:528
+#: /home/julp/ovh-cli/commands/account.c:526
 #, c-format
-msgid "Command aborted: unable to parse expiration date '%s'"
+msgid "command aborted: unable to parse duration '%s'"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:575
-#: /home/julp/ovh-cli/commands/account.c:592
-#: /home/julp/ovh-cli/commands/account.c:616
+#: /home/julp/ovh-cli/commands/account.c:535
 #, c-format
-msgid "Any account named '%s' was found"
+msgid "command aborted: unable to parse expiration date '%s'"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:639
+#: /home/julp/ovh-cli/commands/account.c:547
+#, c-format
+msgid "an account named '%s' already exists"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/account.c:654
 msgid "endpoint"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:640
+#: /home/julp/ovh-cli/commands/account.c:655
 #: /home/julp/ovh-cli/commands/key.c:159
 msgid "key"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:641
+#: /home/julp/ovh-cli/commands/account.c:656
 msgid "secret"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/account.c:701
+#, c-format
+msgid "no application associated to endpoint %s"
 msgstr ""
 
 #: /home/julp/ovh-cli/commands/dedicated.c:343
@@ -251,7 +259,7 @@ msgid "Confirm deletion of '%s.%s'"
 msgstr ""
 
 #: /home/julp/ovh-cli/commands/hosting.c:159
-#: /home/julp/ovh-cli/commands/me.c:125
+#: /home/julp/ovh-cli/commands/me.c:128
 msgid "active"
 msgstr ""
 
@@ -568,71 +576,79 @@ msgstr ""
 msgid "female"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/me.c:118
-msgid "expired"
+#: /home/julp/ovh-cli/commands/me.c:70
+msgid "Attribute"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/me.c:119
-msgid "pendingValidation"
-msgstr ""
-
-#: /home/julp/ovh-cli/commands/me.c:120
-msgid "refused"
+#: /home/julp/ovh-cli/commands/me.c:71
+msgid "Value"
 msgstr ""
 
 #: /home/julp/ovh-cli/commands/me.c:121
+msgid "expired"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:122
+msgid "pendingValidation"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:123
+msgid "refused"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/me.c:124
 msgid "validated"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/me.c:126
+#: /home/julp/ovh-cli/commands/me.c:129
 msgid "blocked"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/me.c:127
+#: /home/julp/ovh-cli/commands/me.c:130
 msgid "inactive"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/me.c:128
+#: /home/julp/ovh-cli/commands/me.c:131
 msgid "trusted"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/me.c:150
+#: /home/julp/ovh-cli/commands/me.c:153
 msgid "credentialId"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/me.c:154
+#: /home/julp/ovh-cli/commands/me.c:157
 msgid "creation"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/me.c:155
+#: /home/julp/ovh-cli/commands/me.c:158
 msgid "expiration"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/me.c:156
+#: /home/julp/ovh-cli/commands/me.c:159
 msgid "last used"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/me.c:157
+#: /home/julp/ovh-cli/commands/me.c:160
 msgid "ovhSupport"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/me.c:158
+#: /home/julp/ovh-cli/commands/me.c:161
 msgid "credential status"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/me.c:159
+#: /home/julp/ovh-cli/commands/me.c:162
 msgid "rules"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/me.c:160
+#: /home/julp/ovh-cli/commands/me.c:163
 msgid "application status"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/me.c:161
+#: /home/julp/ovh-cli/commands/me.c:164
 msgid "application name"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/me.c:162
+#: /home/julp/ovh-cli/commands/me.c:165
 msgid "application description"
 msgstr ""
 

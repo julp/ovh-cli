@@ -154,7 +154,7 @@ static bool account_save(error_t **error)
     do { \
         if (NULL == (node = xmlNewNode(NULL, BAD_CAST name))) { \
             xmlFreeDoc(doc); \
-            error_set(error, WARN, _("Unable to create XML node '%s'"), name); \
+            error_set(error, WARN, _("unable to create XML node '%s'"), name); \
             return FALSE; \
         } \
     } while (0);
@@ -164,7 +164,7 @@ static bool account_save(error_t **error)
         if (NULL == xmlSetProp(node, BAD_CAST name, BAD_CAST value)) { \
             xmlFreeNode(node); \
             xmlFreeDoc(doc); \
-            error_set(error, WARN, _("Unable to set attribute '%s' to value '%s'"), name, value); \
+            error_set(error, WARN, _("unable to set attribute '%s' to value '%s'"), name, value); \
             return FALSE; \
         } \
     } while (0);
@@ -174,7 +174,7 @@ static bool account_save(error_t **error)
         if (NULL == xmlAddChild(root, node)) { \
             xmlFreeNode(node); \
             xmlFreeDoc(doc); \
-            error_set(error, WARN, _("Unable to add child '%s' to document root"), (const char *) node->name); \
+            error_set(error, WARN, _("unable to add child '%s' to document root"), (const char *) node->name); \
             return FALSE; \
         } \
     } while (0);
@@ -226,7 +226,7 @@ static bool account_save(error_t **error)
     umask(old_umask);
     if (-1 == ret) {
         xmlFreeDoc(doc);
-        error_set(error, WARN, _("Could not save file into '%s'"), acd->path);
+        error_set(error, WARN, _("could not save file into '%s'"), acd->path);
         return FALSE;
     }
     xmlFreeDoc(doc);
@@ -243,7 +243,7 @@ const char *account_key(error_t **error)
     assert(NULL != acd->current);
 
     if (NULL == acd->current) {
-        error_set(error, WARN, _("There is no current account"));
+        error_set(error, WARN, _("no current account"));
         return NULL;
     }
     if (NULL == acd->current->consumer_key || (0 != acd->current->expires_at && acd->current->expires_at < time(NULL))) {
@@ -463,6 +463,11 @@ static void account_dtor(void)
     acd = NULL;
 }
 
+#define UNEXISTANT_ACCOUNT \
+    do { \
+        error_set(error, WARN, _("no account named '%s'"), args->account); \
+    } while (0);
+
 static command_status_t account_list(COMMAND_ARGS)
 {
     table_t *t;
@@ -503,6 +508,8 @@ static command_status_t account_list(COMMAND_ARGS)
 static command_status_t account_add(COMMAND_ARGS)
 {
     ht_hash_t h;
+    bool update;
+    account_t *a;
     time_t expires_at;
     account_argument_t *args;
 
@@ -516,7 +523,7 @@ static command_status_t account_add(COMMAND_ARGS)
     if (NULL != args->expiration) {
         if (args->expires_in) {
             if (!parse_duration(args->expiration, &expires_at)) {
-                error_set(error, WARN, _("Command aborted: unable to parse duration '%s'"), args->expiration);
+                error_set(error, WARN, _("command aborted: unable to parse duration '%s'"), args->expiration);
                 return COMMAND_USAGE;
             }
             expires_at += time(NULL);
@@ -525,7 +532,7 @@ static command_status_t account_add(COMMAND_ARGS)
             struct tm ltm = { 0 };
 
             if (NULL == (endptr = strptime(args->expiration, "%c", &ltm))) {
-                error_set(error, WARN, _("Command aborted: unable to parse expiration date '%s'"), args->expiration);
+                error_set(error, WARN, _("command aborted: unable to parse expiration date '%s'"), args->expiration);
                 return COMMAND_USAGE;
             }
             expires_at = mktime(&ltm);
@@ -534,27 +541,35 @@ static command_status_t account_add(COMMAND_ARGS)
         }
     }
     h = hashtable_hash(acd->accounts, args->account);
-    // TODO: how to handle account overwrites? Don't allow it, add an update command? Keep password (if any for both) and non-expired CK (if any for both)?
 #if 0
-    if (hashtable_quick_contains(acd->accounts, h, account)) {
-        fprintf(stderr, "An account named '%s' already exists", account);
+    if (hashtable_quick_get(acd->accounts, h, account, &a)) {
+        if (!update) {
+            error_set(error, WARN, _("an account named '%s' already exists"), args->account);
+            return COMMAND_FAILURE;
+        }
+        FREE(a, password); // if update : only if a new one is given
+        FREE(a, consumer_key); // if update : only if a new one is given
     } else {
 #else
     {
+        update = FALSE;
 #endif
-        account_t *a;
-
+        if (update) {
+            UNEXISTANT_ACCOUNT;
+            return COMMAND_FAILURE;
+        }
         a = mem_new(*a);
         a->account = strdup(args->account);
-        a->password = strdup(args->password);
-        a->consumer_key = strdup(args->consumer_key);
-        a->expires_at = expires_at;
         a->modules_data = hashtable_ascii_cs_new(NULL, NULL, NULL);
-//         hashtable_quick_put(acd->accounts, HT_PUT_ON_DUP_KEY_PRESERVE, h, a->account, a, NULL);
+    }
+    a->password = strdup(args->password); // if update : only if a new one is given
+    a->consumer_key = strdup(args->consumer_key); // if update : only if a new one is given
+    a->expires_at = expires_at; // if update : only if a new consumer key is given
+    if (!update) {
         hashtable_quick_put(acd->accounts, 0, h, a->account, a, NULL);
         // TODO: if this is the first account, set it as current?
-        account_save(error);
     }
+    account_save(error);
 
     return COMMAND_SUCCESS;
 }
@@ -572,7 +587,7 @@ static command_status_t account_default_set(COMMAND_ARGS)
         acd->autosel = ptr;
         account_save(error);
     } else {
-        error_set(error, NOTICE, _("Any account named '%s' was found"), args->account);
+        UNEXISTANT_ACCOUNT;
     }
 
     return ret ? COMMAND_SUCCESS : COMMAND_FAILURE;
@@ -589,7 +604,7 @@ static command_status_t account_delete(COMMAND_ARGS)
     if ((ret = hashtable_delete(acd->accounts, args->account, DTOR_CALL))) {
         account_save(error);
     } else {
-        error_set(error, NOTICE, _("Any account named '%s' was found"), args->account);
+        UNEXISTANT_ACCOUNT;
     }
 
     return ret ? COMMAND_SUCCESS : COMMAND_FAILURE;
@@ -613,7 +628,7 @@ static command_status_t account_switch(COMMAND_ARGS)
         }
         account_notify_change();
     } else {
-        error_set(error, NOTICE, _("Any account named '%s' was found"), args->account);
+        UNEXISTANT_ACCOUNT;
     }
 
     return ret ? COMMAND_SUCCESS : COMMAND_FAILURE;
@@ -680,14 +695,18 @@ static command_status_t application_delete(COMMAND_ARGS)
 
     USED(mainopts);
     args = (application_argument_t *) arg;
-    hashtable_direct_delete(acd->applications, args->endpoint, TRUE);
-    account_save(error);
+    if (hashtable_direct_delete(acd->applications, args->endpoint, TRUE)) {
+        account_save(error);
+    } else {
+        error_set(error, NOTICE, _("no application associated to endpoint %s"), endpoint_names[args->endpoint]);
+    }
 
     return COMMAND_SUCCESS;
 }
 
 static void account_regcomm(graph_t *g)
 {
+    // account ...
     {
         argument_t *arg_account, *arg_password, *arg_consumer_key, *arg_expiration;
         argument_t *lit_account, *lit_list, *lit_delete, *lit_add, *lit_switch, *lit_default, *lit_expires, *lit_in, *lit_at;
@@ -716,6 +735,7 @@ static void account_regcomm(graph_t *g)
         graph_create_full_path(g, lit_account, arg_account, lit_default, NULL);
         graph_create_full_path(g, lit_account, arg_account, lit_switch, NULL);
     }
+    // application ...
     {
         argument_t *arg_app_key, *arg_app_secret, *arg_endpoint;
         argument_t *lit_application, *lit_add, *lit_list, *lit_delete;
