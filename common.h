@@ -152,6 +152,7 @@ typedef enum {
 } command_status_t;
 
 #define USED(x) (void) x
+#define RELAY_COMMAND_ARGS arg, mainopts, error
 #define COMMAND_ARGS void *arg, const main_options_t *mainopts, error_t **error
 
 # ifdef DEBUG

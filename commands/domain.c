@@ -145,6 +145,19 @@ static bool domain_ctor(void)
     return TRUE;
 }
 
+// TODO: should be run after any change on a domain?
+static command_status_t domain_refresh(COMMAND_ARGS);
+
+static void ask_for_refresh(COMMAND_ARGS)
+{
+    domain_record_argument_t *args;
+
+    args = (domain_record_argument_t *) arg;
+    if (confirm(mainopts, _("Do you want to refresh '%s' now?"), args->domain)) {
+        domain_refresh(RELAY_COMMAND_ARGS);
+    }
+}
+
 static int parse_record(HashTable *records, json_document_t *doc)
 {
     record_t *r;
