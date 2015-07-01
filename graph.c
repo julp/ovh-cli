@@ -625,6 +625,7 @@ static bool graph_node_end_in_children(graph_node_t *node)
     return FALSE;
 }
 
+#if 0
 #include <math.h>
 static size_t my_vsnprintf(void *args, char *dst, size_t dst_size, const char *fmt, va_list ap)
 {
@@ -717,6 +718,7 @@ static size_t my_vsnprintf(void *args, char *dst, size_t dst_size, const char *f
 
     return dst_len;
 }
+#endif
 
 static int string_array_to_index(argument_t *arg, const char *value)
 {
@@ -981,20 +983,24 @@ static void traverse_graph_node_for_bash(graph_node_t *node, HashTable *visited,
 //     if (children_count > 1 || has_end) {
 //         putchar('\n');
 //     }
-    if (has_end) {
-        return;
-    }
     path_len = path->len;
     STRING_APPEND_STRING(content, "        [\"");
-    if (ARG_TYPE_STRING == node->type) {
-        string_append_char(path, '*');
-    } else {
-//         string_append_string(content, node->string);
-        string_append_string(path, node->string);
+    switch (node->type) {
+        default:
+        case ARG_TYPE_STRING:
+        case ARG_TYPE_CHOICES:
+            string_append_char(path, '*');
+            break;
+        case ARG_TYPE_LITERAL:
+            string_append_string(path, node->string);
+            break;
+//         default:
+//             assert(FALSE);
+//             break;
     }
     string_append_char(path, '/');
     string_append_string_len(content, path->ptr, path->len);
-    STRING_APPEND_STRING(content, /*"/"*/"\"]=\"");
+    STRING_APPEND_STRING(content, /*"/"*/"\"]=\" ");
     for (i = 0/*, l = dptrarray_length(node->children)*/; i < l; i++) {
         current = dptrarray_at_unsafe(node->children, i, graph_node_t);
         switch (current->type) {
@@ -1011,6 +1017,9 @@ static void traverse_graph_node_for_bash(graph_node_t *node, HashTable *visited,
             case ARG_TYPE_LITERAL:
                 string_append_string(content, current->string);
                 string_append_char(content, ' ');
+                break;
+            default:
+                // NOP: nothing to append to the buffer as this is not a known value
                 break;
         }
     }
