@@ -476,7 +476,14 @@ static command_status_t account_list(COMMAND_ARGS)
     USED(arg);
     USED(error);
     USED(mainopts);
-    t = table_new(4, "account", TABLE_TYPE_STRING, "expiration", TABLE_TYPE_DATETIME, "current", TABLE_TYPE_BOOLEAN, "default", TABLE_TYPE_BOOLEAN);
+    t = table_new(6,
+        _("account"), TABLE_TYPE_STRING,
+        _("consumer key"), TABLE_TYPE_STRING,
+        _("key expiration"), TABLE_TYPE_DATETIME,
+        _("password"), TABLE_TYPE_BOOLEAN,
+        _("current"), TABLE_TYPE_BOOLEAN,
+        _("default"), TABLE_TYPE_BOOLEAN
+    );
     hashtable_to_iterator(&it, acd->accounts);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         account_t *account;
@@ -489,7 +496,7 @@ static command_status_t account_list(COMMAND_ARGS)
             tm = localtime(&account->expires_at);
             expiration = *tm;
         }
-        table_store(t, account->account, expiration, account == acd->current, account == acd->autosel);
+        table_store(t, account->account, account->consumer_key, expiration, NULL != account->password, account == acd->current, account == acd->autosel);
     }
     iterator_close(&it);
     table_display(t, TABLE_FLAG_NONE);
@@ -498,17 +505,9 @@ static command_status_t account_list(COMMAND_ARGS)
     return COMMAND_SUCCESS;
 }
 
-/**
- * account add [nic-handle] [password] ([consumer key] expires in|at [date])
- *
- * NOTE:
- * - in order to not record password, use an empty string (with "")
- * - default expiration of consumer key is 0 (unlimited)
- **/
-static command_status_t account_add(COMMAND_ARGS)
+static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
 {
     ht_hash_t h;
-    bool update;
     account_t *a;
     time_t expires_at;
     account_argument_t *args;
@@ -518,7 +517,9 @@ static command_status_t account_add(COMMAND_ARGS)
     args = (account_argument_t *) arg;
 
     assert(NULL != args->account);
-    assert(NULL != args->password);
+    if (!update) {
+        assert(NULL != args->password); // password argument is mandatory with actual account add command (may be not the case in the future if account add and update share the same logic)
+    }
 
     if (NULL != args->expiration) {
         if (args->expires_in) {
@@ -541,19 +542,18 @@ static command_status_t account_add(COMMAND_ARGS)
         }
     }
     h = hashtable_hash(acd->accounts, args->account);
-#if 0
-    if (hashtable_quick_get(acd->accounts, h, account, &a)) {
+    if (hashtable_quick_get(acd->accounts, h, args->account, &a)) {
         if (!update) {
             error_set(error, WARN, _("an account named '%s' already exists"), args->account);
             return COMMAND_FAILURE;
         }
-        FREE(a, password); // if update : only if a new one is given
-        FREE(a, consumer_key); // if update : only if a new one is given
+        if (NULL != args->password) { // keep current password if a new one is not given
+            FREE(a, password);
+        }
+        if (NULL != args->consumer_key) { // keep current consumer_key if a new one is not given
+            FREE(a, consumer_key);
+        }
     } else {
-#else
-    {
-        update = FALSE;
-#endif
         if (update) {
             UNEXISTANT_ACCOUNT;
             return COMMAND_FAILURE;
@@ -562,16 +562,40 @@ static command_status_t account_add(COMMAND_ARGS)
         a->account = strdup(args->account);
         a->modules_data = hashtable_ascii_cs_new(NULL, NULL, NULL);
     }
-    a->password = strdup(args->password); // if update : only if a new one is given
-    a->consumer_key = strdup(args->consumer_key); // if update : only if a new one is given
-    a->expires_at = expires_at; // if update : only if a new consumer key is given
+    if (!update || NULL != args->password) { // for update, only if a new password is set
+        a->password = strdup(args->password);
+    }
+    if (!update || NULL != args->consumer_key) { // for update, only if a new CK is set
+        a->consumer_key = strdup(args->consumer_key);
+        a->expires_at = expires_at;
+    }
     if (!update) {
+        // if this is the first account, set it as current
+        if (0 == hashtable_size(acd->accounts)) {
+            acd->current = acd->autosel = a;
+        }
         hashtable_quick_put(acd->accounts, 0, h, a->account, a, NULL);
-        // TODO: if this is the first account, set it as current?
     }
     account_save(error);
 
     return COMMAND_SUCCESS;
+}
+
+/**
+ * account add [nic-handle] [password] ([consumer key] expires in|at [date])
+ *
+ * NOTE:
+ * - in order to not record password, use an empty string (with "")
+ * - default expiration of consumer key is 0 (unlimited)
+ **/
+static command_status_t account_add(COMMAND_ARGS)
+{
+    return account_add_or_update(RELAY_COMMAND_ARGS, FALSE);
+}
+
+static command_status_t account_update(COMMAND_ARGS)
+{
+    return account_add_or_update(RELAY_COMMAND_ARGS, TRUE);
 }
 
 static command_status_t account_default_set(COMMAND_ARGS)
@@ -633,13 +657,6 @@ static command_status_t account_switch(COMMAND_ARGS)
 
     return ret ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
-
-#if TODO
-static command_status_t account_update(COMMAND_ARGS)
-{
-    return COMMAND_SUCCESS;
-}
-#endif
 
 static command_status_t application_list(COMMAND_ARGS)
 {
@@ -709,7 +726,7 @@ static void account_regcomm(graph_t *g)
     // account ...
     {
         argument_t *arg_account, *arg_password, *arg_consumer_key, *arg_expiration;
-        argument_t *lit_account, *lit_list, *lit_delete, *lit_add, *lit_switch, *lit_default, *lit_expires, *lit_in, *lit_at;
+        argument_t *lit_account, *lit_list, *lit_delete, *lit_add, *lit_update, *lit_switch, *lit_default, *lit_expires, *lit_in, *lit_at, *lit_password, *lit_key;
 
         lit_account = argument_create_literal("account", NULL);
         lit_list = argument_create_literal("list", account_list);
@@ -718,6 +735,9 @@ static void account_regcomm(graph_t *g)
         lit_default = argument_create_literal("default", account_default_set);
         lit_switch = argument_create_literal("switch", account_switch);
         lit_expires = argument_create_literal("expires", NULL);
+        lit_update = argument_create_literal("update", account_update);
+        lit_key = argument_create_literal("key", NULL);
+        lit_password = argument_create_literal("password", NULL);
         lit_in = argument_create_relevant_literal(offsetof(account_argument_t, expires_in), "in", NULL);
         lit_at = argument_create_relevant_literal(offsetof(account_argument_t, expires_at), "at", NULL);
 
@@ -734,6 +754,42 @@ static void account_regcomm(graph_t *g)
         graph_create_full_path(g, lit_account, arg_account, lit_delete, NULL);
         graph_create_full_path(g, lit_account, arg_account, lit_default, NULL);
         graph_create_full_path(g, lit_account, arg_account, lit_switch, NULL);
+/*
+  account
+     list
+     <account>
+         add <password>
+             <consumer key>
+                 expires
+                     at <expiration>
+                     in <expiration>
+         default
+         delete
+         switch
+====================================
+  account
+     list
+     <account>
+         add <password>
+             key <consumer key>
+                 expires
+                     at <expiration>
+                     in <expiration>
+                 password <password>
+                     <consumer key>
+             <consumer key>
+         default
+         delete
+         switch
+         update # (rien) parce qu'ils ont été visités ?
+*/
+#if 1
+        graph_create_full_path(g, lit_account, arg_account, lit_update, lit_key, arg_consumer_key, lit_expires, lit_at, arg_expiration, NULL);
+        graph_create_full_path(g, lit_account, arg_account, lit_update, lit_key, arg_consumer_key, lit_expires, lit_in, arg_expiration, NULL);
+        graph_create_full_path(g, lit_account, arg_account, lit_update, lit_password, arg_password, lit_key, arg_consumer_key, lit_expires, lit_at, arg_expiration, NULL);
+        graph_create_full_path(g, lit_account, arg_account, lit_update, lit_password, arg_password, lit_key, arg_consumer_key, lit_expires, lit_in, arg_expiration, NULL);
+        graph_create_all_path(g, lit_update, NULL, 2, lit_password, arg_password, 2, lit_key, arg_consumer_key, 0);
+#endif
     }
     // application ...
     {
