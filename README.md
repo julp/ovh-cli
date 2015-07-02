@@ -26,25 +26,25 @@
 
 ## Install
 
-* OVH Europe (compile with `-DAPI_BASE_URL="https://eu.api.ovh.com/1.0"`)
+* OVH Europe
     + [Create your application](https://eu.api.ovh.com/createApp/)
     + [Create a token](https://eu.api.ovh.com/createToken/)
-* OVH North America (compile with `-DAPI_BASE_URL="https://ca.api.ovh.com/1.0"`)
+* OVH North America
     + [Create your application](https://ca.api.ovh.com/createApp/)
     + [Create a token](https://ca.api.ovh.com/createToken/)
-* So you Start Europe (compile with `-DAPI_BASE_URL="https://eu.api.soyoustart.com/1.0"`)
+* So you Start Europe
     + [Create your application](https://eu.api.soyoustart.com/createApp/)
     + [Create a token](https://eu.api.soyoustart.com/createToken/)
-* So you Start North America (compile with `-DAPI_BASE_URL="https://ca.api.soyoustart.com/1.0"`)
+* So you Start North America
     + [Create your application](https://ca.api.soyoustart.com/createApp/)
     + [Create a token](https://ca.api.soyoustart.com/createToken/)
-* Kimsufi Europe (compile with `-DAPI_BASE_URL="https://eu.api.kimsufi.com/1.0"`)
+* Kimsufi Europe
     + [Create your application](https://eu.api.kimsufi.com/createApp/)
     + [Create a token](https://eu.api.kimsufi.com/createToken/)
-* Kimsufi North America (compile with `-DAPI_BASE_URL="https://ca.api.kimsufi.com/1.0"`)
+* Kimsufi North America
     + [Create your application](https://ca.api.kimsufi.com/createApp/)
     + [Create a token](https://ca.api.kimsufi.com/createToken/)
-* Runabove (compile with `-DAPI_BASE_URL="https://api.runabove.com/1.0"`)
+* Runabove
     + [Create your application](https://api.runabove.com/createApp/)
     + [Create a token](https://api.runabove.com/createToken/)
 
