@@ -1,5 +1,6 @@
 #include <curl/curl.h>
 #include "common.h"
+#include "command.h"
 
 static bool curl_ctor(void)
 {
@@ -13,6 +14,7 @@ static void curl_dtor(void)
 
 DECLARE_MODULE(curl) = {
     "curl",
+    NULL,
     NULL,
     curl_ctor,
     NULL,

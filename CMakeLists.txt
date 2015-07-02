@@ -77,16 +77,6 @@ include_directories(
 
 set(MISC_SOURCES )
 
-if(NOT APPLICATION_KEY)
-    message(FATAL_ERROR "Expected cmake paramater -DAPPLICATION_KEY= to set your 'application key'")
-endif(NOT APPLICATION_KEY)
-if(NOT APPLICATION_SECRET)
-    message(FATAL_ERROR "Expected cmake paramater -DAPPLICATION_SECRET= to set your 'application secret'")
-endif(NOT APPLICATION_SECRET)
-if(NOT API_BASE_URL)
-    set(API_BASE_URL "https://eu.api.ovh.com/1.0")
-endif(NOT API_BASE_URL)
-
 if(INTL_FOUND)
     set(WITH_NLS true)
     set(LOCALEDIR "${CMAKE_INSTALL_PREFIX}/share/locale/")

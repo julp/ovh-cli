@@ -2,7 +2,7 @@
 #include <inttypes.h>
 
 #include "common.h"
-#include "json.h"
+#include "command.h"
 #include "date.h"
 #include "util.h"
 #include "table.h"
@@ -52,9 +52,15 @@ static void vps_regcomm(graph_t *g)
     graph_create_full_path(g, lit_vps, lit_vps_list, NULL);
 }
 
+static void vps_register_rules(json_value_t rules, bool UNUSED(ro))
+{
+    JSON_ADD_RULE(rules, "GET", "/vps");
+}
+
 DECLARE_MODULE(vps) = {
     MODULE_NAME,
     vps_regcomm,
+    vps_register_rules,
     NULL,
     NULL,
     NULL

@@ -48,19 +48,22 @@
     + [Create your application](https://api.runabove.com/createApp/)
     + [Create a token](https://api.runabove.com/createToken/)
 
-Fork/compile/install ovh-cli
+1. Clone/compile/install ovh-cli
 ```
 git clone ...
-cmake . \
-    -DAPPLICATION_KEY="<your application key>" \
-    -DAPPLICATION_SECRET="<your application secret>" \
-    -DAPI_BASE_URL="https://eu.api.ovh.com/1.0"
+cd <path/to/build/directory>
+cmake <path/to/sources/directory> (-DCMAKE_INSTALL_PREFIX=/usr/local)
 make
 (sudo) make install
 ```
 (for now, these parameters have to be set at compile time)
 
-Register your account(s):
+2. Register your application(s):
+```
+ovh application <endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runabove-ca, soyoustart-ca, soyoustart-eu)> add <application key> <application secret>
+```
+
+3. Register your account(s):
 ```
 # with your password instead of a valid consumer key
 ovh account <nic-handle> password <password>
@@ -68,6 +71,11 @@ ovh account <nic-handle> password <password>
 # with a valid consumer key instead of a password (use link "Create a token" above)
 ovh account <nic-handle> password "" <consumer key>
 # (if your consumer key is not unlimited, append "expires in X days" to the command)
+```
+
+4. Link it to an application/endpoint (for the time to rewrite the add command)
+```
+ovh account <nic-handle> update endpoint <endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runabove-ca, soyoustart-ca, soyoustart-eu)>
 ```
 
 ## Commands

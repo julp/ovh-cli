@@ -142,18 +142,7 @@ typedef int (*CmpFunc)(const void *, const void *);
 typedef void (*DtorFunc)(void *);
 typedef void *(*DupFunc)(const void *);
 
-# define DECLARE_MODULE(foo) \
-    module_t foo##_module
-
-typedef enum {
-    COMMAND_SUCCESS,
-    COMMAND_FAILURE,
-    COMMAND_USAGE
-} command_status_t;
-
 #define USED(x) (void) x
-#define RELAY_COMMAND_ARGS arg, mainopts, error
-#define COMMAND_ARGS void *arg, const main_options_t *mainopts, error_t **error
 
 # ifdef DEBUG
 #  define RED(str)    "\33[1;31m" str "\33[0m"
@@ -195,15 +184,5 @@ typedef struct {
     bool yes;
     bool noconfirm;
 } main_options_t;
-
-# include "graph.h"
-
-typedef struct {
-    const char *name;
-    void (*register_commands)(graph_t *);
-    bool (*early_init)(void);
-    bool (*late_init)(void);
-    void (*dtor)(void);
-} module_t;
 
 #endif /* COMMON_H */

@@ -3,6 +3,7 @@
 #include <getopt.h>
 #include <libxml/parser.h>
 #include "common.h"
+#include "command.h"
 #include "endpoints.h"
 #include <histedit.h>
 #include "modules/api.h"
@@ -37,18 +38,21 @@ extern module_t dedicated_module;
 static int verbosity = 0;
 /*static */graph_t *g = NULL;
 
-static char optstr[] = "qy";
+static char optstr[] = "lqy";
 
 enum {
     NOCONFIRM_OPT = 0x80,
+//     LOGFILE_OPT,
 };
 
 static struct option long_options[] =
 {
-    { "yes",        no_argument, NULL, 'y' },
-    { "silent",     no_argument, NULL, 'q' },
-    { "no-confirm", no_argument, NULL, NOCONFIRM_OPT },
-    { NULL,         no_argument, NULL, 0 }
+//     { "log",        no_argument,       NULL, 'l' },
+//     { "logfile",    required_argument, NULL, LOGFILE_OPT },
+    { "yes",        no_argument,       NULL, 'y' },
+    { "silent",     no_argument,       NULL, 'q' },
+    { "no-confirm", no_argument,       NULL, NOCONFIRM_OPT },
+    { NULL,         no_argument,       NULL, 0 }
 };
 
 const char *endpoint_names[] = {
@@ -62,17 +66,23 @@ const char *endpoint_names[] = {
     NULL
 };
 
+#define S(s) \
+    s, STR_LEN(s)
+
 const endpoint_t endpoints[] = {
-    { "ovh-eu",        "https://eu.api.ovh.com/1.0",        (const module_t * const []) { &me_module, &key_module, &vps_module, &domain_module, &hosting_module, &dedicated_module, NULL } },
-    { "ovh-ca",        "https://ca.api.ovh.com/1.0",        (const module_t * const []) { &me_module, &key_module, &vps_module, &domain_module, &hosting_module, &dedicated_module, NULL } },
-    { "soyoustart-eu", "https://eu.api.soyoustart.com/1.0", (const module_t * const []) { &me_module, &key_module, &dedicated_module, NULL } },
-    { "soyoustart-ca", "https://ca.api.soyoustart.com/1.0", (const module_t * const []) { &me_module, &key_module, &dedicated_module, NULL } },
-    { "kimsufi-eu",    "https://eu.api.kimsufi.com/1.0",    (const module_t * const []) { &me_module, &key_module, &dedicated_module, NULL } },
-    { "kimsufi-ca",    "https://ca.api.kimsufi.com/1.0",    (const module_t * const []) { &me_module, &key_module, &dedicated_module, NULL } },
-    { "runabove-ca",   "https://api.runabove.com/1.0",      (const module_t * const []) { &me_module, NULL } },
-    { NULL, NULL, NULL }
+    { "ovh-eu",        S("https://eu.api.ovh.com/1.0"),        (const module_t * const []) { &me_module, &key_module, &vps_module, &domain_module, &hosting_module, &dedicated_module, NULL } },
+    { "ovh-ca",        S("https://ca.api.ovh.com/1.0"),        (const module_t * const []) { &me_module, &key_module, &vps_module, &domain_module, &hosting_module, &dedicated_module, NULL } },
+    { "soyoustart-eu", S("https://eu.api.soyoustart.com/1.0"), (const module_t * const []) { &me_module, &key_module, &dedicated_module, NULL } },
+    { "soyoustart-ca", S("https://ca.api.soyoustart.com/1.0"), (const module_t * const []) { &me_module, &key_module, &dedicated_module, NULL } },
+    { "kimsufi-eu",    S("https://eu.api.kimsufi.com/1.0"),    (const module_t * const []) { &me_module, &key_module, &dedicated_module, NULL } },
+    { "kimsufi-ca",    S("https://ca.api.kimsufi.com/1.0"),    (const module_t * const []) { &me_module, &key_module, &dedicated_module, NULL } },
+    { "runabove-ca",   S("https://api.runabove.com/1.0"),      (const module_t * const []) { &me_module, NULL } },
+    { NULL, NULL, 0, NULL }
 };
 
+#undef S
+
+#if 0
 const endpoint_t *endpoint_by_name(const char *name/*, error_t **error*/)
 {
     const endpoint_t *e;
@@ -86,15 +96,16 @@ const endpoint_t *endpoint_by_name(const char *name/*, error_t **error*/)
 //     error_set();
     return NULL;
 }
+#endif
 
 static const module_t */*builtin_*/modules[] = {
     &openssl_module,
     &curl_module,
     &libxml_module,
     &conv_module,
+    &account_module,
     &api_module,
     &base_module,
-    &account_module,
     // ---
 #ifdef WITH_NLS
     &nls_module,
@@ -154,34 +165,6 @@ void print_error(error_t *error)
         }
         fputs(error->message, stderr);
         error_destroy(error);
-        if (FATAL == type) {
-            exit(EXIT_FAILURE);
-        }
-    }
-}
-
-void report(int type, const char *format, ...)
-{
-    if (type >= verbosity) {
-        va_list args;
-
-        switch (type) {
-            case INFO:
-                fprintf(stderr, "[ " GREEN("INFO") " ] ");
-                break;
-            case NOTICE:
-                fprintf(stderr, "[ " YELLOW("NOTE") " ] ");
-                break;
-            case WARN:
-                fprintf(stderr, "[ " YELLOW("WARN") " ] ");
-                break;
-            case FATAL:
-                fprintf(stderr, "[ " RED("ERR ") " ] ");
-                break;
-        }
-        va_start(args, format);
-        vfprintf(stderr, format, args);
-        va_end(args);
         if (FATAL == type) {
             exit(EXIT_FAILURE);
         }
@@ -321,7 +304,7 @@ int main(int argc, char **argv)
     atexit(cleanup);
     for (i = 0; i < ARRAY_SIZE(modules); i++) {
         if (NULL != modules[i]->late_init) {
-            modules[i]->late_init();
+            modules[i]->late_init(&error);
         }
     }
     for (i = 0; i < ARRAY_SIZE(modules); i++) {

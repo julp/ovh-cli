@@ -2,7 +2,7 @@
 #include <string.h>
 
 #include "common.h"
-#include "json.h"
+#include "command.h"
 #include "date.h"
 #include "table.h"
 #include "modules/api.h"
@@ -347,19 +347,21 @@ static void me_regcomm(graph_t *g)
     graph_create_full_path(g, lit_crendentials, lit_cred_flush, NULL);
 }
 
-#if 0
-void me_register_rules(json_value_t rules)
+static void me_register_rules(json_value_t rules, bool ro)
 {
+    JSON_ADD_RULE(rules, "GET", "/me");
     JSON_ADD_RULE(rules, "GET", "/me/*");
-    JSON_ADD_RULE(rules, "PUT", "/me/*");
-    JSON_ADD_RULE(rules, "POST", "/me/*");
-    JSON_ADD_RULE(rules, "DELETE", "/me/*");
+    if (!ro) {
+        JSON_ADD_RULE(rules, "PUT", "/me/*");
+        JSON_ADD_RULE(rules, "POST", "/me/*");
+        JSON_ADD_RULE(rules, "DELETE", "/me/*");
+    }
 }
-#endif
 
 DECLARE_MODULE(me) = {
     "me",
     me_regcomm,
+    me_register_rules,
     me_ctor,
     NULL,
     me_dtor

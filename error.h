@@ -14,11 +14,14 @@ enum {
 #ifdef DEBUG
 const char *ubasename(const char *);
 
-# define msg(type, format, ...) \
-    report(type, "%s:%d:" format GRAY(" in %s()\n"), ubasename(__FILE__), __LINE__, ## __VA_ARGS__, __func__)
-
 # define debug(format, ...) \
-    msg(INFO, format, ## __VA_ARGS__)
+    do { \
+        error_t *e; \
+ \
+        e = NULL; \
+        error_set(&e, INFO, format, ## __VA_ARGS__); \
+        print_error(e); \
+    } while (0);
 
 # define UGREP_FILE_LINE_FUNC_D \
     const char *__ugrep_file, const unsigned int __ugrep_line, const char *__ugrep_func
@@ -67,6 +70,6 @@ error_t *error_new(UGREP_FILE_LINE_FUNC_DC int, const char *, ...) WARN_UNUSED_R
 error_t *error_vnew(UGREP_FILE_LINE_FUNC_DC int, const char *, va_list) WARN_UNUSED_RESULT;
 void _error_set(UGREP_FILE_LINE_FUNC_DC error_t **, int, const char *, ...);
 
-void report(int, const char *, ...);
+void print_error(error_t *);
 
 #endif /* !ERROR_H */

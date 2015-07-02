@@ -1,5 +1,6 @@
 #include <locale.h>
 #include "common.h"
+#include "command.h"
 
 #define PACKAGE "ovh-cli"
 
@@ -17,6 +18,7 @@ bool nls_ctor(void)
 
 DECLARE_MODULE(nls) = {
     "nls",
+    NULL,
     NULL,
     nls_ctor,
     NULL,

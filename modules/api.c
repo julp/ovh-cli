@@ -5,11 +5,12 @@
 #include <libxml/xpath.h>
 #include <libxml/HTMLparser.h>
 
-#include "json.h"
+#include "command.h"
 #include "modules/api.h"
 #include "modules/libxml.h"
 #include "commands/account.h"
 #include "struct/xtring.h"
+#include "account_api.h"
 
 struct request_t {
     CURL *ch;
@@ -65,29 +66,63 @@ static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, voi
     return total_size;
 }
 
-void request_add_header(request_t *req, const char *header)
+void request_add_header1(request_t *req, const char *header)
 {
     // NOTE: curl_slist_append() copies the string
     req->headers = curl_slist_append(req->headers, header);
 }
 
-static bool request_sign(request_t *req, error_t **error)
+static char *stpcpy_s(char *to, const char *from, const char * const zero)
+{
+    const char * const end = zero - 1;
+
+    if (NULL == to || to >= end) {
+        return NULL;
+    }
+    while (to < end && 0 != (*to++ = *from++))
+        ;
+    if (to == end) {
+        *to = 0;
+        return NULL;
+    } else {
+        return to - 1;
+    }
+}
+
+bool request_add_header2(request_t *req, const char *header, const char *value, error_t **error)
+{
+    char *p, buffer[1024];
+    const char * const end = buffer + ARRAY_SIZE(buffer);
+
+    *buffer = '\0';
+    if (NULL != (p = stpcpy_s(buffer, header, end))) {
+        p = stpcpy_s(p, value, end);
+    }
+    if (NULL == p) {
+        error_set(error, FATAL, _("buffer overflow"));
+    }
+    // NOTE: curl_slist_append() copies the string
+    req->headers = curl_slist_append(req->headers, buffer);
+
+    return NULL != p;
+}
+
+bool request_sign(request_t *req, error_t **error)
 {
     EVP_MD_CTX ctx;
     unsigned int i, hash_len;
     char header[1024], buffer[1024], *p;
     unsigned char hash[EVP_MAX_MD_SIZE];
     const char * const end = header + ARRAY_SIZE(header);
-    const char *consumer_key = account_key();
 
-    if (NULL == consumer_key) {
+    if (!check_current_application_and_account(FALSE, error)) {
         return FALSE;
     }
     EVP_MD_CTX_init(&ctx);
     EVP_DigestInit_ex(&ctx, md, NULL);
-    EVP_DigestUpdate(&ctx, APPLICATION_SECRET, STR_LEN(APPLICATION_SECRET));
+    EVP_DigestUpdate(&ctx, current_application->secret, strlen(current_application->secret));
     EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
-    EVP_DigestUpdate(&ctx, consumer_key, strlen(consumer_key));
+    EVP_DigestUpdate(&ctx, (*current_account)->consumer_key, strlen((*current_account)->consumer_key));
     EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
     EVP_DigestUpdate(&ctx, methods[req->method].name, methods[req->method].name_len);
     EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
@@ -101,31 +136,26 @@ static bool request_sign(request_t *req, error_t **error)
     EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
     // <timestamp>
     if (snprintf(buffer, ARRAY_SIZE(buffer), "%u", req->timestamp) >= (int) ARRAY_SIZE(buffer)) {
-        error_set(error, FATAL, "buffer overflow"); // should not happen
+        error_set(error, FATAL, _("buffer overflow")); // should not happen
         return FALSE;
     }
     EVP_DigestUpdate(&ctx, buffer, strlen(buffer));
     // </timestamp>
     EVP_DigestFinal_ex(&ctx, hash, &hash_len);
     EVP_MD_CTX_cleanup(&ctx);
-    request_add_header(req, "X-Ovh-Application: " APPLICATION_KEY);
+    // X-Ovh-Application
+    request_add_header2(req, "X-Ovh-Application: ", current_application->key, error);
     // X-Ovh-Signature header
     *header = '\0';
     p = stpcpy(header, "X-Ovh-Signature: $1$");
     for (i = 0; i < hash_len; i++) {
         p += snprintf(p, end - p, "%02x", hash[i]); // TODO: check
     }
-    request_add_header(req, header);
+    request_add_header1(req, header);
     // X-Ovh-Timestamp header
-    *header = '\0';
-    p = stpcpy(header, "X-Ovh-Timestamp: ");
-    p = stpcpy(p, buffer);
-    request_add_header(req, header);
+    request_add_header2(req, "X-Ovh-Timestamp: ", buffer, error);
     // X-Ovh-Consumer header
-    *header = '\0';
-    p = stpcpy(header, "X-Ovh-Consumer: ");
-    p = stpcpy(p, consumer_key);
-    request_add_header(req, header);
+    request_add_header2(req, "X-Ovh-Consumer: ", (*current_account)->consumer_key, error);
 
     return TRUE;
 }
@@ -150,9 +180,14 @@ static const int8_t unreserved[] = {
     /* F */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
-#if 0
-#include <math.h>
-#endif
+/**
+ * URL format:
+ * - %% for a '%'
+ * - %B for endpoint's base URL for the current account
+ * - %s for a string substitution into the URL (it is escaped) - if NULL, ignored
+ * - %S for a string substitution as is (no escaping) - if NULL, ignored
+ * - %u for an integer (uint32_t)
+ **/
 static size_t urlf(char *dst, size_t dst_size, const char *fmt, va_list ap)
 {
     char *w;
@@ -172,6 +207,15 @@ static size_t urlf(char *dst, size_t dst_size, const char *fmt, va_list ap)
                         *w++ = '%';
                     }
                     break;
+                case 'B':
+                {
+                    dst_len += current_application->endpoint->base_len;
+                    if (dst_size > dst_len) {
+                        memcpy(w, current_application->endpoint->base, current_application->endpoint->base_len);
+                        w += current_application->endpoint->base_len;
+                    }
+                    break;
+                }
                 case 's':
                 {
                     const char *s, *p;
@@ -219,21 +263,6 @@ static size_t urlf(char *dst, size_t dst_size, const char *fmt, va_list ap)
                     if (dst_size > dst_len) {
                         w += sprintf(w, "%" PRIu32, num);
                     }
-#if 0
-                    num = va_arg(ap, uint32_t);
-                    num_len = log10(num) + 1;
-                    dst_len += num_len;
-                    if (dst_size > dst_len) {
-                        size_t i;
-
-                        i = num_len;
-                        do {
-                            w[i--] = '0' + num % 10;
-                            num /= 10;
-                        } while (0 != num);
-                        w += num_len;
-                    }
-#endif
                     break;
                 }
             }
@@ -259,25 +288,19 @@ request_t *request_vnew(uint32_t flags, http_method_t method, const void *pdata,
     size_t url_len, url_size;
 
     assert(NULL != url);
-
+    if (!check_current_application_and_account(!HAS_FLAG(flags, REQUEST_FLAG_SIGN), NULL)) {
+        return NULL;
+    }
     req = mem_new(*req);
     req->flags = flags;
     req->headers = NULL;
     req->method = method;
     va_copy(cpyargs, args);
-#if 0
-    req->url = mem_new_n(*req->url, vsnprintf(NULL, 0, url, cpyargs) + 1);
-#else
     url_size = urlf(NULL, 0, url, cpyargs) + 1;
     req->url = mem_new_n(*req->url, url_size);
-#endif
     va_end(cpyargs);
-#if 0
-    vsprintf(req->url, url, args);
-#else
     url_len = urlf(req->url, url_size, url, args);
     assert(url_len < url_size);
-#endif
     req->pdata = req->data = NULL;
     req->ch = curl_easy_init();
     req->buffer = string_new();
@@ -298,7 +321,7 @@ request_t *request_vnew(uint32_t flags, http_method_t method, const void *pdata,
 #endif /* DEBUG */
             );
             req->pdata = string_orphan(buffer);
-            request_add_header(req, "Content-Type: application/json; charset=utf-8");
+            request_add_header1(req, "Content-Type: application/json; charset=utf-8");
         } else {
             if (HAS_FLAG(flags, REQUEST_FLAG_COPY)) {
                 req->pdata = strdup(pdata);
@@ -534,12 +557,16 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
 #define STRINGIFY_EXPANDED(x) STRINGIFY(x)
 #define DEFAULT_CONSUMER_KEY_EXPIRATION 86400 /* 1 day */
 
-const char *request_consumer_key(const char *account, const char *password, time_t *expires_at, error_t **error)
+const char *request_consumer_key(time_t *expires_at, error_t **error)
 {
+    bool success;
     request_t *req;
     char *validationUrl;
     char *consumerKey;
 
+    if (!check_current_application_and_account(TRUE, error)) {
+        return NULL;
+    }
     // POST /auth/credential
     {
         xmlDocPtr doc;
@@ -548,44 +575,29 @@ const char *request_consumer_key(const char *account, const char *password, time
 
         {
             json_value_t root, rules;
-
-#define JSON_ADD_RULE(parent, method, value) \
-    do { \
-        json_value_t object; \
- \
-        object = json_object(); \
-        json_object_set_property(object, "method", json_string(method)); \
-        json_object_set_property(object, "path", json_string(value)); \
-        json_array_push(parent, object); \
-    } while (0);
+            const module_t * const *m;
 
             reqdoc = json_document_new();
             root = json_object();
             rules = json_array();
             json_document_set_root(reqdoc, root);
             json_object_set_property(root, "accessRules", rules);
-//             json_object_set_property(root, "redirection", json_string("https://www.mywebsite.com/"));
-            JSON_ADD_RULE(rules, "GET", "/*");
-            JSON_ADD_RULE(rules, "PUT", "/me/*");
-            JSON_ADD_RULE(rules, "POST", "/me/*");
-            JSON_ADD_RULE(rules, "DELETE", "/me/*");
-            JSON_ADD_RULE(rules, "POST", "/ip/*");
-            JSON_ADD_RULE(rules, "DELETE", "/ip/*");
-            JSON_ADD_RULE(rules, "PUT", "/domain/zone/*");
-            JSON_ADD_RULE(rules, "POST", "/domain/zone/*");
-            JSON_ADD_RULE(rules, "DELETE", "/domain/zone/*");
-            JSON_ADD_RULE(rules, "PUT", "/dedicated/server/*");
-            JSON_ADD_RULE(rules, "POST", "/dedicated/server/*");
-            JSON_ADD_RULE(rules, "DELETE", "/dedicated/server/*");
-
-#undef JSON_ADD_RULE
+            for (m = current_application->endpoint->supported; NULL != *m; m++) {
+                if (NULL != (*m)->register_rules) {
+                    (*m)->register_rules(rules, FALSE);
+                }
+            }
         }
         req = request_new(REQUEST_FLAG_NONE | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, API_BASE_URL "/auth/credential");
         REQUEST_XML_RESPONSE_WANTED(req);
-        request_add_header(req, "Content-type: application/json");
-        request_add_header(req, "X-Ovh-Application: " APPLICATION_KEY);
-        request_execute(req, RESPONSE_XML, (void **) &doc, error); // TODO: check returned value
+        request_add_header1(req, "Content-type: application/json");
+        request_add_header2(req, "X-Ovh-Application: ", current_application->key, error);
+        success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
         json_document_destroy(reqdoc);
+        if (!success) {
+            request_destroy(req);
+            return NULL;
+        }
 #if 0
         puts("====================");
         xmlDocFormatDump(stdout, doc, 1);
@@ -594,22 +606,22 @@ const char *request_consumer_key(const char *account, const char *password, time
         if (NULL == (root = xmlDocGetRootElement(doc))) {
             xmlFreeDoc(doc);
             request_destroy(req);
-            return 0;
+            return NULL;
         }
         consumerKey = xmlGetPropAsString(root, "consumerKey");
         validationUrl = xmlGetPropAsString(root, "validationUrl");
         xmlFreeDoc(doc);
         request_destroy(req);
     }
-    if (NULL == password || '\0' == *password) {
+    if (NULL == (*current_account)->password || '\0' == *(*current_account)->password) {
         error_set(
             error,
             NOTICE,
             _("you have not registered your password so you have to confirm the current consumer key %s yourself by validating it at: %s\n" \
             "Once done, if you choose to set a limited validity, don't forget to run: ovh account %s update expires in \"<duration>\""),
-            consumerKey,
+            (*current_account)->consumer_key,
             validationUrl,
-            account
+            (*current_account)->account
         );
         *expires_at = 0;
     } else {
@@ -634,14 +646,14 @@ const char *request_consumer_key(const char *account, const char *password, time
                 xmlFreeDoc(doc);
                 request_destroy(req);
                 free(validationUrl);
-                return 0;
+                return NULL;
             }
             if (NULL == (res = xmlXPathEvalExpression(BAD_CAST "string(//form//input[@name=\"credentialToken\"]/@value)", ctxt))) {
                 xmlXPathFreeObject(res);
                 xmlFreeDoc(doc);
                 request_destroy(req);
                 free(validationUrl);
-                return 0;
+                return NULL;
             }
             token = strdup((char *) xmlXPathCastToString(res));
             xmlXPathFreeObject(res);
@@ -650,7 +662,7 @@ const char *request_consumer_key(const char *account, const char *password, time
                 xmlFreeDoc(doc);
                 request_destroy(req);
                 free(validationUrl);
-                return 0;
+                return NULL;
             }
             password_field_name = strdup((char *) xmlXPathCastToString(res));
             xmlXPathFreeObject(res);
@@ -659,7 +671,7 @@ const char *request_consumer_key(const char *account, const char *password, time
                 xmlFreeDoc(doc);
                 request_destroy(req);
                 free(validationUrl);
-                return 0;
+                return NULL;
             }
             account_field_name = strdup((char *) xmlXPathCastToString(res));
             xmlXPathFreeObject(res);
@@ -670,8 +682,8 @@ const char *request_consumer_key(const char *account, const char *password, time
         // POST validationUrl
         req = request_new(REQUEST_FLAG_NONE, HTTP_POST, NULL, "%S", validationUrl);
         request_add_post_field(req, "credentialToken", token);
-        request_add_post_field(req, account_field_name, account);
-        request_add_post_field(req, password_field_name, password);
+        request_add_post_field(req, account_field_name, (*current_account)->account);
+        request_add_post_field(req, password_field_name, (*current_account)->password);
 //         request_add_post_field(req, "duration", "0");
         request_add_post_field(req, "duration", STRINGIFY_EXPANDED(DEFAULT_CONSUMER_KEY_EXPIRATION));
         request_execute(req, RESPONSE_IGNORE, NULL, error); // TODO: check returned value
@@ -711,6 +723,7 @@ void api_regcomm(graph_t *g)
 DECLARE_MODULE(api) = {
     "api",
     api_regcomm,
+    NULL,
     api_ctor,
     NULL,
     NULL

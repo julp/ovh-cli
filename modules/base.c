@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "common.h"
+#include "command.h"
 
 extern graph_t *g;
 
@@ -81,6 +82,7 @@ static void base_regcomm(graph_t *g)
 DECLARE_MODULE(base) = {
     "base",
     base_regcomm,
+    NULL,
     NULL,
     NULL,
     NULL

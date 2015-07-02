@@ -3,6 +3,7 @@
 #include <libxml/parser.h>
 
 #include "common.h"
+#include "command.h"
 
 static bool libxml_ctor(void)
 {
@@ -19,6 +20,7 @@ static void libxml_dtor(void)
 
 DECLARE_MODULE(libxml) = {
     "libxml",
+    NULL,
     NULL,
     libxml_ctor,
     NULL,

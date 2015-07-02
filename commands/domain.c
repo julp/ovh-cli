@@ -2,7 +2,7 @@
 #include <inttypes.h>
 
 #include "common.h"
-#include "json.h"
+#include "command.h"
 #include "date.h"
 #include "util.h"
 #include "table.h"
@@ -789,19 +789,22 @@ static void domain_regcomm(graph_t *g)
     graph_create_all_path(g, lit_record_update, NULL, 2, lit_name, arg_name, 2, lit_target, arg_value, 2, lit_ttl, arg_ttl, 0);
 }
 
-#if 0
-void domain_register_rules(json_value_t rules)
+static void domain_register_rules(json_value_t rules, bool ro)
 {
+    JSON_ADD_RULE(rules, "GET", "/domain");
+    JSON_ADD_RULE(rules, "GET", "/domain/*");
     JSON_ADD_RULE(rules, "GET", "/domain/zone/*");
-    JSON_ADD_RULE(rules, "PUT", "/domain/zone/*");
-    JSON_ADD_RULE(rules, "POST", "/domain/zone/*");
-    JSON_ADD_RULE(rules, "DELETE", "/domain/zone/*");
+    if (!ro) {
+        JSON_ADD_RULE(rules, "PUT", "/domain/zone/*");
+        JSON_ADD_RULE(rules, "POST", "/domain/zone/*");
+        JSON_ADD_RULE(rules, "DELETE", "/domain/zone/*");
+    }
 }
-#endif
 
 DECLARE_MODULE(domain) = {
     MODULE_NAME,
     domain_regcomm,
+    domain_register_rules,
     domain_ctor,
     NULL,
     NULL

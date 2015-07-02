@@ -2,7 +2,7 @@
 #include <inttypes.h>
 
 #include "common.h"
-#include "json.h"
+#include "command.h"
 #include "date.h"
 #include "util.h"
 #include "table.h"
@@ -942,19 +942,21 @@ static void hosting_regcomm(graph_t *g)
     graph_create_full_path(g, lit_hosting, arg_hosting, lit_cron, lit_cron_list, NULL);
 }
 
-#if 0
-void hosting_register_rules(json_value_t rules)
+static void hosting_register_rules(json_value_t rules, bool ro)
 {
+    JSON_ADD_RULE(rules, "GET", "/hosting/web");
     JSON_ADD_RULE(rules, "GET", "/hosting/web/*");
-    JSON_ADD_RULE(rules, "PUT", "/hosting/web/*");
-    JSON_ADD_RULE(rules, "POST", "/hosting/web/*");
-    JSON_ADD_RULE(rules, "DELETE", "/hosting/web/*");
+    if (!ro) {
+        JSON_ADD_RULE(rules, "PUT", "/hosting/web/*");
+        JSON_ADD_RULE(rules, "POST", "/hosting/web/*");
+        JSON_ADD_RULE(rules, "DELETE", "/hosting/web/*");
+    }
 }
-#endif
 
 DECLARE_MODULE(hosting) = {
     MODULE_NAME,
     hosting_regcomm,
+    hosting_register_rules,
     hosting_ctor,
     NULL,
     NULL

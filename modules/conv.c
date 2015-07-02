@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "common.h"
+#include "command.h"
 
 static const char *input_encoding, *output_encoding = "UTF-8";
 
@@ -251,6 +252,7 @@ bool convert_string_utf8_to_local(const char *src, size_t src_len, char **dst, s
 
 DECLARE_MODULE(conv) = {
     "conv",
+    NULL,
     NULL,
     convert_ctor,
     NULL,

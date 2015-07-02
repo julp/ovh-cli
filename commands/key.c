@@ -2,7 +2,7 @@
 #include <inttypes.h>
 
 #include "common.h"
-#include "json.h"
+#include "command.h"
 #include "date.h"
 #include "util.h"
 #include "table.h"
@@ -315,20 +315,21 @@ static void key_regcomm(graph_t *g)
     graph_create_full_path(g, lit_key, arg_name, lit_key_default, arg_on_off, NULL);
 }
 
-#if 0
-void key_register_rules(json_value_t rules)
+static void key_register_rules(json_value_t rules, bool ro)
 {
     JSON_ADD_RULE(rules, "GET", "/me/sshKey");
     JSON_ADD_RULE(rules, "GET", "/me/sshKey/*");
-    JSON_ADD_RULE(rules, "PUT", "/me/sshKey/*");
-    JSON_ADD_RULE(rules, "POST", "/me/sshKey/*");
-    JSON_ADD_RULE(rules, "DELETE", "/me/sshKey/*");
+    if (!ro) {
+        JSON_ADD_RULE(rules, "PUT", "/me/sshKey/*");
+        JSON_ADD_RULE(rules, "POST", "/me/sshKey/*");
+        JSON_ADD_RULE(rules, "DELETE", "/me/sshKey/*");
+    }
 }
-#endif
 
 DECLARE_MODULE(key) = {
     MODULE_NAME,
     key_regcomm,
+    key_register_rules,
     key_ctor,
     NULL,
     NULL

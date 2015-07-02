@@ -10,6 +10,8 @@ enum {
     RESPONSE_JSON
 };
 
+#define API_BASE_URL "%B"
+
 #define REQUEST_FLAG_NONE       0
 #define REQUEST_FLAG_SIGN       (1<<1)
 #define REQUEST_FLAG_COPY       (1<<2)
@@ -28,7 +30,8 @@ typedef struct request_t request_t;
 # include "common.h"
 
 void request_add_post_field(request_t *, const char *, const char *);
-void request_add_header(request_t *, const char *);
+void request_add_header1(request_t *, const char *);
+bool request_add_header2(request_t *, const char *, const char *, error_t **);
 
 void request_destroy(request_t *);
 long request_response_status(request_t *);
@@ -38,8 +41,8 @@ request_t *request_vnew(uint32_t, http_method_t, const void *, const char *, va_
 bool request_execute(request_t *, int, void **, error_t **);
 
 # define REQUEST_XML_RESPONSE_WANTED(/* request_t * */ req) \
-    request_add_header(req, "Accept: application/xml")
+    request_add_header1(req, "Accept: application/xml")
 
-const char *request_consumer_key(const char *, const char *, time_t *, error_t **);
+const char *request_consumer_key(time_t *, error_t **);
 
 #endif /* API_H */

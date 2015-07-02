@@ -1,6 +1,7 @@
 #include <openssl/ssl.h>
 #include <openssl/evp.h>
 #include "common.h"
+#include "command.h"
 
 static bool openssl_ctor(void)
 {
@@ -17,6 +18,7 @@ static void openssl_dtor(void)
 
 DECLARE_MODULE(openssl) = {
     "openssl",
+    NULL,
     NULL,
     openssl_ctor,
     NULL,

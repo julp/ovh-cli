@@ -253,3 +253,27 @@ INITIALIZER_P(date_test)
     }
     iterator_close(&it);
 }
+
+#define DURATION_UT(string, expected_result, expected_value) \
+    do { \
+        bool r; \
+        time_t v; \
+         \
+        if (expected_result == (r = parse_duration(string, &v))) { \
+            if (r && v != expected_value) { \
+                printf("parse_duration('%s') failed (expected = %lld ; got = %lld)\n", string, (long long) expected_value, (long long) v); \
+            } \
+        } else { \
+            printf("parse_duration('%s') failed (expected = %d ; got = %d)\n", string, expected_result, r); \
+        } \
+    } while (0);
+
+// INITIALIZER_DECL(duration_test);
+INITIALIZER_P(duration_test)
+{
+    DURATION_UT("3 day 1 days", FALSE, 0);
+    DURATION_UT("3 seconds 1 hour", FALSE, 0);
+    DURATION_UT("12 11 hours", FALSE, 0);
+    DURATION_UT("3 days 1", FALSE, 0);
+    DURATION_UT("3 days 1 second", TRUE, 3 * DAY + 1 * SECOND);
+}

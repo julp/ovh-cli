@@ -2,6 +2,7 @@
 
 # define JSON_H
 
+# include "struct/iterator.h"
 # include "struct/xtring.h"
 
 typedef uintptr_t json_value_t;

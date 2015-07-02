@@ -4,6 +4,7 @@
 
 # include <time.h>
 # include "common.h"
+# include "struct/iterator.h"
 
 int date_diff_in_days(time_t, time_t);
 bool date_parse(const char *, const char *, struct tm *, error_t **);

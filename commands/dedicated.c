@@ -2,7 +2,7 @@
 #include <inttypes.h>
 
 #include "common.h"
-#include "json.h"
+#include "command.h"
 #include "date.h"
 #include "util.h"
 #include "table.h"
@@ -701,7 +701,8 @@ static command_status_t dedicated_mrtg(COMMAND_ARGS)
     request_destroy(req);
 #else
     success = TRUE;
-    doc = json_document_parse("[{\"timestamp\":1435140540,\"value\":{\"unit\":\"bps\",\"value\":2281.533}},{\"timestamp\":1435140600,\"value\":{\"unit\":\"bps\",\"value\":1981.95}},{\"timestamp\":1435140660,\"value\":{\"unit\":\"bps\",\"value\":1922.11}},{\"timestamp\":1435140720,\"value\":{\"unit\":\"bps\",\"value\":2215.201}},{\"timestamp\":1435140780,\"value\":{\"unit\":\"bps\",\"value\":1824.761}},{\"timestamp\":1435140840,\"value\":{\"unit\":\"bps\",\"value\":1856.88}},{\"timestamp\":1435140900,\"value\":{\"unit\":\"bps\",\"value\":1962.336}},{\"timestamp\":1435140960,\"value\":{\"unit\":\"bps\",\"value\":1702.629}},{\"timestamp\":1435141020,\"value\":{\"unit\":\"bps\",\"value\":2194.6}},{\"timestamp\":1435141080,\"value\":{\"unit\":\"bps\",\"value\":2003.756}},{\"timestamp\":1435141140,\"value\":{\"unit\":\"bps\",\"value\":1941.444}},{\"timestamp\":1435141200,\"value\":{\"unit\":\"bps\",\"value\":1888.647}},{\"timestamp\":1435141260,\"value\":{\"unit\":\"bps\",\"value\":1877.333}},{\"timestamp\":1435141320,\"value\":{\"unit\":\"bps\",\"value\":1980.607}},{\"timestamp\":1435141380,\"value\":{\"unit\":\"bps\",\"value\":3732.604}}]", NULL);
+    doc = json_document_parse("[{\"timestamp\":1435140540,\"value\":{\"unit\":\"bps\",\"value\":2281.533}},{\"timestamp\":1435140600,\"value\":{\"unit\":\"bps\",\"value\":1981.95}},{\"timestamp\":1435140660,\"value\":{\"unit\":\"bps\",\"value\":1922.11}},{\"timestamp\":1435140720,\"value\":{\"unit\":\"bps\",\"value\":2215.201}},{\"timestamp\":1435140780,\"value\":{\"unit\":\"bps\",\"value\":1824.761}},{\"timestamp\":1435140840,\"value\":{\"unit\":\"bps\",\"value\":1856.88}},{\"timestamp\":1435140900,\"value\":{\"unit\":\"bps\",\"value\":1962.336}},{\"timestamp\":1435140960,\"value\":{\"unit\":\"bps\",\"value\":1702.629}},\
+    {\"timestamp\":1435141020,\"value\":{\"unit\":\"bps\",\"value\":2194.6}},{\"timestamp\":1435141080,\"value\":{\"unit\":\"bps\",\"value\":2003.756}},{\"timestamp\":1435141140,\"value\":{\"unit\":\"bps\",\"value\":1941.444}},{\"timestamp\":1435141200,\"value\":{\"unit\":\"bps\",\"value\":1888.647}},{\"timestamp\":1435141260,\"value\":{\"unit\":\"bps\",\"value\":1877.333}},{\"timestamp\":1435141320,\"value\":{\"unit\":\"bps\",\"value\":1980.607}},{\"timestamp\":1435141380,\"value\":{\"unit\":\"bps\",\"value\":3732.604}}]", NULL);
 #endif
     if (success) {
         Iterator it;
@@ -813,22 +814,24 @@ static void dedicated_regcomm(graph_t *g)
     graph_create_full_path(g, lit_dedicated, arg_server, lit_reverse, lit_rev_set, arg_reverse, NULL);
 }
 
-#if 0
-void dedicated_register_rules(json_value_t rules)
+static void dedicated_register_rules(json_value_t rules, bool ro)
 {
-    JSON_ADD_RULE(rules, "GET", "/ip/*");
-    JSON_ADD_RULE(rules, "POST", "/ip/*");
-    JSON_ADD_RULE(rules, "DELETE", "/ip/*");
+    JSON_ADD_RULE(rules, "GET", "/ip");
+    JSON_ADD_RULE(rules, "GET", "/dedicated/server");
     JSON_ADD_RULE(rules, "GET", "/dedicated/server/*");
-    JSON_ADD_RULE(rules, "PUT", "/dedicated/server/*");
-    JSON_ADD_RULE(rules, "POST", "/dedicated/server/*");
-    JSON_ADD_RULE(rules, "DELETE", "/dedicated/server/*");
+    if (!ro) {
+        JSON_ADD_RULE(rules, "POST", "/ip/*");
+        JSON_ADD_RULE(rules, "DELETE", "/ip/*");
+        JSON_ADD_RULE(rules, "PUT", "/dedicated/server/*");
+        JSON_ADD_RULE(rules, "POST", "/dedicated/server/*");
+        JSON_ADD_RULE(rules, "DELETE", "/dedicated/server/*");
+    }
 }
-#endif
 
 DECLARE_MODULE(dedicated) = {
     MODULE_NAME,
     dedicated_regcomm,
+    dedicated_register_rules,
     dedicated_ctor,
     NULL,
     NULL

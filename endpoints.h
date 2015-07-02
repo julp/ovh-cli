@@ -5,7 +5,8 @@
 typedef struct {
     const char *name;
     const char *base;
-    const module_t * const *managed;
+    size_t base_len;
+    const module_t * const *supported;
 } endpoint_t;
 
 extern const endpoint_t endpoints[];

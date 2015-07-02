@@ -7,12 +7,14 @@
 #include <errno.h>
 
 #include "common.h"
+#include "command.h"
 #include "date.h"
 #include "endpoints.h"
 #include "table.h"
 #include "modules/api.h"
 #include "modules/libxml.h"
 #include "struct/hashtable.h"
+#include "account_api.h"
 
 #include <limits.h>
 #if !defined(MAXPATHLEN) && defined(PATH_MAX)
@@ -25,29 +27,11 @@ enum {
 };
 
 typedef struct {
-    char *key;
-    char *secret;
-    const endpoint_t *endpoint;
-} application_t;
-
-typedef struct {
-    char *account;
-    char *password;
-    time_t expires_at;
-    const char *consumer_key;
-    HashTable *modules_data;
-//     application_t *application;
-//     or
-//     const endpoint_t *endpoint;
-//     ?
-} account_t;
-
-typedef struct {
     char path[MAXPATHLEN];
     HashTable *accounts;
     HashTable *applications; // int (index in endpoints - see endpoints.h) => application_t *
     account_t *autosel;
-    account_t *current;
+    account_t *current_account;
     HashTable *modules_callbacks;
 } account_command_data_t;
 
@@ -58,20 +42,12 @@ typedef struct {
 
 static account_command_data_t *acd = NULL;
 
-#define duration_test(string, expected_result, expected_value) \
-    do { \
-        bool r; \
-        time_t v; \
-         \
-        if (expected_result == (r = parse_duration(string, &v))) { \
-            if (r && v != expected_value) { \
-                printf("parse_duration('%s') failed (expected = %lld ; got = %lld)\n", string, (long long) expected_value, (long long) v); \
-            } \
-        } else { \
-            printf("parse_duration('%s') failed (expected = %d ; got = %d)\n", string, expected_result, r); \
-        } \
-    } while (0);
+account_t * const *current_account;
+const application_t *current_application = NULL;
 
+static bool account_save(error_t **);
+
+#if 0
 static void account_notify_change(void)
 {
     bool exists;
@@ -86,37 +62,98 @@ static void account_notify_change(void)
         assert(NULL != mc);
         if (NULL != mc->on_set_account) {
             data = NULL;
-            exists = hashtable_get(acd->current->modules_data, key, &data);
+            exists = hashtable_get(acd->current_account->modules_data, key, &data);
             mc->on_set_account(&data);
             if (!exists) {
-                hashtable_put(acd->current->modules_data, 0, key, data, NULL);
+                hashtable_put(acd->current_account->modules_data, 0, key, data, NULL);
             }
         }
     }
     iterator_close(&it);
 }
+#endif
+
+static void account_set_current(account_t *account, bool autosel)
+{
+    if (acd->current_account != account) {
+        bool exists;
+        Iterator it;
+
+        acd->current_account = account;
+        // change global variables
+        current_application = NULL;
+        if (NULL != account->endpoint) { // account can't be NULL
+            hashtable_direct_get(acd->applications, (account->endpoint - endpoints), &current_application);
+        }
+        // notify modules
+        hashtable_to_iterator(&it, acd->modules_callbacks);
+        for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+            void *key, *data;
+            module_callbacks_t *mc;
+
+            mc = iterator_current(&it, &key);
+            assert(NULL != mc);
+            if (NULL != mc->on_set_account) {
+                data = NULL;
+                exists = hashtable_get(acd->current_account->modules_data, key, &data);
+                mc->on_set_account(&data);
+                if (!exists) {
+                    hashtable_put(acd->current_account->modules_data, 0, key, data, NULL);
+                }
+            }
+        }
+        iterator_close(&it);
+    }
+    if (autosel) {
+        acd->autosel = account;
+    }
+}
+
+bool check_current_application_and_account(bool skip_CK_check, error_t **error)
+{
+    if (NULL == current_account || NULL == *current_account) {
+        error_set(error, WARN, _("no current account"));
+        return FALSE;
+    }
+    if (NULL == current_application) {
+        error_set(error, WARN, _("no application registered for endpoint '%s'"), acd->current_account->endpoint->name);
+        return FALSE;
+    }
+    if (skip_CK_check) {
+        return TRUE;
+    }
+    // if no CK is defined or it is expired, get one
+    if (NULL == acd->current_account->consumer_key || (0 != acd->current_account->expires_at && acd->current_account->expires_at < time(NULL))) {
+        // if we successfully had a CK, save it
+        if (NULL != (acd->current_account->consumer_key = request_consumer_key(&acd->current_account->expires_at, error))) {
+            account_save(error);
+        }
+    }
+
+    return NULL != acd->current_account->consumer_key;
+}
 
 const char *account_current(void)
 {
-    if (NULL == acd->current) {
+    if (NULL == acd->current_account) {
         return "(no current account)";
     } else {
-        return acd->current->account;
+        return acd->current_account->account;
     }
 }
 
 void account_current_set_data(const char *name, void *data)
 {
-    assert(NULL != acd->current);
+    assert(NULL != acd->current_account);
 
-    hashtable_put(acd->current->modules_data, 0, name, data, NULL);
+    hashtable_put(acd->current_account->modules_data, 0, name, data, NULL);
 }
 
 bool account_current_get_data(const char *name, void **data)
 {
-    assert(NULL != acd->current);
+    assert(NULL != acd->current_account);
 
-    return hashtable_get(acd->current->modules_data, name, data);
+    return hashtable_get(acd->current_account->modules_data, name, data);
 }
 
 void account_register_module_callbacks(const char *name, DtorFunc dtor, void (*on_set_account)(void **))
@@ -191,6 +228,9 @@ static bool account_save(error_t **error)
         CREATE_NODE(node, "account");
         SET_PROP(node, "account", account->account);
         SET_PROP(node, "password", account->password);
+        if (NULL != account->endpoint) { // TODO: for compatibility, remove this test in the future
+            SET_PROP(node, "endpoint", account->endpoint->name);
+        }
         if (account == acd->autosel) {
             SET_PROP(node, "default", "1");
         }
@@ -238,22 +278,24 @@ static bool account_save(error_t **error)
     return TRUE;
 }
 
+#if 0
 const char *account_key(error_t **error)
 {
-    assert(NULL != acd->current);
+    assert(NULL != acd->current_account);
 
-    if (NULL == acd->current) {
+    if (NULL == acd->current_account) {
         error_set(error, WARN, _("no current account"));
         return NULL;
     }
-    if (NULL == acd->current->consumer_key || (0 != acd->current->expires_at && acd->current->expires_at < time(NULL))) {
-        if (NULL != (acd->current->consumer_key = request_consumer_key(acd->current->account, acd->current->password, &acd->current->expires_at, error))) {
+    if (NULL == acd->current_account->consumer_key || (0 != acd->current_account->expires_at && acd->current_account->expires_at < time(NULL))) {
+        if (NULL != (acd->current_account->consumer_key = request_consumer_key(&acd->current_account->expires_at, error))) {
             account_save(error);
         }
     }
 
-    return acd->current->consumer_key;
+    return acd->current_account->consumer_key;
 }
+#endif
 
 static void application_dtor(void *data)
 {
@@ -265,7 +307,7 @@ static void application_dtor(void *data)
     free(app);
 }
 
-static int account_load(error_t **error)
+static bool account_load(error_t **error)
 {
     struct stat st;
 
@@ -276,14 +318,15 @@ static int account_load(error_t **error)
         xmlKeepBlanksDefault(0);
         if (NULL == (doc = xmlParseFile(acd->path))) {
             error_set(error, WARN, _("parsing of '%s' failed"), acd->path);
-            return COMMAND_FAILURE;
+            return FALSE;
         }
         if (NULL == (root = xmlDocGetRootElement(doc))) {
             error_set(error, WARN, _("unable to retrieve document root"));
-            return COMMAND_FAILURE;
+            return FALSE;
         }
         for (n = root->children; n != NULL; n = n->next) {
             if (0 == xmlStrcmp(n->name, BAD_CAST "account")) {
+                int endpoint;
                 account_t *a;
 
                 a = mem_new(*a);
@@ -291,7 +334,7 @@ static int account_load(error_t **error)
                 a->password = xmlGetPropAsString(n, "password");
                 a->consumer_key = NULL;
                 a->modules_data = hashtable_ascii_cs_new(NULL, NULL, NULL); // no dup/dtor for keys as they are "static" strings ; no dtor for values, we need to do it ourselves
-                if (NULL != xmlHasProp(n, BAD_CAST "consumer_key")) {
+                if (xmlHasProp(n, BAD_CAST "consumer_key")) {
                     char *expires_at;
 
                     a->consumer_key = xmlGetPropAsString(n, "consumer_key");
@@ -305,8 +348,15 @@ static int account_load(error_t **error)
                 }
                 hashtable_put(acd->accounts, 0, a->account, a, NULL);
                 if (xmlHasProp(n, BAD_CAST "default")) {
-                    acd->current = acd->autosel = a;
-                    account_notify_change();
+                    account_set_current(acd->current_account, TRUE);
+                }
+                if (xmlHasProp(n, BAD_CAST "endpoint")) { // TODO: for compatibility, remove this test in the future
+                    if (-1 == (endpoint = xmlGetPropAsCollectionIndex(n, "endpoint", endpoint_names, -1))) {
+                        // TODO: set it to NULL for now
+                        a->endpoint = NULL;
+                    } else {
+                        a->endpoint = &endpoints[endpoint];
+                    }
                 }
             } else if (0 == xmlStrcmp(n->name, BAD_CAST "application")) {
                 int endpoint;
@@ -324,16 +374,17 @@ static int account_load(error_t **error)
             }
         }
         if (hashtable_size(acd->accounts) > 0) {
-            if (NULL == acd->current) {
-                acd->current = (account_t *) hashtable_first(acd->accounts);
-                account_notify_change();
+            if (NULL == acd->current_account) {
+                account_set_current((account_t *) hashtable_first(acd->accounts), FALSE);
             }
-            acd->current->consumer_key = account_key(error); // TODO: error checking?
+#if 0
+            acd->current_account->consumer_key = account_key(error); // TODO: error checking?
+#endif
         }
         xmlFreeDoc(doc);
     }
 
-    return COMMAND_SUCCESS;
+    return TRUE;
 }
 
 static void account_account_dtor(void *data)
@@ -372,7 +423,8 @@ static bool account_early_init(void)
     char *home;
 
     acd = mem_new(*acd);
-    acd->autosel = acd->current = NULL;
+    current_account = &acd->current_account;
+    acd->autosel = acd->current_account = NULL;
     acd->applications = hashtable_new(value_hash, value_equal, NULL, NULL, application_dtor);
     acd->accounts = hashtable_ascii_cs_new(NULL, NULL /* no dtor for key as it is also part of the value */, account_account_dtor);
     acd->modules_callbacks = hashtable_ascii_cs_new(NULL, NULL /* no dtor for key as it is also part of the value */, free);
@@ -406,40 +458,24 @@ static bool account_early_init(void)
             return FALSE;
         }
     }
-#if 0
-    duration_test("3 day 1 days", FALSE, 0);
-    duration_test("3 seconds 1 hour", FALSE, 0);
-    duration_test("12 11 hours", FALSE, 0);
-    duration_test("3 days 1", FALSE, 0);
-    duration_test("3 days 1 second", TRUE, 3 * DAY + 1 SECOND);
-#endif
 
     return TRUE;
 }
 
-static bool account_late_init(void)
+static bool account_late_init(error_t **error)
 {
-    error_t *error;
-    /**
-     * TODO:
-     * temporary "fix" to remove warning due to usage of print_error in this function: add an error_t as argument?
-     **/
-    extern void print_error(error_t *);
-
-    error = NULL;
-    account_load(&error);
-    print_error(error);
-
-    return TRUE;
+    return account_load(error);
 }
 
 typedef struct {
+    int endpoint;
     char *account;
     char *password;
     bool expires_in;
     bool expires_at;
     char *expiration;
     char *consumer_key;
+    bool endpoint_present;
 } account_argument_t;
 
 typedef struct {
@@ -447,7 +483,6 @@ typedef struct {
     char *key;
     char *secret;
 } application_argument_t;
-
 
 static void account_dtor(void)
 {
@@ -481,6 +516,7 @@ static command_status_t account_list(COMMAND_ARGS)
         _("consumer key"), TABLE_TYPE_STRING,
         _("key expiration"), TABLE_TYPE_DATETIME,
         _("password"), TABLE_TYPE_BOOLEAN,
+        _("endpoint"), TABLE_TYPE_ENUM, endpoint_names,
         _("current"), TABLE_TYPE_BOOLEAN,
         _("default"), TABLE_TYPE_BOOLEAN
     );
@@ -496,7 +532,7 @@ static command_status_t account_list(COMMAND_ARGS)
             tm = localtime(&account->expires_at);
             expiration = *tm;
         }
-        table_store(t, account->account, account->consumer_key, expiration, NULL != account->password, account == acd->current, account == acd->autosel);
+        table_store(t, account->account, account->consumer_key, expiration, NULL != account->password, NULL == account->endpoint ? 0 /* TODO: a safety against NULL is needed for compatibility */ : account->endpoint - endpoints, account == acd->current_account, account == acd->autosel);
     }
     iterator_close(&it);
     table_display(t, TABLE_FLAG_NONE);
@@ -562,6 +598,9 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
         a->account = strdup(args->account);
         a->modules_data = hashtable_ascii_cs_new(NULL, NULL, NULL);
     }
+    if (args->endpoint_present) {
+        a->endpoint = &endpoints[args->endpoint];
+    }
     if (!update || NULL != args->password) { // for update, only if a new password is set
         a->password = strdup(args->password);
     }
@@ -572,7 +611,7 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
     if (!update) {
         // if this is the first account, set it as current
         if (0 == hashtable_size(acd->accounts)) {
-            acd->current = acd->autosel = a;
+            account_set_current(a, TRUE);
         }
         hashtable_quick_put(acd->accounts, 0, h, a->account, a, NULL);
     }
@@ -625,6 +664,7 @@ static command_status_t account_delete(COMMAND_ARGS)
     USED(mainopts);
     args = (account_argument_t *) arg;
     assert(NULL != args->account);
+    //TODO: handle deletion of current/active account
     if ((ret = hashtable_delete(acd->accounts, args->account, DTOR_CALL))) {
         account_save(error);
     } else {
@@ -644,13 +684,17 @@ static command_status_t account_switch(COMMAND_ARGS)
     args = (account_argument_t *) arg;
     assert(NULL != args->account);
     if ((ret = hashtable_get(acd->accounts, args->account, &ptr))) {
+#if 0
         const char *consumer_key;
 
-        acd->current = ptr;
+        acd->current_account = ptr;
         if (NULL != (consumer_key = account_key(error))) {
-            acd->current->consumer_key = consumer_key;
+            acd->current_account->consumer_key = consumer_key;
         }
         account_notify_change();
+#else
+        account_set_current(ptr, FALSE);
+#endif
     } else {
         UNEXISTANT_ACCOUNT;
     }
@@ -697,7 +741,7 @@ static command_status_t application_add(COMMAND_ARGS)
     assert(NULL != args->secret);
 
     app = mem_new(*app);
-    app->key = strdup(args->secret);
+    app->key = strdup(args->key);
     app->secret = strdup(args->secret);
     app->endpoint = &endpoints[args->endpoint];
     hashtable_direct_put(acd->applications, 0, args->endpoint, app, NULL);
@@ -725,8 +769,8 @@ static void account_regcomm(graph_t *g)
 {
     // account ...
     {
-        argument_t *arg_account, *arg_password, *arg_consumer_key, *arg_expiration;
-        argument_t *lit_account, *lit_list, *lit_delete, *lit_add, *lit_update, *lit_switch, *lit_default, *lit_expires, *lit_in, *lit_at, *lit_password, *lit_key;
+        argument_t *arg_account, *arg_password, *arg_consumer_key, *arg_expiration, *arg_endpoint;
+        argument_t *lit_account, *lit_list, *lit_delete, *lit_add, *lit_update, *lit_switch, *lit_default, *lit_expires, *lit_in, *lit_at, *lit_password, *lit_key, *lit_endpoint;
 
         lit_account = argument_create_literal("account", NULL);
         lit_list = argument_create_literal("list", account_list);
@@ -740,13 +784,16 @@ static void account_regcomm(graph_t *g)
         lit_password = argument_create_literal("password", NULL);
         lit_in = argument_create_relevant_literal(offsetof(account_argument_t, expires_in), "in", NULL);
         lit_at = argument_create_relevant_literal(offsetof(account_argument_t, expires_at), "at", NULL);
+        lit_endpoint = argument_create_relevant_literal(offsetof(account_argument_t, endpoint_present), "endpoint", NULL);
 
         arg_password = argument_create_string(offsetof(account_argument_t, password), "<password>", NULL, NULL);
         arg_expiration = argument_create_string(offsetof(account_argument_t, expiration), "<expiration>", NULL, NULL);
         arg_consumer_key = argument_create_string(offsetof(account_argument_t, consumer_key), "<consumer key>", NULL, NULL);
+        arg_endpoint = argument_create_choices(offsetof(account_argument_t, endpoint), "<endpoint>", endpoint_names);
         arg_account = argument_create_string(offsetof(account_argument_t, account), "<account>", complete_from_hashtable_keys, acd->accounts);
 
         graph_create_full_path(g, lit_account, lit_list, NULL);
+        // TODO: refactor "account add" arguments + add support for endpoint
         graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, NULL);
         graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, arg_consumer_key, NULL);
         graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, arg_consumer_key, lit_expires, lit_at, arg_expiration, NULL);
@@ -788,7 +835,7 @@ static void account_regcomm(graph_t *g)
         graph_create_full_path(g, lit_account, arg_account, lit_update, lit_key, arg_consumer_key, lit_expires, lit_in, arg_expiration, NULL);
         graph_create_full_path(g, lit_account, arg_account, lit_update, lit_password, arg_password, lit_key, arg_consumer_key, lit_expires, lit_at, arg_expiration, NULL);
         graph_create_full_path(g, lit_account, arg_account, lit_update, lit_password, arg_password, lit_key, arg_consumer_key, lit_expires, lit_in, arg_expiration, NULL);
-        graph_create_all_path(g, lit_update, NULL, 2, lit_password, arg_password, 2, lit_key, arg_consumer_key, 0);
+        graph_create_all_path(g, lit_update, NULL, 2, lit_password, arg_password, 2, lit_key, arg_consumer_key, 2, lit_endpoint, arg_endpoint, 0);
 #endif
     }
     // application ...
@@ -814,6 +861,7 @@ static void account_regcomm(graph_t *g)
 DECLARE_MODULE(account) = {
     "account",
     account_regcomm,
+    NULL,
     account_early_init,
     account_late_init,
     account_dtor

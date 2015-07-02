@@ -4,6 +4,7 @@
 #include <histedit.h>
 
 #include "common.h"
+#include "command.h"
 #include "struct/xtring.h"
 #include "struct/hashtable.h"
 
