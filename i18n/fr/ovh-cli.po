@@ -145,7 +145,7 @@ msgstr "commande avortée : impossible de traduire la date '%s'"
 #: /home/julp/ovh-cli/commands/account.c:547
 #, c-format
 msgid "an account named '%s' already exists"
-msgstr "aucun compte nommé '%s'"
+msgstr "un compte nommé '%s' existe déjà"
 
 #: /home/julp/ovh-cli/commands/account.c:671
 msgid "endpoint"

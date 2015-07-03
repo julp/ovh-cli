@@ -115,6 +115,10 @@ bool check_current_application_and_account(bool skip_CK_check, error_t **error)
         error_set(error, WARN, _("no current account"));
         return FALSE;
     }
+    if (NULL == acd->current_account->endpoint) {
+        error_set(error, WARN, _("no endpoint associated to account '%s'"), acd->current_account->account);
+        return FALSE;
+    }
     if (NULL == current_application) {
         error_set(error, WARN, _("no application registered for endpoint '%s'"), acd->current_account->endpoint->name);
         return FALSE;
@@ -596,6 +600,7 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
         }
         a = mem_new(*a);
         a->endpoint = NULL; // TODO: temporary
+        a->consumer_key = NULL;
         a->account = strdup(args->account);
         a->modules_data = hashtable_ascii_cs_new(NULL, NULL, NULL);
     }
@@ -605,7 +610,7 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
     if (!update || NULL != args->password) { // for update, only if a new password is set
         a->password = strdup(args->password);
     }
-    if (!update || NULL != args->consumer_key) { // for update, only if a new CK is set
+    if (NULL != args->consumer_key) { // only if a new CK is set
         a->consumer_key = strdup(args->consumer_key);
         a->expires_at = expires_at;
     }
@@ -789,7 +794,7 @@ static void account_regcomm(graph_t *g)
         lit_update = argument_create_literal("update", account_update);
         lit_key = argument_create_literal("key", NULL);
         lit_password = argument_create_literal("password", NULL);
-        lit_in = argument_create_relevant_literal(offsetof(account_argument_t, expires_in), "in", NULL);
+        lit_in = argument_create_relevant_literal(offsetof(account_argument_t, expires_in), "in", NULL); // TODO: turn "in" and "at" literals into a choice?
         lit_at = argument_create_relevant_literal(offsetof(account_argument_t, expires_at), "at", NULL);
         lit_endpoint = argument_create_relevant_literal(offsetof(account_argument_t, endpoint_present), "endpoint", NULL);
 

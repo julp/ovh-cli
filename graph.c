@@ -497,16 +497,18 @@ typedef struct {
 
 static bool agument_literal_match(argument_t *arg, const char *value)
 {
-    return 0 == strcmp(arg->string, value);
+    return '\0' != *value && 0 == strcmp(arg->string, value);
 }
 
 static bool argument_choices_match(argument_t *arg, const char *value)
 {
     const char * const *v;
 
-    for (v = (const char * const *) arg->completion_data; NULL != *v; v++) {
-        if (0 == strcmp(value, *v)) {
-            return TRUE;
+    if ('\0' != *value) {
+        for (v = (const char * const *) arg->completion_data; NULL != *v; v++) {
+            if (0 == strcmp(value, *v)) {
+                return TRUE;
+            }
         }
     }
 
@@ -515,12 +517,12 @@ static bool argument_choices_match(argument_t *arg, const char *value)
 
 static bool argument_string_match(argument_t *UNUSED(arg), const char *UNUSED(value))
 {
-    return TRUE;
+    return TRUE; // ARG_TYPE_STRING match everything
 }
 
 static bool argument_end_match(argument_t *UNUSED(arg), const char *UNUSED(value))
 {
-    return FALSE;
+    return FALSE; // ARG_TYPE_END match nothing, it's a virtual dummy node
 }
 
 static argument_description_t descriptions[] = {

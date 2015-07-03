@@ -79,10 +79,12 @@ static char *stpcpy_s(char *to, const char *from, const char * const zero)
     if (NULL == to || to >= end) {
         return NULL;
     }
-    while (to < end && 0 != (*to++ = *from++))
-        ;
+    if (NULL != from) {
+        while (to < end && 0 != (*to++ = *from++))
+            ;
+    }
     if (to == end) {
-        *to = 0;
+        *to = '\0';
         return NULL;
     } else {
         return to - 1;
@@ -281,14 +283,16 @@ static size_t urlf(char *dst, size_t dst_size, const char *fmt, va_list ap)
     return dst_len;
 }
 
-request_t *request_vnew(uint32_t flags, http_method_t method, const void *pdata, const char *url, va_list args)
+request_t *request_vnew(uint32_t flags, http_method_t method, const void *pdata, /*error_t **error, */const char *url, va_list args)
 {
+    error_t *error;
     request_t *req;
     va_list cpyargs;
     size_t url_len, url_size;
 
+    error = NULL;
     assert(NULL != url);
-    if (!check_current_application_and_account(!HAS_FLAG(flags, REQUEST_FLAG_SIGN), NULL)) {
+    if (!check_current_application_and_account(!HAS_FLAG(flags, REQUEST_FLAG_SIGN), &error)) {
         return NULL;
     }
     req = mem_new(*req);
@@ -354,13 +358,13 @@ request_t *request_vnew(uint32_t flags, http_method_t method, const void *pdata,
     return req;
 }
 
-request_t *request_new(uint32_t flags, http_method_t method, const void *pdata, const char *url, ...)
+request_t *request_new(uint32_t flags, http_method_t method, const void *pdata, /*error_t **error, */const char *url, ...)
 {
     va_list args;
     request_t *req;
 
     va_start(args, url);
-    req = request_vnew(flags, method, pdata, url, args);
+    req = request_vnew(flags, method, pdata, /*error, */url, args);
     va_end(args);
 
     return req;

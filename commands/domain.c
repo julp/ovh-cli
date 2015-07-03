@@ -184,7 +184,7 @@ static command_status_t fetch_domains(domain_set_t *ds, bool force, error_t **er
         bool request_success;
         json_document_t *doc;
 
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/domain");
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, /*error, */API_BASE_URL "/domain");
         request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (request_success) {
