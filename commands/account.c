@@ -595,6 +595,7 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
             return COMMAND_FAILURE;
         }
         a = mem_new(*a);
+        a->endpoint = NULL; // TODO: temporary
         a->account = strdup(args->account);
         a->modules_data = hashtable_ascii_cs_new(NULL, NULL, NULL);
     }
@@ -665,6 +666,12 @@ static command_status_t account_delete(COMMAND_ARGS)
     args = (account_argument_t *) arg;
     assert(NULL != args->account);
     //TODO: handle deletion of current/active account
+    if (NULL != acd->current_account && 0 == strcmp(args->account, acd->current_account->account)) {
+        if (acd->current_account == acd->autosel) {
+            acd->autosel = NULL;
+        }
+        acd->current_account = NULL;
+    }
     if ((ret = hashtable_delete(acd->accounts, args->account, DTOR_CALL))) {
         account_save(error);
     } else {
