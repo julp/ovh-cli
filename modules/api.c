@@ -490,6 +490,7 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
                 if (json_object_get_property(root, "message", &reason)) {
                     error_set(error, NOTICE, json_get_string(reason));
                 }
+                // if property "errorCode" exists and its value is "INVALID_CREDENTIAL", we should invalidate consumer key?
                 json_document_destroy(doc);
             }
         } else {
