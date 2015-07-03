@@ -25,7 +25,7 @@ msgstr "trop d'arguments (%s)"
 #: /home/julp/ovh-cli/graph.c:602
 #, c-format
 msgid "got %s, expect one of: %s"
-msgstr "Un des arguments : %s est attendu à la place de %s"
+msgstr "Argument %s erroné. Était attendu attendu à sa place l'un de ceux-ci: %s"
 
 #: /home/julp/ovh-cli/graph.c:931
 msgid "unterminated command: argument(s) missing"
