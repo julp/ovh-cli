@@ -26,29 +26,7 @@
 
 ## Install
 
-* OVH Europe
-    + [Create your application](https://eu.api.ovh.com/createApp/)
-    + [Create a token](https://eu.api.ovh.com/createToken/)
-* OVH North America
-    + [Create your application](https://ca.api.ovh.com/createApp/)
-    + [Create a token](https://ca.api.ovh.com/createToken/)
-* So you Start Europe
-    + [Create your application](https://eu.api.soyoustart.com/createApp/)
-    + [Create a token](https://eu.api.soyoustart.com/createToken/)
-* So you Start North America
-    + [Create your application](https://ca.api.soyoustart.com/createApp/)
-    + [Create a token](https://ca.api.soyoustart.com/createToken/)
-* Kimsufi Europe
-    + [Create your application](https://eu.api.kimsufi.com/createApp/)
-    + [Create a token](https://eu.api.kimsufi.com/createToken/)
-* Kimsufi North America
-    + [Create your application](https://ca.api.kimsufi.com/createApp/)
-    + [Create a token](https://ca.api.kimsufi.com/createToken/)
-* Runabove
-    + [Create your application](https://api.runabove.com/createApp/)
-    + [Create a token](https://api.runabove.com/createToken/)
-
-1. Clone/compile/install ovh-cli
+ Clone/compile/install ovh-cli
 ```
 git clone ...
 cd <path/to/build/directory>
@@ -56,24 +34,42 @@ cmake <path/to/sources/directory> (-DCMAKE_INSTALL_PREFIX=/usr/local)
 make
 (sudo) make install
 ```
-(for now, these parameters have to be set at compile time)
 
-2. Register your application(s):
+## First usage
+
+* OVH Europe
+    + [Create your application](https://eu.api.ovh.com/createApp/)
+    + [Create all keys at once](https://eu.api.ovh.com/createToken/)
+* OVH North America
+    + [Create your application](https://ca.api.ovh.com/createApp/)
+    + [Create all keys at once](https://ca.api.ovh.com/createToken/)
+* So you Start Europe
+    + [Create your application](https://eu.api.soyoustart.com/createApp/)
+    + [Create all keys at once](https://eu.api.soyoustart.com/createToken/)
+* So you Start North America
+    + [Create your application](https://ca.api.soyoustart.com/createApp/)
+    + [Create all keys at once](https://ca.api.soyoustart.com/createToken/)
+* Kimsufi Europe
+    + [Create your application](https://eu.api.kimsufi.com/createApp/)
+    + [Create all keys at once](https://eu.api.kimsufi.com/createToken/)
+* Kimsufi North America
+    + [Create your application](https://ca.api.kimsufi.com/createApp/)
+    + [Create all keys at once](https://ca.api.kimsufi.com/createToken/)
+* Runabove
+    + [Create your application](https://api.runabove.com/createApp/)
+    + [Create all keys at once](https://api.runabove.com/createToken/)
+
+1. Create and register your application(s):
 ```
 ovh application <endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runabove-ca, soyoustart-ca, soyoustart-eu)> add <application key> <application secret>
 ```
 
-3. Register your account(s):
-```
-# with your password instead of a valid consumer key
-ovh account <nic-handle> password <password>
+2. Register your account(s):
+    * with your password instead of a valid consumer key: `ovh account <nic-handle> add password <password>`
+    * with a valid consumer key instead of a password (use link "Create all keys at once" above): `ovh account <nic-handle> add password "" <consumer key>` (if your consumer key is not unlimited, append "expires in X days" to the command)
+    * without password or consumer key: `ovh account <nic-handle> add password ""` and follow instructions to acquire a consumer key
 
-# with a valid consumer key instead of a password (use link "Create a token" above)
-ovh account <nic-handle> password "" <consumer key>
-# (if your consumer key is not unlimited, append "expires in X days" to the command)
-```
-
-4. Link it to an application/endpoint (for the time to rewrite the add command)
+3. Link each account to the appropriate application/endpoint (for the time to rewrite the add command)
 ```
 ovh account <nic-handle> update endpoint <endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runabove-ca, soyoustart-ca, soyoustart-eu)>
 ```
