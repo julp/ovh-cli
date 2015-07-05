@@ -634,6 +634,10 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
             UNEXISTANT_ACCOUNT;
             return COMMAND_FAILURE;
         }
+        if (!args->endpoint_present) {
+            error_set(error, WARN, _("no endpoint specified"));
+            return COMMAND_USAGE;
+        }
         a = mem_new(*a);
         a->password = NULL;
         a->endpoint = NULL; // TODO: temporary
@@ -664,11 +668,9 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
 }
 
 /**
- * account add [nic-handle] [password] ([consumer key] expires in|at [date])
+ * account [nic-handle] add (password [password]) (key [consumer key] expires in|at [date]) (endpoint [endpoint])
  *
- * NOTE:
- * - in order to not record password, use an empty string (with "")
- * - default expiration of consumer key is 0 (unlimited)
+ * NOTE: in order to not record password, use an empty string (with "")
  **/
 static command_status_t account_add(COMMAND_ARGS)
 {
