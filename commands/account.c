@@ -21,6 +21,8 @@
 # define MAXPATHLEN PATH_MAX
 #endif /* !MAXPATHLEN && PATH_MAX */
 
+#define TURN_IN_AT_IN_CHOICE 1
+
 enum {
     DTOR_NOCALL,
     DTOR_CALL
@@ -46,6 +48,17 @@ account_t * const *current_account;
 const application_t *current_application = NULL;
 
 static bool account_save(error_t **);
+
+enum {
+    EXPIRES_IN,
+    EXPIRES_AT
+};
+
+static const char * const expires_in_at[] = {
+    [ EXPIRES_IN ] = "in",
+    [ EXPIRES_AT ] = "at",
+    NULL
+};
 
 #if 0
 static void account_notify_change(void)
@@ -475,8 +488,12 @@ typedef struct {
     int endpoint;
     char *account;
     char *password;
+#ifdef TURN_IN_AT_IN_CHOICE
+    int expires_in_at;
+#else
     bool expires_in;
     bool expires_at;
+#endif /* TURN_IN_AT_IN_CHOICE */
     char *expiration;
     char *consumer_key;
     bool endpoint_present;
@@ -562,13 +579,24 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
     }
 
     if (NULL != args->expiration) {
+#ifdef TURN_IN_AT_IN_CHOICE
+        switch (args->expires_in_at) {
+            case EXPIRES_IN:
+#else
         if (args->expires_in) {
+#endif /* TURN_IN_AT_IN_CHOICE */
             if (!parse_duration(args->expiration, &expires_at)) {
                 error_set(error, WARN, _("command aborted: unable to parse duration '%s'"), args->expiration);
                 return COMMAND_USAGE;
             }
             expires_at += time(NULL);
+#ifdef TURN_IN_AT_IN_CHOICE
+                break;
+            case EXPIRES_AT:
+            {
+#else
         } else if (args->expires_at) {
+#endif
             char *endptr;
             struct tm ltm = { 0 };
 
@@ -577,9 +605,17 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
                 return COMMAND_USAGE;
             }
             expires_at = mktime(&ltm);
+#ifdef TURN_IN_AT_IN_CHOICE
+                break;
+            }
+            default:
+                assert(FALSE);
+        }
+#else
         } else {
             assert(FALSE); // we should not reach this point if "graph" have done its job
         }
+#endif /* TURN_IN_AT_IN_CHOICE */
     }
     h = hashtable_hash(acd->accounts, args->account);
     if (hashtable_quick_get(acd->accounts, h, args->account, &a)) {
@@ -599,6 +635,7 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
             return COMMAND_FAILURE;
         }
         a = mem_new(*a);
+        a->password = NULL;
         a->endpoint = NULL; // TODO: temporary
         a->consumer_key = NULL;
         a->account = strdup(args->account);
@@ -781,8 +818,13 @@ static void account_regcomm(graph_t *g)
 {
     // account ...
     {
+#ifdef TURN_IN_AT_IN_CHOICE
+        argument_t *arg_expires_in_at;
+#else
+        argument_t *lit_in, *lit_at;
+#endif /* TURN_IN_AT_IN_CHOICE */
         argument_t *arg_account, *arg_password, *arg_consumer_key, *arg_expiration, *arg_endpoint;
-        argument_t *lit_account, *lit_list, *lit_delete, *lit_add, *lit_update, *lit_switch, *lit_default, *lit_expires, *lit_in, *lit_at, *lit_password, *lit_key, *lit_endpoint;
+        argument_t *lit_account, *lit_list, *lit_delete, *lit_add, *lit_update, *lit_switch, *lit_default, *lit_expires, *lit_password, *lit_key, *lit_endpoint;
 
         lit_account = argument_create_literal("account", NULL);
         lit_list = argument_create_literal("list", account_list);
@@ -794,61 +836,47 @@ static void account_regcomm(graph_t *g)
         lit_update = argument_create_literal("update", account_update);
         lit_key = argument_create_literal("key", NULL);
         lit_password = argument_create_literal("password", NULL);
-        lit_in = argument_create_relevant_literal(offsetof(account_argument_t, expires_in), "in", NULL); // TODO: turn "in" and "at" literals into a choice?
+#ifndef TURN_IN_AT_IN_CHOICE
+        lit_in = argument_create_relevant_literal(offsetof(account_argument_t, expires_in), "in", NULL);
         lit_at = argument_create_relevant_literal(offsetof(account_argument_t, expires_at), "at", NULL);
+#endif /* !TURN_IN_AT_IN_CHOICE */
         lit_endpoint = argument_create_relevant_literal(offsetof(account_argument_t, endpoint_present), "endpoint", NULL);
 
         arg_password = argument_create_string(offsetof(account_argument_t, password), "<password>", NULL, NULL);
+#ifdef TURN_IN_AT_IN_CHOICE
+        arg_expires_in_at = argument_create_choices(offsetof(account_argument_t, expires_in_at), "<in/at>",  expires_in_at);
+#endif /* TURN_IN_AT_IN_CHOICE */
         arg_expiration = argument_create_string(offsetof(account_argument_t, expiration), "<expiration>", NULL, NULL);
         arg_consumer_key = argument_create_string(offsetof(account_argument_t, consumer_key), "<consumer key>", NULL, NULL);
         arg_endpoint = argument_create_choices(offsetof(account_argument_t, endpoint), "<endpoint>", endpoint_names);
         arg_account = argument_create_string(offsetof(account_argument_t, account), "<account>", complete_from_hashtable_keys, acd->accounts);
 
         graph_create_full_path(g, lit_account, lit_list, NULL);
+#ifdef TURN_IN_AT_IN_CHOICE
+        graph_create_path(g, lit_account, lit_add, arg_account, NULL);
+        graph_create_all_path(g, lit_add, NULL, 2, lit_password, arg_password, 5, lit_key, arg_consumer_key, lit_expires, arg_expires_in_at, arg_expiration, 2, lit_endpoint, arg_endpoint, 0);
+#else
         // TODO: refactor "account add" arguments + add support for endpoint
         graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, NULL);
         graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, arg_consumer_key, NULL);
         graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, arg_consumer_key, lit_expires, lit_at, arg_expiration, NULL);
         graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, arg_consumer_key, lit_expires, lit_in, arg_expiration, NULL);
+#endif /* TURN_IN_AT_IN_CHOICE */
         graph_create_full_path(g, lit_account, arg_account, lit_delete, NULL);
         graph_create_full_path(g, lit_account, arg_account, lit_default, NULL);
         graph_create_full_path(g, lit_account, arg_account, lit_switch, NULL);
-/*
-  account
-     list
-     <account>
-         add <password>
-             <consumer key>
-                 expires
-                     at <expiration>
-                     in <expiration>
-         default
-         delete
-         switch
-====================================
-  account
-     list
-     <account>
-         add <password>
-             key <consumer key>
-                 expires
-                     at <expiration>
-                     in <expiration>
-                 password <password>
-                     <consumer key>
-             <consumer key>
-         default
-         delete
-         switch
-         update # (rien) parce qu'ils ont été visités ?
-*/
-#if 1
+
+#ifdef TURN_IN_AT_IN_CHOICE
+        graph_create_path(g, lit_account, lit_update, arg_account, NULL);
+        graph_create_all_path(g, lit_update, NULL, 2, lit_password, arg_password, 5, lit_key, arg_consumer_key, lit_expires, arg_expires_in_at, arg_expiration, 2, lit_endpoint, arg_endpoint, 0);
+#else
         graph_create_full_path(g, lit_account, arg_account, lit_update, lit_key, arg_consumer_key, lit_expires, lit_at, arg_expiration, NULL);
         graph_create_full_path(g, lit_account, arg_account, lit_update, lit_key, arg_consumer_key, lit_expires, lit_in, arg_expiration, NULL);
         graph_create_full_path(g, lit_account, arg_account, lit_update, lit_password, arg_password, lit_key, arg_consumer_key, lit_expires, lit_at, arg_expiration, NULL);
         graph_create_full_path(g, lit_account, arg_account, lit_update, lit_password, arg_password, lit_key, arg_consumer_key, lit_expires, lit_in, arg_expiration, NULL);
+
         graph_create_all_path(g, lit_update, NULL, 2, lit_password, arg_password, 2, lit_key, arg_consumer_key, 2, lit_endpoint, arg_endpoint, 0);
-#endif
+#endif /* TURN_IN_AT_IN_CHOICE */
     }
     // application ...
     {

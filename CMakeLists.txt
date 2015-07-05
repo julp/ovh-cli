@@ -57,12 +57,12 @@ check_function_exists("strtod_l" HAVE_STRTOD_L)
 check_library_exists("iconv" "iconvctl" ${ICONV_LIBRARIES} HAVE_ICONVCTL)
 
 include(FeatureSummary)
-set_package_properties(CURL PROPERTIES TYPE REQUIRED)
-set_package_properties(LibXml2 PROPERTIES TYPE REQUIRED)
-set_package_properties(OpenSSL PROPERTIES TYPE REQUIRED)
-set_package_properties(EditLine PROPERTIES TYPE REQUIRED)
-set_package_properties(Gettext PROPERTIES TYPE OPTIONAL)
-set_package_properties(Intl PROPERTIES TYPE OPTIONAL)
+set_package_properties(CURL PROPERTIES TYPE REQUIRED PURPOSE "HTTP(S) client to interact with OVH API")
+set_package_properties(LibXml2 PROPERTIES TYPE REQUIRED PURPOSE "For configuration file management and auto-generation of consumer key")
+set_package_properties(OpenSSL PROPERTIES TYPE REQUIRED PURPOSE "To sign (SHA1) HTTP request")
+set_package_properties(EditLine PROPERTIES TYPE REQUIRED PURPOSE "For command line completion")
+set_package_properties(Gettext PROPERTIES TYPE OPTIONAL PURPOSE "The tools to manage files translation")
+set_package_properties(Intl PROPERTIES TYPE OPTIONAL PURPOSE "The library to translate internal strings")
 feature_summary(INCLUDE_QUIET_PACKAGES WHAT ALL)
 
 include_directories(

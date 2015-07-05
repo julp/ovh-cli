@@ -301,6 +301,27 @@ void graph_create_path(graph_t *g, graph_node_t *start, graph_node_t *end, ...) 
 
 #define MAX_ALTERNATE_PATHS 12
 // créer tous les chemins/permutations possibles entre start et end (1 - 2 - 3, 1 - 3 - 2, 2 - 1 - 3, 2 - 3 - 1, 3 - 1 - 2, 3 - 2 - 1)
+/**
+ * Creates all possible subpaths (permutations) of groups of nodes between start and end.
+ *
+ * Each group of nodes should be given as: number of nodes in the group then the list of the nodes from left to right.
+ * The end of the list (sentinel) is represented by a subgroup of 0 nodes.
+ *
+ * end can be NULL to represent the end of the command line.
+ * start and end (except if last one is NULL) have to be already inserted in the graph.
+ *
+ * Example:
+ *   graph_create_all_path(g, start, end, 2, a, b, 1, c, 2, d, e, 0);
+ *
+ * Creates all these paths:
+ *   - start - (a - b) - (c) - (d - e) - end
+ *   - start - (a - b) - (d - e) - (c) - end
+ *   - start - (c) - (a - b) - (d - e) - end
+ *   - start - (c) - (d - e) - (a - b) - end
+ *   - start - (d - e) - (a - b) - (c) - end
+ *   - start - (d - e) - (c) - (a - b) - end
+ */
+#if 0
 void graph_create_all_path(graph_t *g, graph_node_t *start, graph_node_t *end, ...)
 {
     va_list ap;
@@ -310,6 +331,9 @@ void graph_create_all_path(graph_t *g, graph_node_t *start, graph_node_t *end, .
     assert(NULL != start);
 
     real_end = end;
+    if (NULL == end) {
+        real_end = g->end;
+    }
     va_start(ap, end);
     subpaths_count = 0;
     while (0 != (group_count = va_arg(ap, int))) {
@@ -326,11 +350,9 @@ void graph_create_all_path(graph_t *g, graph_node_t *start, graph_node_t *end, .
             parent = node;
         }
         ends[subpaths_count] = parent;
-        if (NULL == end) {
-//             CREATE_ARG(real_end, ARG_TYPE_END, "(END)");
-            real_end = g->end;
-        }
+#if 0
         graph_node_insert_child(g, parent, real_end);
+#endif
         ++subpaths_count;
     }
     va_end(ap);
@@ -341,8 +363,93 @@ void graph_create_all_path(graph_t *g, graph_node_t *start, graph_node_t *end, .
             if (j != i) {
                 graph_node_insert_child(g, ends[i], starts[j]);
             }
+#if 1
+//             graph_node_insert_child(g, ends[i], real_end);
+#endif
         }
     }
+}
+#endif
+
+struct subpath {
+    graph_node_t *start, *end;
+};
+
+static void swap_subpaths(struct subpath *a, struct subpath *b)
+{
+    struct subpath tmp;
+
+    tmp = *a;
+    *a = *b;
+    *b = tmp;
+}
+
+static void graph_generate_subpath(graph_t *g, graph_node_t *start, graph_node_t *end, struct subpath *subpaths, size_t subpaths_len, size_t n)
+{
+    size_t i;
+
+    if (1 == n) {
+        graph_node_insert_child(g, start, subpaths[0].start);
+//         printf(" > %s", subpaths[0].start->string);
+        for (i = 1; i < subpaths_len; i++) {
+//             printf(" > %s", subpaths[i].start->string);
+            graph_node_insert_child(g, subpaths[i - 1].end, subpaths[i].start);
+        }
+        graph_node_insert_child(g, subpaths[i - 1].end, end);
+//         printf("\n");
+    } else {
+        for (i = 0; i < n - 1; i++) {
+            graph_generate_subpath(g, start, end, subpaths, subpaths_len, n - 1);
+            if (n & 1) {
+                swap_subpaths(&subpaths[0], &subpaths[n - 1]);
+            } else {
+                swap_subpaths(&subpaths[i], &subpaths[n - 1]);
+            }
+        }
+        graph_generate_subpath(g, start, end, subpaths, subpaths_len, n - 1);
+    }
+}
+
+void graph_create_all_path(graph_t *g, graph_node_t *start, graph_node_t *end, ...)
+{
+    va_list ap, aq;
+    struct subpath *subpaths;
+    graph_node_t *node, *parent;
+    size_t i, group_count, subpaths_count;
+
+    va_start(ap, end);
+    va_copy(aq, ap);
+    subpaths_count = 0;
+    while (0 != (group_count = va_arg(aq, int))) {
+        for (i = 1; i <= group_count; i++) {
+            va_arg(aq, graph_node_t *);
+        }
+        ++subpaths_count;
+    }
+    va_end(aq);
+    subpaths = mem_new_n(*subpaths, subpaths_count);
+    subpaths_count = 0;
+    while (0 != (group_count = va_arg(ap, int))) {
+        subpaths[subpaths_count].start = node = va_arg(ap, graph_node_t *);
+        assert(NULL != node);
+        graph_node_insert_child(g, start, node);
+        parent = node;
+        // link nodes of subgroup between them if not yet done
+        for (i = 2; i <= group_count; i++) {
+            node = va_arg(ap, graph_node_t *);
+            assert(NULL != node);
+            graph_node_insert_child(g, parent, node);
+            parent = node;
+        }
+        subpaths[subpaths_count].end = parent;
+        ++subpaths_count;
+    }
+    va_end(ap);
+    if (NULL == end) {
+        end = g->end;
+    }
+    graph_generate_subpath(g, start, end, subpaths, subpaths_count, subpaths_count);
+    free(subpaths);
 }
 
 static void traverse_graph_node_ex(graph_node_t *node, HashTable *visited, int depth, bool indent)

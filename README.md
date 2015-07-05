@@ -59,20 +59,15 @@ make
     + [Create your application](https://api.runabove.com/createApp/)
     + [Create all keys at once](https://api.runabove.com/createToken/)
 
-1. Create and register your application(s):
+\1. Create and register your application(s):
 ```
 ovh application <endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runabove-ca, soyoustart-ca, soyoustart-eu)> add <application key> <application secret>
 ```
 
-2. Register your account(s):
-    * with your password instead of a valid consumer key: `ovh account <nic-handle> add password <password>`
-    * with a valid consumer key instead of a password (use link "Create all keys at once" above): `ovh account <nic-handle> add password "" <consumer key>` (if your consumer key is not unlimited, append "expires in X days" to the command)
-    * without password or consumer key: `ovh account <nic-handle> add password ""` and follow instructions to acquire a consumer key
-
-3. Link each account to the appropriate application/endpoint (for the time to rewrite the add command)
-```
-ovh account <nic-handle> update endpoint <endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runabove-ca, soyoustart-ca, soyoustart-eu)>
-```
+\2. Register your account(s):
+    * with your password instead of a valid consumer key: `ovh account <nic-handle> add password <password> endpoint <endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runabove-ca, soyoustart-ca, soyoustart-eu)>`
+    * with a valid consumer key instead of a password (use link "Create all keys at once" above): `ovh account <nic-handle> add password "" key <consumer key> expires in illimited endpoint <endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runabove-ca, soyoustart-ca, soyoustart-eu)>` (if your consumer key is not unlimited, replace `illimited` by `"X days"`)
+    * without password or consumer key: `ovh account <nic-handle> add password "" endpoint <endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runabove-ca, soyoustart-ca, soyoustart-eu)>` and follow instructions to acquire a consumer key
 
 ## Commands
 
@@ -85,10 +80,13 @@ ovh account <nic-handle> update endpoint <endpoint (one of: kimsufi-ca, kimsufi-
 * account
     * list => list all known OVH accounts
     * \<nic-handle>
-        * add \<password or use empty string - "" - to not record it> (\<consumer key> expires in|at \<expiration date or delay>) => register a new account
+        * add or update => register a new account or update an existant account named *nic-handle*
+            * password \<password or use empty string - "" - to not record it>
+            * key \<consumer key> expires in|at \<expiration date or delay>)
+            * endpoint \<endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runabove-ca, soyoustart-ca, soyoustart-eu)>
         * delete => delete *account*
-        * default => set default account
-        * switch => change current *account*
+        * default => set default account to *nic-handle*
+        * switch => change current account to *nic-handle*
 * domain
     * check => list domains and when they expire
     * list => display all domains owned by the current account

@@ -595,7 +595,7 @@ const char *request_consumer_key(time_t *expires_at, error_t **error)
         }
         req = request_new(REQUEST_FLAG_NONE | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, API_BASE_URL "/auth/credential");
         REQUEST_XML_RESPONSE_WANTED(req);
-        request_add_header1(req, "Content-type: application/json");
+//         request_add_header1(req, "Content-type: application/json");
         request_add_header2(req, "X-Ovh-Application: ", current_application->key, error);
         success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
         json_document_destroy(reqdoc);
