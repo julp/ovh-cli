@@ -60,32 +60,6 @@ static const char * const expires_in_at[] = {
     NULL
 };
 
-#if 0
-static void account_notify_change(void)
-{
-    bool exists;
-    Iterator it;
-
-    hashtable_to_iterator(&it, acd->modules_callbacks);
-    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        void *key, *data;
-        module_callbacks_t *mc;
-
-        mc = iterator_current(&it, &key);
-        assert(NULL != mc);
-        if (NULL != mc->on_set_account) {
-            data = NULL;
-            exists = hashtable_get(acd->current_account->modules_data, key, &data);
-            mc->on_set_account(&data);
-            if (!exists) {
-                hashtable_put(acd->current_account->modules_data, 0, key, data, NULL);
-            }
-        }
-    }
-    iterator_close(&it);
-}
-#endif
-
 static void account_set_current(account_t *account, bool autosel)
 {
     if (acd->current_account != account) {
@@ -439,6 +413,31 @@ static bool account_early_init(void)
 {
     char *home;
 
+    int ret;
+    char *errmsg;
+
+    // TODO: faire des requêtes de création des tables un champ du module pour que main se charge de les exécuter directement ?
+    ret = sqlite3_exec(db, "CREATE TABLE IF NOT EXISTS accounts(\n\
+        id INTEGER PRIMARY KEY,\n\
+        name TEXT NOT NULL UNIQUE,\n\
+        password TEXT,\n\
+        consumer_key TEXT,\n\
+        endpoint_id INTEGER NOT NULL,\n\
+        is_default INTEGER NOT NULL,\n\
+        expires_at INTEGER NOT NULL\n\
+    );\n\
+    \n\
+    CREATE TABLE IF NOT EXISTS applications(\n\
+        app_key TEXT NOT NULL,\n\
+        secret TEXT NOT NULL,\n\
+        endpoint_id INTEGER NOT NULL\n\
+    )", NULL, NULL, &errmsg);
+    if (SQLITE_OK != ret) {
+//         error_set(error, FATAL, _("can't create tables for module %s: %s"), "account", errmsg);
+        debug("%s", errmsg);
+        sqlite3_free(errmsg);
+    }
+
     acd = mem_new(*acd);
     current_account = &acd->current_account;
     acd->autosel = acd->current_account = NULL;
@@ -505,11 +504,19 @@ typedef struct {
     char *secret;
 } application_argument_t;
 
+#define UNEXISTANT_ACCOUNT \
+    do { \
+        error_set(error, WARN, _("no account named '%s'"), args->account); \
+    } while (0);
+
 static void account_dtor(void)
 {
     if (NULL != acd) {
         if (NULL != acd->accounts) {
             hashtable_destroy(acd->accounts);
+        }
+        if (NULL != acd->applications) {
+            hashtable_destroy(acd->applications);
         }
         if (NULL != acd->modules_callbacks) {
             hashtable_destroy(acd->modules_callbacks);
@@ -519,43 +526,199 @@ static void account_dtor(void)
     acd = NULL;
 }
 
-#define UNEXISTANT_ACCOUNT \
-    do { \
-        error_set(error, WARN, _("no account named '%s'"), args->account); \
-    } while (0);
+typedef enum {
+    SQLITE_TYPE_BOOL,
+    SQLITE_TYPE_INT,
+    SQLITE_TYPE_STRING
+} sqlite_bind_type_t;
+
+typedef struct {
+    sqlite_bind_type_t type;
+    void *ptr;
+} sqlite_statement_bind_t;
+
+typedef struct {
+    int ret;
+    size_t output_binds_count;
+    sqlite_statement_bind_t *output_binds;
+} sqlite_statement_state_t;
+
+static bool statement_iterator_is_valid(const void *UNUSED(collection), void **state)
+{
+    sqlite_statement_state_t *sss;
+
+    assert(NULL != state);
+    sss = *(sqlite_statement_state_t **) state;
+
+    return SQLITE_ROW == sss->ret;
+}
+
+static void statement_iterator_first(const void *collection, void **state)
+{
+    sqlite3_stmt *stmt;
+    sqlite_statement_state_t *sss;
+
+    assert(NULL != state);
+    assert(NULL != collection);
+
+    stmt = (sqlite3_stmt *) collection;
+    sss = *(sqlite_statement_state_t **) state;
+//     sqlite3_reset(stmt);
+    sss->ret = sqlite3_step(stmt);
+}
+
+static void statement_iterator_current(const void *collection, void **state, void **UNUSED(value), void **UNUSED(key))
+{
+    sqlite3_stmt *stmt;
+    sqlite_statement_state_t *sss;
+
+    assert(NULL != state);
+    assert(NULL != collection);
+
+    stmt = (sqlite3_stmt *) collection;
+    sss = *(sqlite_statement_state_t **) state;
+    if (0 != sss->output_binds_count) {
+        size_t i;
+
+        for (i = 0; i < sss->output_binds_count; i++) {
+            switch (sss->output_binds[i].type) {
+                case SQLITE_TYPE_BOOL:
+                    *((bool *) sss->output_binds[i].ptr) = /*!!*/sqlite3_column_int(stmt, i);
+                    break;
+                case SQLITE_TYPE_INT:
+                    *((int *) sss->output_binds[i].ptr) = sqlite3_column_int(stmt, i);
+                    break;
+                case SQLITE_TYPE_STRING:
+                {
+                    const unsigned char *v;
+
+                    if (NULL == (v = sqlite3_column_text(stmt, i))) {
+                        *((char **) sss->output_binds[i].ptr) = NULL;
+                    } else {
+                        *((char **) sss->output_binds[i].ptr) = strdup((char *) v);
+                    }
+                    break;
+                }
+                default:
+                    assert(FALSE);
+                    break;
+            }
+        }
+    }
+}
+
+static void statement_iterator_next(const void *collection, void **state)
+{
+    sqlite3_stmt *stmt;
+    sqlite_statement_state_t *sss;
+
+    assert(NULL != state);
+    assert(NULL != collection);
+
+    stmt = (sqlite3_stmt *) collection;
+    sss = *(sqlite_statement_state_t **) state;
+    sss->ret = sqlite3_step(stmt);
+}
+
+static void statement_iterator_close(void *state)
+{
+    sqlite_statement_state_t *sss;
+
+    assert(NULL != state);
+//     assert(NULL != collection);
+
+    sss = (sqlite_statement_state_t *) state;
+    if (0 != sss->output_binds_count) {
+        free(sss->output_binds);
+    }
+//     sqlite3_finalize((sqlite3_stmt *) collection);
+    free(sss);
+}
+
+void statement_to_iterator(Iterator *it, sqlite3_stmt *stmt, const char *outbinds, ...)
+{
+    va_list ap;
+    sqlite_statement_state_t *sss;
+
+    va_start(ap, outbinds);
+    sss = mem_new(*sss);
+    sss->output_binds_count = strlen(outbinds);
+    if (0 == sss->output_binds_count) {
+        sss->output_binds = NULL;
+    } else {
+        size_t i;
+
+        sss->output_binds = mem_new_n(*sss->output_binds, sss->output_binds_count);
+        for (i = 0; i < sss->output_binds_count; i++) {
+            switch (outbinds[i]) {
+                case 'b':
+                    sss->output_binds[i].type = SQLITE_TYPE_BOOL;
+//                     sss->output_binds[i].ptr = va_arg(ap, void *);
+                    break;
+                case 'i':
+                    sss->output_binds[i].type = SQLITE_TYPE_INT;
+//                     sss->output_binds[i].ptr = va_arg(ap, void *);
+                    break;
+                case 's':
+                    sss->output_binds[i].type = SQLITE_TYPE_STRING;
+//                     *((char ***) sss->output_binds[i].ptr) = /*(void *)*/ va_arg(ap, char **);
+                    break;
+                default:
+                    assert(FALSE);
+                    break;
+            }
+            sss->output_binds[i].ptr = va_arg(ap, void *);
+        }
+    }
+    va_end(ap);
+    iterator_init(
+        it, stmt, sss,
+        statement_iterator_first, NULL,
+        statement_iterator_current,
+        statement_iterator_next, NULL,
+        statement_iterator_is_valid,
+        statement_iterator_close
+    );
+}
 
 static command_status_t account_list(COMMAND_ARGS)
 {
+    int id;
+    bool isdefault;
     table_t *t;
     Iterator it;
+    sqlite3_stmt *stmt;
+    account_t account = { 0 };
 
     USED(arg);
     USED(error);
     USED(mainopts);
     t = table_new(6,
-        _("account"), TABLE_TYPE_STRING,
-        _("consumer key"), TABLE_TYPE_STRING,
+        _("account"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
+        _("consumer key"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
         _("key expiration"), TABLE_TYPE_DATETIME,
         _("password"), TABLE_TYPE_BOOLEAN,
         _("endpoint"), TABLE_TYPE_ENUM, endpoint_names,
         _("current"), TABLE_TYPE_BOOLEAN,
         _("default"), TABLE_TYPE_BOOLEAN
     );
-    hashtable_to_iterator(&it, acd->accounts);
+    sqlite3_prepare_v2(db, "SELECT * FROM accounts", -1, &stmt, NULL);
+    statement_to_iterator(&it, stmt, "isssiii", &id, &account.account, &account.password, &account.consumer_key, &account.endpoint, &isdefault, &account.expires_at);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        account_t *account;
         struct tm expiration, *tm;
 
-        account = (account_t *) iterator_current(&it, NULL);
-        if (0 == account->expires_at) {
+        iterator_current(&it, NULL);
+        if (0 == account.expires_at) {
             bzero(&expiration, sizeof(expiration));
         } else {
-            tm = localtime(&account->expires_at);
+            tm = localtime(&account.expires_at);
             expiration = *tm;
         }
-        table_store(t, account->account, account->consumer_key, expiration, NULL != account->password, NULL == account->endpoint ? 0 /* TODO: a safety against NULL is needed for compatibility */ : account->endpoint - endpoints, account == acd->current_account, account == acd->autosel);
+        table_store(t, account.account, account.consumer_key, expiration, NULL != account.password, account.endpoint, FALSE /* TODO */, isdefault);
+        free(account.password);
     }
     iterator_close(&it);
+    sqlite3_finalize(stmt); // TODO: handle this in iterator_close
     table_display(t, TABLE_FLAG_NONE);
     table_destroy(t);
 
@@ -634,6 +797,10 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
             UNEXISTANT_ACCOUNT;
             return COMMAND_FAILURE;
         }
+        if (!args->endpoint_present) {
+            error_set(error, WARN, _("no endpoint specified"));
+            return COMMAND_USAGE;
+        }
         a = mem_new(*a);
         a->password = NULL;
         a->endpoint = NULL; // TODO: temporary
@@ -664,11 +831,9 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
 }
 
 /**
- * account add [nic-handle] [password] ([consumer key] expires in|at [date])
+ * account [nic-handle] add (password [password]) (key [consumer key] expires in|at [date]) (endpoint [endpoint])
  *
- * NOTE:
- * - in order to not record password, use an empty string (with "")
- * - default expiration of consumer key is 0 (unlimited)
+ * NOTE: in order to not record password, use an empty string (with "")
  **/
 static command_status_t account_add(COMMAND_ARGS)
 {

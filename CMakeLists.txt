@@ -10,10 +10,11 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 find_package(CURL REQUIRED)
 find_package(LibXml2 REQUIRED)
 find_package(OpenSSL REQUIRED)
+find_package(SQLite3 REQUIRED)
+find_package(Intl QUIET)
+find_package(Gettext QUIET)
 # set(EDITLINE_DEBUG TRUE)
 find_package(EditLine REQUIRED)
-find_package(Gettext QUIET)
-find_package(Intl QUIET)
 
 find_path(ICONV_INCLUDE_DIR iconv.h)
 find_library(ICONV_LIBRARIES NAMES iconv libiconv c)
@@ -63,6 +64,7 @@ set_package_properties(OpenSSL PROPERTIES TYPE REQUIRED PURPOSE "To sign (SHA1) 
 set_package_properties(EditLine PROPERTIES TYPE REQUIRED PURPOSE "For command line completion")
 set_package_properties(Gettext PROPERTIES TYPE OPTIONAL PURPOSE "The tools to manage files translation")
 set_package_properties(Intl PROPERTIES TYPE OPTIONAL PURPOSE "The library to translate internal strings")
+set_package_properties(SQLite3 PROPERTIES TYPE OPTIONAL PURPOSE "A permanent cache")
 feature_summary(INCLUDE_QUIET_PACKAGES WHAT ALL)
 
 include_directories(
@@ -71,6 +73,7 @@ include_directories(
     ${ICONV_INCLUDE_DIR}
     ${LIBXML2_INCLUDE_DIR}
     ${OPENSSL_INCLUDE_DIR}
+    ${SQLITE3_INCLUDE_DIRS}
     ${EDITLINE_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
@@ -110,6 +113,6 @@ add_executable(ovh main.c graph.c json.c error.c util.c date.c table.c graphic.c
     struct/iterator.c struct/hashtable.c struct/dptrarray.c struct/xtring.c
     ${BUILTIN_MODULES} ${EXTRA_MODULES_ENABLED} ${MISC_SOURCES}
 )
-target_link_libraries(ovh ${Intl_LIBRARIES} ${CURL_LIBRARIES} ${ICONV_LIBRARIES} ${LIBXML2_LIBRARIES} ${OPENSSL_LIBRARIES} ${EDITLINE_LIBRARIES})
+target_link_libraries(ovh ${Intl_LIBRARIES} ${CURL_LIBRARIES} ${ICONV_LIBRARIES} ${LIBXML2_LIBRARIES} ${OPENSSL_LIBRARIES} ${SQLITE3_LIBRARIES} ${EDITLINE_LIBRARIES})
 
 install(TARGETS ovh DESTINATION bin)

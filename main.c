@@ -296,6 +296,9 @@ int main(int argc, char **argv)
     g = graph_new();
     ret = EXIT_SUCCESS;
     bzero(&mainopts, sizeof(mainopts));
+    if (SQLITE_OK != sqlite3_open("/tmp/ovh.db", &db)) {
+        printf("%s\n", sqlite3_errmsg(db));
+    }
     for (i = 0; i < ARRAY_SIZE(modules); i++) {
         if (NULL != modules[i]->early_init) {
             modules[i]->early_init();
@@ -390,6 +393,7 @@ int main(int argc, char **argv)
         print_error(error);
         convert_array_free(argc, argv, utf8_argv);
     }
+    sqlite3_close(db);
 
     return ret;
 }
