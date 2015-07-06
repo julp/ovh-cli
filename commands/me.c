@@ -327,6 +327,8 @@ static command_status_t me_credential_flush(COMMAND_ARGS)
             success = request_execute(req, RESPONSE_IGNORE, NULL, error);
             request_destroy(req);
         }
+        iterator_close(&it);
+        json_document_destroy(doc);
     }
 
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
