@@ -511,6 +511,9 @@ static void account_dtor(void)
         if (NULL != acd->accounts) {
             hashtable_destroy(acd->accounts);
         }
+        if (NULL != acd->applications) {
+            hashtable_destroy(acd->applications);
+        }
         if (NULL != acd->modules_callbacks) {
             hashtable_destroy(acd->modules_callbacks);
         }
