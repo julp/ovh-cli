@@ -247,12 +247,12 @@ void string_chomp(String *str)
 #if 0
             case 0x85: /* ISO-8859-1: next line character */
 #endif
-                str->ptr[--str->len] = 0;
+                str->ptr[--str->len] = '\0';
                 break;
             case '\n':
-                str->ptr[--str->len] = 0;
+                str->ptr[--str->len] = '\0';
                 if (str->len > 0 && '\r' == str->ptr[str->len - 1]) {
-                    str->ptr[--str->len] = 0;
+                    str->ptr[--str->len] = '\0';
                 }
                 break;
         }

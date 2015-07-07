@@ -410,16 +410,8 @@ static command_status_t account_list(COMMAND_ARGS)
     sqlite3_prepare_v2(db, "SELECT * FROM accounts", -1, &stmt, NULL);
     statement_to_iterator(&it, stmt, "isssiii", &id, &account.account, &account.password, &account.consumer_key, &account.endpoint_id, &isdefault, &account.expires_at);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        struct tm expiration, *tm;
-
         iterator_current(&it, NULL);
-        if (0 == account.expires_at) {
-            bzero(&expiration, sizeof(expiration));
-        } else {
-            tm = localtime(&account.expires_at);
-            expiration = *tm;
-        }
-        table_store(t, account.account, account.consumer_key, expiration, NULL != account.password, account.endpoint_id, FALSE /* TODO */, isdefault);
+        table_store(t, account.account, account.consumer_key, timestamp_to_tm(account.expires_at), NULL != account.password, account.endpoint_id, FALSE /* TODO */, isdefault);
         free(account.password);
     }
     iterator_close(&it);
