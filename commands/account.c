@@ -547,16 +547,9 @@ static command_status_t account_list(COMMAND_ARGS)
     hashtable_to_iterator(&it, acd->accounts);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         account_t *account;
-        struct tm expiration, *tm;
 
         account = (account_t *) iterator_current(&it, NULL);
-        if (0 == account->expires_at) {
-            bzero(&expiration, sizeof(expiration));
-        } else {
-            tm = localtime(&account->expires_at);
-            expiration = *tm;
-        }
-        table_store(t, account->account, account->consumer_key, expiration, NULL != account->password, NULL == account->endpoint ? 0 /* TODO: a safety against NULL is needed for compatibility */ : account->endpoint - endpoints, account == acd->current_account, account == acd->autosel);
+        table_store(t, account->account, account->consumer_key, timestamp_to_tm(account->expires_at), NULL != account->password, NULL == account->endpoint ? 0 /* TODO: a safety against NULL is needed for compatibility */ : account->endpoint - endpoints, account == acd->current_account, account == acd->autosel);
     }
     iterator_close(&it);
     table_display(t, TABLE_FLAG_NONE);

@@ -32,6 +32,7 @@ extern module_t me_module;
 extern module_t key_module;
 extern module_t vps_module;
 extern module_t domain_module;
+extern module_t support_module;
 extern module_t hosting_module;
 extern module_t dedicated_module;
 
@@ -70,13 +71,13 @@ const char *endpoint_names[] = {
     s, STR_LEN(s)
 
 const endpoint_t endpoints[] = {
-    { "ovh-eu",        S("https://eu.api.ovh.com/1.0"),        (const module_t * const []) { &me_module, &key_module, &vps_module, &domain_module, &hosting_module, &dedicated_module, NULL } },
-    { "ovh-ca",        S("https://ca.api.ovh.com/1.0"),        (const module_t * const []) { &me_module, &key_module, &vps_module, &domain_module, &hosting_module, &dedicated_module, NULL } },
-    { "soyoustart-eu", S("https://eu.api.soyoustart.com/1.0"), (const module_t * const []) { &me_module, &key_module, &dedicated_module, NULL } },
-    { "soyoustart-ca", S("https://ca.api.soyoustart.com/1.0"), (const module_t * const []) { &me_module, &key_module, &dedicated_module, NULL } },
-    { "kimsufi-eu",    S("https://eu.api.kimsufi.com/1.0"),    (const module_t * const []) { &me_module, &key_module, &dedicated_module, NULL } },
-    { "kimsufi-ca",    S("https://ca.api.kimsufi.com/1.0"),    (const module_t * const []) { &me_module, &key_module, &dedicated_module, NULL } },
-    { "runabove-ca",   S("https://api.runabove.com/1.0"),      (const module_t * const []) { &me_module, NULL } },
+    { "ovh-eu",        S("https://eu.api.ovh.com/1.0"),        (const module_t * const []) { &me_module, &key_module, &vps_module, &domain_module, &hosting_module, &dedicated_module, &support_module, NULL } },
+    { "ovh-ca",        S("https://ca.api.ovh.com/1.0"),        (const module_t * const []) { &me_module, &key_module, &vps_module, &domain_module, &hosting_module, &dedicated_module, &support_module, NULL } },
+    { "soyoustart-eu", S("https://eu.api.soyoustart.com/1.0"), (const module_t * const []) { &me_module, &key_module, &dedicated_module, &support_module, NULL } },
+    { "soyoustart-ca", S("https://ca.api.soyoustart.com/1.0"), (const module_t * const []) { &me_module, &key_module, &dedicated_module, &support_module, NULL } },
+    { "kimsufi-eu",    S("https://eu.api.kimsufi.com/1.0"),    (const module_t * const []) { &me_module, &key_module, &dedicated_module, &support_module, NULL } },
+    { "kimsufi-ca",    S("https://ca.api.kimsufi.com/1.0"),    (const module_t * const []) { &me_module, &key_module, &dedicated_module, &support_module, NULL } },
+    { "runabove-ca",   S("https://api.runabove.com/1.0"),      (const module_t * const []) { &me_module, &support_module, NULL } },
     { NULL, NULL, 0, NULL }
 };
 
@@ -114,6 +115,7 @@ static const module_t */*builtin_*/modules[] = {
     &key_module,
     &vps_module,
     &domain_module,
+    &support_module,
     &hosting_module,
     &dedicated_module
 };

@@ -225,6 +225,21 @@ void time_to_iterator(Iterator *it, time_t start, time_t end, int64_t step)
     );
 }
 
+struct tm timestamp_to_tm(time_t t)
+{
+    struct tm tm, *ptm;
+
+    if (0 == t) {
+        bzero(&tm, sizeof(tm));
+    } else {
+        ptm = localtime(&t);
+        assert(NULL != ptm);
+        tm = *ptm;
+    }
+
+    return tm;
+}
+
 size_t timestamp_to_localtime(time_t t, char *buffer, size_t buffer_size)
 {
     struct tm ltm = { 0 };

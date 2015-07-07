@@ -59,12 +59,12 @@ make
     + [Create your application](https://api.runabove.com/createApp/)
     + [Create all keys at once](https://api.runabove.com/createToken/)
 
-\1. Create and register your application(s):
+1. Create and register your application(s):
 ```
 ovh application <endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runabove-ca, soyoustart-ca, soyoustart-eu)> add <application key> <application secret>
 ```
 
-\2. Register your account(s):
+2. Register your account(s):
     * with your password instead of a valid consumer key: `ovh account <nic-handle> add password <password> endpoint <endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runabove-ca, soyoustart-ca, soyoustart-eu)>`
     * with a valid consumer key instead of a password (use link "Create all keys at once" above): `ovh account <nic-handle> add password "" key <consumer key> expires in illimited endpoint <endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runabove-ca, soyoustart-ca, soyoustart-eu)>` (if your consumer key is not unlimited, replace `illimited` by `"X days"`)
     * without password or consumer key: `ovh account <nic-handle> add password "" endpoint <endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runabove-ca, soyoustart-ca, soyoustart-eu)>` and follow instructions to acquire a consumer key

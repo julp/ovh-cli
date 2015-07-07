@@ -93,7 +93,7 @@ set(
     commands/account.c
 )
 
-set(EXTRA_MODULES domain me dedicated hosting vps key)
+set(EXTRA_MODULES domain me dedicated hosting vps key support)
 
 set(EXTRA_MODULES_ENABLED )
 foreach(MODULE ${EXTRA_MODULES})
