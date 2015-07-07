@@ -211,10 +211,10 @@ static size_t urlf(char *dst, size_t dst_size, const char *fmt, va_list ap)
                     break;
                 case 'B':
                 {
-                    dst_len += current_application->endpoint->base_len;
+                    dst_len += endpoints[current_application->endpoint_id].base_len;
                     if (dst_size > dst_len) {
-                        memcpy(w, current_application->endpoint->base, current_application->endpoint->base_len);
-                        w += current_application->endpoint->base_len;
+                        memcpy(w, endpoints[current_application->endpoint_id].base, endpoints[current_application->endpoint_id].base_len);
+                        w += endpoints[current_application->endpoint_id].base_len;
                     }
                     break;
                 }
@@ -587,7 +587,7 @@ const char *request_consumer_key(time_t *expires_at, error_t **error)
             rules = json_array();
             json_document_set_root(reqdoc, root);
             json_object_set_property(root, "accessRules", rules);
-            for (m = current_application->endpoint->supported; NULL != *m; m++) {
+            for (m = endpoints[current_application->endpoint_id].supported; NULL != *m; m++) {
                 if (NULL != (*m)->register_rules) {
                     (*m)->register_rules(rules, FALSE);
                 }

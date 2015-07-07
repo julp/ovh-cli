@@ -109,7 +109,7 @@ configure_file(
     @ONLY
 )
 
-add_executable(ovh main.c graph.c json.c error.c util.c date.c table.c graphic.c
+add_executable(ovh main.c sqlite.c graph.c json.c error.c util.c date.c table.c graphic.c
     struct/iterator.c struct/hashtable.c struct/dptrarray.c struct/xtring.c
     ${BUILTIN_MODULES} ${EXTRA_MODULES_ENABLED} ${MISC_SOURCES}
 )

@@ -11,8 +11,8 @@
 #include "date.h"
 #include "endpoints.h"
 #include "table.h"
+#include "sqlite.h"
 #include "modules/api.h"
-#include "modules/libxml.h"
 #include "struct/hashtable.h"
 #include "account_api.h"
 
@@ -20,8 +20,6 @@
 #if !defined(MAXPATHLEN) && defined(PATH_MAX)
 # define MAXPATHLEN PATH_MAX
 #endif /* !MAXPATHLEN && PATH_MAX */
-
-#define TURN_IN_AT_IN_CHOICE 1
 
 enum {
     DTOR_NOCALL,
@@ -38,6 +36,27 @@ typedef struct {
 } account_command_data_t;
 
 typedef struct {
+    int endpoint;
+    char *account;
+    char *password;
+    int expires_in_at;
+    char *expiration;
+    char *consumer_key;
+    bool endpoint_present;
+} account_argument_t;
+
+typedef struct {
+    int endpoint;
+    char *key;
+    char *secret;
+} application_argument_t;
+
+#define UNEXISTANT_ACCOUNT \
+    do { \
+        error_set(error, WARN, _("no account named '%s'"), args->account); \
+    } while (0);
+
+typedef struct {
     DtorFunc dtor;
     void (*on_set_account)(void **);
 } module_callbacks_t;
@@ -47,7 +66,11 @@ static account_command_data_t *acd = NULL;
 account_t * const *current_account;
 const application_t *current_application = NULL;
 
-static bool account_save(error_t **);
+/**
+ * TODO:
+ * - sqlite3_prepare_v2 only once each query (on demand? in ctor?)
+ * - sqlite3_finalize only at the end (on dtor?)
+ */
 
 enum {
     EXPIRES_IN,
@@ -60,6 +83,7 @@ static const char * const expires_in_at[] = {
     NULL
 };
 
+// TODO: for compatibility
 static void account_set_current(account_t *account, bool autosel)
 {
     if (acd->current_account != account) {
@@ -69,9 +93,7 @@ static void account_set_current(account_t *account, bool autosel)
         acd->current_account = account;
         // change global variables
         current_application = NULL;
-        if (NULL != account->endpoint) { // account can't be NULL
-            hashtable_direct_get(acd->applications, (account->endpoint - endpoints), &current_application);
-        }
+        hashtable_direct_get(acd->applications, account->endpoint_id, &current_application);
         // notify modules
         hashtable_to_iterator(&it, acd->modules_callbacks);
         for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
@@ -102,12 +124,12 @@ bool check_current_application_and_account(bool skip_CK_check, error_t **error)
         error_set(error, WARN, _("no current account"));
         return FALSE;
     }
-    if (NULL == acd->current_account->endpoint) {
-        error_set(error, WARN, _("no endpoint associated to account '%s'"), acd->current_account->account);
-        return FALSE;
-    }
+//     if (NULL == acd->current_account->endpoint_id) {
+//         error_set(error, WARN, _("no endpoint associated to account '%s'"), acd->current_account->account);
+//         return FALSE;
+//     }
     if (NULL == current_application) {
-        error_set(error, WARN, _("no application registered for endpoint '%s'"), acd->current_account->endpoint->name);
+        error_set(error, WARN, _("no application registered for endpoint '%s'"), endpoint_names[acd->current_account->endpoint_id]);
         return FALSE;
     }
     if (skip_CK_check) {
@@ -117,7 +139,15 @@ bool check_current_application_and_account(bool skip_CK_check, error_t **error)
     if (NULL == acd->current_account->consumer_key || (0 != acd->current_account->expires_at && acd->current_account->expires_at < time(NULL))) {
         // if we successfully had a CK, save it
         if (NULL != (acd->current_account->consumer_key = request_consumer_key(&acd->current_account->expires_at, error))) {
-            account_save(error);
+            sqlite3_stmt *stmt;
+
+            sqlite3_prepare_v2(db, "UPDATE accounts SET consumer_key = ?, expires_at = ? WHERE name = ?", -1, &stmt, NULL);
+            sqlite3_bind_text(stmt, 1, acd->current_account->consumer_key, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+            sqlite3_bind_int(stmt, 2, acd->current_account->expires_at);
+            sqlite3_bind_text(stmt, 3, acd->current_account->account, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+            assert(SQLITE_DONE == sqlite3_step(stmt));
+            sqlite3_reset(stmt);
+            sqlite3_finalize(stmt);
         }
     }
 
@@ -133,6 +163,7 @@ const char *account_current(void)
     }
 }
 
+// TODO: for compatibility
 void account_current_set_data(const char *name, void *data)
 {
     assert(NULL != acd->current_account);
@@ -140,6 +171,7 @@ void account_current_set_data(const char *name, void *data)
     hashtable_put(acd->current_account->modules_data, 0, name, data, NULL);
 }
 
+// TODO: for compatibility
 bool account_current_get_data(const char *name, void **data)
 {
     assert(NULL != acd->current_account);
@@ -147,6 +179,7 @@ bool account_current_get_data(const char *name, void **data)
     return hashtable_get(acd->current_account->modules_data, name, data);
 }
 
+// TODO: for compatibility
 void account_register_module_callbacks(const char *name, DtorFunc dtor, void (*on_set_account)(void **))
 {
     module_callbacks_t *mc;
@@ -170,124 +203,7 @@ void account_register_module_callbacks(const char *name, DtorFunc dtor, void (*o
     }
 }
 
-static bool account_save(error_t **error)
-{
-    int ret;
-    Iterator it;
-    xmlDocPtr doc;
-    xmlNodePtr root;
-    mode_t old_umask;
-
-#define CREATE_NODE(node, name) \
-    do { \
-        if (NULL == (node = xmlNewNode(NULL, BAD_CAST name))) { \
-            xmlFreeDoc(doc); \
-            error_set(error, WARN, _("unable to create XML node '%s'"), name); \
-            return FALSE; \
-        } \
-    } while (0);
-
-#define SET_PROP(node, name, value) \
-    do { \
-        if (NULL == xmlSetProp(node, BAD_CAST name, BAD_CAST value)) { \
-            xmlFreeNode(node); \
-            xmlFreeDoc(doc); \
-            error_set(error, WARN, _("unable to set attribute '%s' to value '%s'"), name, value); \
-            return FALSE; \
-        } \
-    } while (0);
-
-#define LINK_TO_ROOT(node) \
-    do { \
-        if (NULL == xmlAddChild(root, node)) { \
-            xmlFreeNode(node); \
-            xmlFreeDoc(doc); \
-            error_set(error, WARN, _("unable to add child '%s' to document root"), (const char *) node->name); \
-            return FALSE; \
-        } \
-    } while (0);
-
-    doc = xmlNewDoc(BAD_CAST "1.0");
-    CREATE_NODE(root, "ovh");
-    xmlDocSetRootElement(doc, root);
-    hashtable_to_iterator(&it, acd->accounts);
-    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        xmlNodePtr node;
-        account_t *account;
-
-        account = (account_t *) iterator_current(&it, NULL);
-        CREATE_NODE(node, "account");
-        SET_PROP(node, "account", account->account);
-        SET_PROP(node, "password", account->password);
-        if (NULL != account->endpoint) { // TODO: for compatibility, remove this test in the future
-            SET_PROP(node, "endpoint", account->endpoint->name);
-        }
-        if (account == acd->autosel) {
-            SET_PROP(node, "default", "1");
-        }
-        if (NULL != account->consumer_key) {
-            char buffer[512];
-
-            SET_PROP(node, "consumer_key", account->consumer_key);
-            ret = snprintf(buffer, ARRAY_SIZE(buffer), "%lld", (long long) account->expires_at);
-            if (ret < 0 || ((size_t) ret) >= ARRAY_SIZE(buffer)) {
-                error_set(error, WARN, _("error or buffer overflow"));
-                return FALSE;
-            }
-            SET_PROP(node, "expires_at", buffer);
-        }
-        LINK_TO_ROOT(node);
-    }
-    iterator_close(&it);
-    hashtable_to_iterator(&it, acd->applications);
-    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        xmlNodePtr node;
-        application_t *app;
-
-        app = (application_t *) iterator_current(&it, NULL);
-        CREATE_NODE(node, "application");
-        SET_PROP(node, "key", app->key);
-        SET_PROP(node, "secret", app->secret);
-        SET_PROP(node, "endpoint", app->endpoint->name);
-        LINK_TO_ROOT(node);
-    }
-    iterator_close(&it);
-    old_umask = umask(077);
-    ret = xmlSaveFormatFile(acd->path, doc, 1);
-    umask(old_umask);
-    if (-1 == ret) {
-        xmlFreeDoc(doc);
-        error_set(error, WARN, _("could not save file into '%s'"), acd->path);
-        return FALSE;
-    }
-    xmlFreeDoc(doc);
-
-#undef SET_PROP
-#undef CREATE_NODE
-#undef LINK_TO_ROOT
-
-    return TRUE;
-}
-
-#if 0
-const char *account_key(error_t **error)
-{
-    assert(NULL != acd->current_account);
-
-    if (NULL == acd->current_account) {
-        error_set(error, WARN, _("no current account"));
-        return NULL;
-    }
-    if (NULL == acd->current_account->consumer_key || (0 != acd->current_account->expires_at && acd->current_account->expires_at < time(NULL))) {
-        if (NULL != (acd->current_account->consumer_key = request_consumer_key(&acd->current_account->expires_at, error))) {
-            account_save(error);
-        }
-    }
-
-    return acd->current_account->consumer_key;
-}
-#endif
-
+// TODO: for compatibility
 static void application_dtor(void *data)
 {
     application_t *app;
@@ -298,86 +214,56 @@ static void application_dtor(void *data)
     free(app);
 }
 
-static bool account_load(error_t **error)
+// TODO: for compatibility
+static bool account_late_init(error_t **error)
 {
-    struct stat st;
+    int id;
+    Iterator it;
+    bool isdefault;
+    sqlite3_stmt *stmt;
+    account_t account = { 0 };
+    application_t application = { 0 };
 
-    if ((-1 != (stat(acd->path, &st)))/* && S_ISREG(st.st_mode)*/) {
-        xmlDocPtr doc;
-        xmlNodePtr root, n;
+    sqlite3_prepare_v2(db, "SELECT * FROM accounts", -1, &stmt, NULL);
+    statement_to_iterator(&it, stmt, "isssiii", &id, &account.account, &account.password, &account.consumer_key, &account.endpoint_id, &isdefault, &account.expires_at);
+    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        account_t *a;
 
-        xmlKeepBlanksDefault(0);
-        if (NULL == (doc = xmlParseFile(acd->path))) {
-            error_set(error, WARN, _("parsing of '%s' failed"), acd->path);
-            return FALSE;
+        iterator_current(&it, NULL);
+        a = mem_new(*a);
+        *a = account;
+        a->modules_data = hashtable_ascii_cs_new(NULL, NULL, NULL); // no dup/dtor for keys as they are "static" strings ; no dtor for values, we need to do it ourselves
+        hashtable_put(acd->accounts, 0, a->account, a, NULL);
+        if (isdefault) {
+            account_set_current(a, TRUE);
         }
-        if (NULL == (root = xmlDocGetRootElement(doc))) {
-            error_set(error, WARN, _("unable to retrieve document root"));
-            return FALSE;
-        }
-        for (n = root->children; n != NULL; n = n->next) {
-            if (0 == xmlStrcmp(n->name, BAD_CAST "account")) {
-                int endpoint;
-                account_t *a;
+    }
+    iterator_close(&it);
+    sqlite3_finalize(stmt);
 
-                a = mem_new(*a);
-                a->account = xmlGetPropAsString(n, "account");
-                a->password = xmlGetPropAsString(n, "password");
-                a->consumer_key = NULL;
-                a->modules_data = hashtable_ascii_cs_new(NULL, NULL, NULL); // no dup/dtor for keys as they are "static" strings ; no dtor for values, we need to do it ourselves
-                if (xmlHasProp(n, BAD_CAST "consumer_key")) {
-                    char *expires_at;
+    sqlite3_prepare_v2(db, "SELECT * FROM applications", -1, &stmt, NULL);
+    statement_to_iterator(&it, stmt, "ssi", &application.key, &application.secret, &application.endpoint_id);
+    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        application_t *app;
 
-                    a->consumer_key = xmlGetPropAsString(n, "consumer_key");
-                    if ('\0' == *a->consumer_key) {
-                        FREE(a, consumer_key);
-                    } else {
-                        expires_at = xmlGetPropAsString(n, "expires_at");
-                        a->expires_at = (time_t) atol(expires_at);
-                        free(expires_at);
-                    }
-                }
-                hashtable_put(acd->accounts, 0, a->account, a, NULL);
-                if (xmlHasProp(n, BAD_CAST "default")) {
-                    account_set_current(acd->current_account, TRUE);
-                }
-                if (xmlHasProp(n, BAD_CAST "endpoint")) { // TODO: for compatibility, remove this test in the future
-                    if (-1 == (endpoint = xmlGetPropAsCollectionIndex(n, "endpoint", endpoint_names, -1))) {
-                        // TODO: set it to NULL for now
-                        a->endpoint = NULL;
-                    } else {
-                        a->endpoint = &endpoints[endpoint];
-                    }
-                }
-            } else if (0 == xmlStrcmp(n->name, BAD_CAST "application")) {
-                int endpoint;
-                application_t *app;
+        iterator_current(&it, NULL);
+        app = mem_new(*app);
+        *app = application;
+        hashtable_direct_put(acd->applications, 0, app->endpoint_id, app, NULL);
+    }
+    iterator_close(&it);
+    sqlite3_finalize(stmt);
 
-                app = mem_new(*app);
-                app->key = xmlGetPropAsString(n, "key");
-                app->secret = xmlGetPropAsString(n, "secret");
-                if (-1 == (endpoint = xmlGetPropAsCollectionIndex(n, "endpoint", endpoint_names, -1))) {
-                    application_dtor(app);
-                } else {
-                    app->endpoint = &endpoints[endpoint];
-                    hashtable_direct_put(acd->applications, 0, endpoint, app, NULL);
-                }
-            }
+    if (hashtable_size(acd->accounts) > 0) {
+        if (NULL == acd->current_account) {
+            account_set_current((account_t *) hashtable_first(acd->accounts), FALSE);
         }
-        if (hashtable_size(acd->accounts) > 0) {
-            if (NULL == acd->current_account) {
-                account_set_current((account_t *) hashtable_first(acd->accounts), FALSE);
-            }
-#if 0
-            acd->current_account->consumer_key = account_key(error); // TODO: error checking?
-#endif
-        }
-        xmlFreeDoc(doc);
     }
 
     return TRUE;
 }
 
+// TODO: for compatibility
 static void account_account_dtor(void *data)
 {
     account_t *account;
@@ -430,7 +316,7 @@ static bool account_early_init(void)
     CREATE TABLE IF NOT EXISTS applications(\n\
         app_key TEXT NOT NULL,\n\
         secret TEXT NOT NULL,\n\
-        endpoint_id INTEGER NOT NULL\n\
+        endpoint_id INTEGER NOT NULL UNIQUE\n\
     )", NULL, NULL, &errmsg);
     if (SQLITE_OK != ret) {
 //         error_set(error, FATAL, _("can't create tables for module %s: %s"), "account", errmsg);
@@ -438,12 +324,15 @@ static bool account_early_init(void)
         sqlite3_free(errmsg);
     }
 
+    // TODO: for compatibility
     acd = mem_new(*acd);
     current_account = &acd->current_account;
     acd->autosel = acd->current_account = NULL;
     acd->applications = hashtable_new(value_hash, value_equal, NULL, NULL, application_dtor);
     acd->accounts = hashtable_ascii_cs_new(NULL, NULL /* no dtor for key as it is also part of the value */, account_account_dtor);
     acd->modules_callbacks = hashtable_ascii_cs_new(NULL, NULL /* no dtor for key as it is also part of the value */, free);
+
+    // <TODO: move to main.c>
     if (NULL == (home = getenv("HOME"))) {
 # ifdef _MSC_VER
 #  ifndef CSIDL_PROFILE
@@ -474,41 +363,12 @@ static bool account_early_init(void)
             return FALSE;
         }
     }
+    // </TODO: move to main.c>
 
     return TRUE;
 }
 
-static bool account_late_init(error_t **error)
-{
-    return account_load(error);
-}
-
-typedef struct {
-    int endpoint;
-    char *account;
-    char *password;
-#ifdef TURN_IN_AT_IN_CHOICE
-    int expires_in_at;
-#else
-    bool expires_in;
-    bool expires_at;
-#endif /* TURN_IN_AT_IN_CHOICE */
-    char *expiration;
-    char *consumer_key;
-    bool endpoint_present;
-} account_argument_t;
-
-typedef struct {
-    int endpoint;
-    char *key;
-    char *secret;
-} application_argument_t;
-
-#define UNEXISTANT_ACCOUNT \
-    do { \
-        error_set(error, WARN, _("no account named '%s'"), args->account); \
-    } while (0);
-
+// TODO: for compatibility
 static void account_dtor(void)
 {
     if (NULL != acd) {
@@ -524,161 +384,6 @@ static void account_dtor(void)
         free(acd);
     }
     acd = NULL;
-}
-
-typedef enum {
-    SQLITE_TYPE_BOOL,
-    SQLITE_TYPE_INT,
-    SQLITE_TYPE_STRING
-} sqlite_bind_type_t;
-
-typedef struct {
-    sqlite_bind_type_t type;
-    void *ptr;
-} sqlite_statement_bind_t;
-
-typedef struct {
-    int ret;
-    size_t output_binds_count;
-    sqlite_statement_bind_t *output_binds;
-} sqlite_statement_state_t;
-
-static bool statement_iterator_is_valid(const void *UNUSED(collection), void **state)
-{
-    sqlite_statement_state_t *sss;
-
-    assert(NULL != state);
-    sss = *(sqlite_statement_state_t **) state;
-
-    return SQLITE_ROW == sss->ret;
-}
-
-static void statement_iterator_first(const void *collection, void **state)
-{
-    sqlite3_stmt *stmt;
-    sqlite_statement_state_t *sss;
-
-    assert(NULL != state);
-    assert(NULL != collection);
-
-    stmt = (sqlite3_stmt *) collection;
-    sss = *(sqlite_statement_state_t **) state;
-//     sqlite3_reset(stmt);
-    sss->ret = sqlite3_step(stmt);
-}
-
-static void statement_iterator_current(const void *collection, void **state, void **UNUSED(value), void **UNUSED(key))
-{
-    sqlite3_stmt *stmt;
-    sqlite_statement_state_t *sss;
-
-    assert(NULL != state);
-    assert(NULL != collection);
-
-    stmt = (sqlite3_stmt *) collection;
-    sss = *(sqlite_statement_state_t **) state;
-    if (0 != sss->output_binds_count) {
-        size_t i;
-
-        for (i = 0; i < sss->output_binds_count; i++) {
-            switch (sss->output_binds[i].type) {
-                case SQLITE_TYPE_BOOL:
-                    *((bool *) sss->output_binds[i].ptr) = /*!!*/sqlite3_column_int(stmt, i);
-                    break;
-                case SQLITE_TYPE_INT:
-                    *((int *) sss->output_binds[i].ptr) = sqlite3_column_int(stmt, i);
-                    break;
-                case SQLITE_TYPE_STRING:
-                {
-                    const unsigned char *v;
-
-                    if (NULL == (v = sqlite3_column_text(stmt, i))) {
-                        *((char **) sss->output_binds[i].ptr) = NULL;
-                    } else {
-                        *((char **) sss->output_binds[i].ptr) = strdup((char *) v);
-                    }
-                    break;
-                }
-                default:
-                    assert(FALSE);
-                    break;
-            }
-        }
-    }
-}
-
-static void statement_iterator_next(const void *collection, void **state)
-{
-    sqlite3_stmt *stmt;
-    sqlite_statement_state_t *sss;
-
-    assert(NULL != state);
-    assert(NULL != collection);
-
-    stmt = (sqlite3_stmt *) collection;
-    sss = *(sqlite_statement_state_t **) state;
-    sss->ret = sqlite3_step(stmt);
-}
-
-static void statement_iterator_close(void *state)
-{
-    sqlite_statement_state_t *sss;
-
-    assert(NULL != state);
-//     assert(NULL != collection);
-
-    sss = (sqlite_statement_state_t *) state;
-    if (0 != sss->output_binds_count) {
-        free(sss->output_binds);
-    }
-//     sqlite3_finalize((sqlite3_stmt *) collection);
-    free(sss);
-}
-
-void statement_to_iterator(Iterator *it, sqlite3_stmt *stmt, const char *outbinds, ...)
-{
-    va_list ap;
-    sqlite_statement_state_t *sss;
-
-    va_start(ap, outbinds);
-    sss = mem_new(*sss);
-    sss->output_binds_count = strlen(outbinds);
-    if (0 == sss->output_binds_count) {
-        sss->output_binds = NULL;
-    } else {
-        size_t i;
-
-        sss->output_binds = mem_new_n(*sss->output_binds, sss->output_binds_count);
-        for (i = 0; i < sss->output_binds_count; i++) {
-            switch (outbinds[i]) {
-                case 'b':
-                    sss->output_binds[i].type = SQLITE_TYPE_BOOL;
-//                     sss->output_binds[i].ptr = va_arg(ap, void *);
-                    break;
-                case 'i':
-                    sss->output_binds[i].type = SQLITE_TYPE_INT;
-//                     sss->output_binds[i].ptr = va_arg(ap, void *);
-                    break;
-                case 's':
-                    sss->output_binds[i].type = SQLITE_TYPE_STRING;
-//                     *((char ***) sss->output_binds[i].ptr) = /*(void *)*/ va_arg(ap, char **);
-                    break;
-                default:
-                    assert(FALSE);
-                    break;
-            }
-            sss->output_binds[i].ptr = va_arg(ap, void *);
-        }
-    }
-    va_end(ap);
-    iterator_init(
-        it, stmt, sss,
-        statement_iterator_first, NULL,
-        statement_iterator_current,
-        statement_iterator_next, NULL,
-        statement_iterator_is_valid,
-        statement_iterator_close
-    );
 }
 
 static command_status_t account_list(COMMAND_ARGS)
@@ -703,7 +408,7 @@ static command_status_t account_list(COMMAND_ARGS)
         _("default"), TABLE_TYPE_BOOLEAN
     );
     sqlite3_prepare_v2(db, "SELECT * FROM accounts", -1, &stmt, NULL);
-    statement_to_iterator(&it, stmt, "isssiii", &id, &account.account, &account.password, &account.consumer_key, &account.endpoint, &isdefault, &account.expires_at);
+    statement_to_iterator(&it, stmt, "isssiii", &id, &account.account, &account.password, &account.consumer_key, &account.endpoint_id, &isdefault, &account.expires_at);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         struct tm expiration, *tm;
 
@@ -714,11 +419,11 @@ static command_status_t account_list(COMMAND_ARGS)
             tm = localtime(&account.expires_at);
             expiration = *tm;
         }
-        table_store(t, account.account, account.consumer_key, expiration, NULL != account.password, account.endpoint, FALSE /* TODO */, isdefault);
+        table_store(t, account.account, account.consumer_key, expiration, NULL != account.password, account.endpoint_id, FALSE /* TODO */, isdefault);
         free(account.password);
     }
     iterator_close(&it);
-    sqlite3_finalize(stmt); // TODO: handle this in iterator_close
+    sqlite3_finalize(stmt);
     table_display(t, TABLE_FLAG_NONE);
     table_destroy(t);
 
@@ -742,43 +447,29 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
     }
 
     if (NULL != args->expiration) {
-#ifdef TURN_IN_AT_IN_CHOICE
         switch (args->expires_in_at) {
             case EXPIRES_IN:
-#else
-        if (args->expires_in) {
-#endif /* TURN_IN_AT_IN_CHOICE */
-            if (!parse_duration(args->expiration, &expires_at)) {
-                error_set(error, WARN, _("command aborted: unable to parse duration '%s'"), args->expiration);
-                return COMMAND_USAGE;
-            }
-            expires_at += time(NULL);
-#ifdef TURN_IN_AT_IN_CHOICE
+                if (!parse_duration(args->expiration, &expires_at)) {
+                    error_set(error, WARN, _("command aborted: unable to parse duration '%s'"), args->expiration);
+                    return COMMAND_USAGE;
+                }
+                expires_at += time(NULL);
                 break;
             case EXPIRES_AT:
             {
-#else
-        } else if (args->expires_at) {
-#endif
-            char *endptr;
-            struct tm ltm = { 0 };
+                char *endptr;
+                struct tm ltm = { 0 };
 
-            if (NULL == (endptr = strptime(args->expiration, "%c", &ltm))) {
-                error_set(error, WARN, _("command aborted: unable to parse expiration date '%s'"), args->expiration);
-                return COMMAND_USAGE;
-            }
-            expires_at = mktime(&ltm);
-#ifdef TURN_IN_AT_IN_CHOICE
+                if (NULL == (endptr = strptime(args->expiration, "%c", &ltm))) {
+                    error_set(error, WARN, _("command aborted: unable to parse expiration date '%s'"), args->expiration);
+                    return COMMAND_USAGE;
+                }
+                expires_at = mktime(&ltm);
                 break;
             }
             default:
                 assert(FALSE);
         }
-#else
-        } else {
-            assert(FALSE); // we should not reach this point if "graph" have done its job
-        }
-#endif /* TURN_IN_AT_IN_CHOICE */
     }
     h = hashtable_hash(acd->accounts, args->account);
     if (hashtable_quick_get(acd->accounts, h, args->account, &a)) {
@@ -803,13 +494,13 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
         }
         a = mem_new(*a);
         a->password = NULL;
-        a->endpoint = NULL; // TODO: temporary
+        a->endpoint_id = 0; // TODO: temporary
         a->consumer_key = NULL;
         a->account = strdup(args->account);
         a->modules_data = hashtable_ascii_cs_new(NULL, NULL, NULL);
     }
     if (args->endpoint_present) {
-        a->endpoint = &endpoints[args->endpoint];
+        a->endpoint_id = args->endpoint;
     }
     if (!update || NULL != args->password) { // for update, only if a new password is set
         a->password = strdup(args->password);
@@ -819,13 +510,49 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
         a->expires_at = expires_at;
     }
     if (!update) {
+        sqlite3_stmt *stmt;
         // if this is the first account, set it as current
         if (0 == hashtable_size(acd->accounts)) {
             account_set_current(a, TRUE);
         }
         hashtable_quick_put(acd->accounts, 0, h, a->account, a, NULL);
+
+        sqlite3_prepare_v2(db, "INSERT INTO accounts(name, password, consumer_key, endpoint_id, is_default, expires_at) VALUES(?, ?, ?, ?, ?, ?)", -1, &stmt, NULL);
+        sqlite3_bind_text(stmt, 1, a->account, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+        sqlite3_bind_text(stmt, 2, a->password, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+        sqlite3_bind_text(stmt, 3, a->consumer_key, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+        sqlite3_bind_int(stmt, 4, a->endpoint_id);
+        sqlite3_bind_int(stmt, 5, 0);
+        sqlite3_bind_int(stmt, 6, a->expires_at);
+        assert(SQLITE_DONE == sqlite3_step(stmt));
+        sqlite3_reset(stmt);
+        sqlite3_finalize(stmt);
+    } else {
+        sqlite3_stmt *stmt;
+
+        sqlite3_prepare_v2(db, "UPDATE accounts SET password = IFNULL(?, password), consumer_key = IFNULL(?, consumer_key), expires_at = IFNULL(?, expires_at), endpoint_id = IFNULL(?, endpoint_id) WHERE name = ?", -1, &stmt, NULL);
+        if (NULL != args->password) {
+            sqlite3_bind_text(stmt, 1, a->password, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+        } else {
+            sqlite3_bind_null(stmt, 1);
+        }
+        if (NULL != args->consumer_key) {
+            sqlite3_bind_text(stmt, 2, a->consumer_key, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+            sqlite3_bind_int(stmt, 3, a->expires_at);
+        } else {
+            sqlite3_bind_null(stmt, 2);
+            sqlite3_bind_null(stmt, 3);
+        }
+        if (args->endpoint_present) {
+            sqlite3_bind_int(stmt, 4, a->endpoint_id);
+        } else {
+            sqlite3_bind_null(stmt, 4);
+        }
+        sqlite3_bind_text(stmt, 5, a->account, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+        assert(SQLITE_DONE == sqlite3_step(stmt));
+        sqlite3_reset(stmt);
+        sqlite3_finalize(stmt);
     }
-    account_save(error);
 
     return COMMAND_SUCCESS;
 }
@@ -856,7 +583,13 @@ static command_status_t account_default_set(COMMAND_ARGS)
     assert(NULL != args->account);
     if ((ret = hashtable_get(acd->accounts, args->account, &ptr))) {
         acd->autosel = ptr;
-        account_save(error);
+        sqlite3_stmt *stmt;
+
+        sqlite3_prepare_v2(db, "UPDATE accounts SET is_default = (name = ?)", -1, &stmt, NULL);
+        sqlite3_bind_text(stmt, 1, args->account, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+        assert(SQLITE_DONE == sqlite3_step(stmt));
+        sqlite3_reset(stmt);
+        sqlite3_finalize(stmt);
     } else {
         UNEXISTANT_ACCOUNT;
     }
@@ -872,7 +605,6 @@ static command_status_t account_delete(COMMAND_ARGS)
     USED(mainopts);
     args = (account_argument_t *) arg;
     assert(NULL != args->account);
-    //TODO: handle deletion of current/active account
     if (NULL != acd->current_account && 0 == strcmp(args->account, acd->current_account->account)) {
         if (acd->current_account == acd->autosel) {
             acd->autosel = NULL;
@@ -880,7 +612,13 @@ static command_status_t account_delete(COMMAND_ARGS)
         acd->current_account = NULL;
     }
     if ((ret = hashtable_delete(acd->accounts, args->account, DTOR_CALL))) {
-        account_save(error);
+        sqlite3_stmt *stmt;
+
+        sqlite3_prepare_v2(db, "DELETE FROM accounts WHERE name = ?", -1, &stmt, NULL);
+        sqlite3_bind_text(stmt, 1, args->account, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+        assert(SQLITE_DONE == sqlite3_step(stmt));
+        sqlite3_reset(stmt);
+        sqlite3_finalize(stmt);
     } else {
         UNEXISTANT_ACCOUNT;
     }
@@ -898,17 +636,7 @@ static command_status_t account_switch(COMMAND_ARGS)
     args = (account_argument_t *) arg;
     assert(NULL != args->account);
     if ((ret = hashtable_get(acd->accounts, args->account, &ptr))) {
-#if 0
-        const char *consumer_key;
-
-        acd->current_account = ptr;
-        if (NULL != (consumer_key = account_key(error))) {
-            acd->current_account->consumer_key = consumer_key;
-        }
-        account_notify_change();
-#else
         account_set_current(ptr, FALSE);
-#endif
     } else {
         UNEXISTANT_ACCOUNT;
     }
@@ -920,6 +648,8 @@ static command_status_t application_list(COMMAND_ARGS)
 {
     table_t *t;
     Iterator it;
+    sqlite3_stmt *stmt;
+    application_t application = { 0 };
 
     USED(arg);
     USED(error);
@@ -927,17 +657,17 @@ static command_status_t application_list(COMMAND_ARGS)
     t = table_new(
         3,
         _("endpoint"), TABLE_TYPE_ENUM, endpoint_names,
-        _("key"), TABLE_TYPE_STRING,
-        _("secret"), TABLE_TYPE_STRING
+        _("key"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
+        _("secret"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE
     );
-    hashtable_to_iterator(&it, acd->applications);
+    sqlite3_prepare_v2(db, "SELECT * FROM applications", -1, &stmt, NULL);
+    statement_to_iterator(&it, stmt, "ssi", &application.key, &application.secret, &application.endpoint_id);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        application_t *app;
-
-        app = iterator_current(&it, NULL);
-        table_store(t, app->endpoint - endpoints, app->key, app->secret);
+        iterator_current(&it, NULL);
+        table_store(t, application.endpoint_id, application.key, application.secret);
     }
     iterator_close(&it);
+    sqlite3_finalize(stmt);
     table_display(t, TABLE_FLAG_NONE);
     table_destroy(t);
 
@@ -946,9 +676,11 @@ static command_status_t application_list(COMMAND_ARGS)
 
 static command_status_t application_add(COMMAND_ARGS)
 {
+    sqlite3_stmt *stmt;
     application_t *app;
     application_argument_t *args;
 
+    USED(error);
     USED(mainopts);
     args = (application_argument_t *) arg;
     assert(NULL != args->key);
@@ -957,9 +689,16 @@ static command_status_t application_add(COMMAND_ARGS)
     app = mem_new(*app);
     app->key = strdup(args->key);
     app->secret = strdup(args->secret);
-    app->endpoint = &endpoints[args->endpoint];
-    hashtable_direct_put(acd->applications, 0, args->endpoint, app, NULL);
-    account_save(error);
+    app->endpoint_id = args->endpoint;
+    hashtable_direct_put(acd->applications, 0, app->endpoint_id, app, NULL);
+
+    sqlite3_prepare_v2(db, "INSERT INTO applications(app_key, secret, endpoint_id) VALUES(?, ?, ?)", -1, &stmt, NULL);
+    sqlite3_bind_text(stmt, 1, app->key, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+    sqlite3_bind_text(stmt, 2, app->secret, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+    sqlite3_bind_int(stmt, 3, app->endpoint_id);
+    assert(SQLITE_DONE == sqlite3_step(stmt));
+    sqlite3_reset(stmt);
+    sqlite3_finalize(stmt);
 
     return COMMAND_SUCCESS;
 }
@@ -968,10 +707,17 @@ static command_status_t application_delete(COMMAND_ARGS)
 {
     application_argument_t *args;
 
+    USED(error);
     USED(mainopts);
     args = (application_argument_t *) arg;
     if (hashtable_direct_delete(acd->applications, args->endpoint, TRUE)) {
-        account_save(error);
+        sqlite3_stmt *stmt;
+
+        sqlite3_prepare_v2(db, "DELETE FROM applications WHERE endpoint_id = ?", -1, &stmt, NULL);
+        sqlite3_bind_int(stmt, 1, args->endpoint);
+        assert(SQLITE_DONE == sqlite3_step(stmt));
+        sqlite3_reset(stmt);
+        sqlite3_finalize(stmt);
     } else {
         error_set(error, NOTICE, _("no application associated to endpoint %s"), endpoint_names[args->endpoint]);
     }
@@ -983,11 +729,7 @@ static void account_regcomm(graph_t *g)
 {
     // account ...
     {
-#ifdef TURN_IN_AT_IN_CHOICE
         argument_t *arg_expires_in_at;
-#else
-        argument_t *lit_in, *lit_at;
-#endif /* TURN_IN_AT_IN_CHOICE */
         argument_t *arg_account, *arg_password, *arg_consumer_key, *arg_expiration, *arg_endpoint;
         argument_t *lit_account, *lit_list, *lit_delete, *lit_add, *lit_update, *lit_switch, *lit_default, *lit_expires, *lit_password, *lit_key, *lit_endpoint;
 
@@ -1001,47 +743,24 @@ static void account_regcomm(graph_t *g)
         lit_update = argument_create_literal("update", account_update);
         lit_key = argument_create_literal("key", NULL);
         lit_password = argument_create_literal("password", NULL);
-#ifndef TURN_IN_AT_IN_CHOICE
-        lit_in = argument_create_relevant_literal(offsetof(account_argument_t, expires_in), "in", NULL);
-        lit_at = argument_create_relevant_literal(offsetof(account_argument_t, expires_at), "at", NULL);
-#endif /* !TURN_IN_AT_IN_CHOICE */
         lit_endpoint = argument_create_relevant_literal(offsetof(account_argument_t, endpoint_present), "endpoint", NULL);
 
         arg_password = argument_create_string(offsetof(account_argument_t, password), "<password>", NULL, NULL);
-#ifdef TURN_IN_AT_IN_CHOICE
         arg_expires_in_at = argument_create_choices(offsetof(account_argument_t, expires_in_at), "<in/at>",  expires_in_at);
-#endif /* TURN_IN_AT_IN_CHOICE */
         arg_expiration = argument_create_string(offsetof(account_argument_t, expiration), "<expiration>", NULL, NULL);
         arg_consumer_key = argument_create_string(offsetof(account_argument_t, consumer_key), "<consumer key>", NULL, NULL);
         arg_endpoint = argument_create_choices(offsetof(account_argument_t, endpoint), "<endpoint>", endpoint_names);
         arg_account = argument_create_string(offsetof(account_argument_t, account), "<account>", complete_from_hashtable_keys, acd->accounts);
 
         graph_create_full_path(g, lit_account, lit_list, NULL);
-#ifdef TURN_IN_AT_IN_CHOICE
         graph_create_path(g, lit_account, lit_add, arg_account, NULL);
         graph_create_all_path(g, lit_add, NULL, 2, lit_password, arg_password, 5, lit_key, arg_consumer_key, lit_expires, arg_expires_in_at, arg_expiration, 2, lit_endpoint, arg_endpoint, 0);
-#else
-        // TODO: refactor "account add" arguments + add support for endpoint
-        graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, NULL);
-        graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, arg_consumer_key, NULL);
-        graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, arg_consumer_key, lit_expires, lit_at, arg_expiration, NULL);
-        graph_create_full_path(g, lit_account, arg_account, lit_add, arg_password, arg_consumer_key, lit_expires, lit_in, arg_expiration, NULL);
-#endif /* TURN_IN_AT_IN_CHOICE */
         graph_create_full_path(g, lit_account, arg_account, lit_delete, NULL);
         graph_create_full_path(g, lit_account, arg_account, lit_default, NULL);
         graph_create_full_path(g, lit_account, arg_account, lit_switch, NULL);
 
-#ifdef TURN_IN_AT_IN_CHOICE
         graph_create_path(g, lit_account, lit_update, arg_account, NULL);
         graph_create_all_path(g, lit_update, NULL, 2, lit_password, arg_password, 5, lit_key, arg_consumer_key, lit_expires, arg_expires_in_at, arg_expiration, 2, lit_endpoint, arg_endpoint, 0);
-#else
-        graph_create_full_path(g, lit_account, arg_account, lit_update, lit_key, arg_consumer_key, lit_expires, lit_at, arg_expiration, NULL);
-        graph_create_full_path(g, lit_account, arg_account, lit_update, lit_key, arg_consumer_key, lit_expires, lit_in, arg_expiration, NULL);
-        graph_create_full_path(g, lit_account, arg_account, lit_update, lit_password, arg_password, lit_key, arg_consumer_key, lit_expires, lit_at, arg_expiration, NULL);
-        graph_create_full_path(g, lit_account, arg_account, lit_update, lit_password, arg_password, lit_key, arg_consumer_key, lit_expires, lit_in, arg_expiration, NULL);
-
-        graph_create_all_path(g, lit_update, NULL, 2, lit_password, arg_password, 2, lit_key, arg_consumer_key, 2, lit_endpoint, arg_endpoint, 0);
-#endif /* TURN_IN_AT_IN_CHOICE */
     }
     // application ...
     {

@@ -8,7 +8,8 @@
 typedef struct {
     char *key;
     char *secret;
-    const endpoint_t *endpoint;
+    int endpoint_id;
+//     const endpoint_t *endpoint;
 } application_t;
 
 typedef struct {
@@ -17,7 +18,8 @@ typedef struct {
     time_t expires_at;
     const char *consumer_key;
     HashTable *modules_data;
-    const endpoint_t *endpoint;
+    int endpoint_id;
+//     const endpoint_t *endpoint;
 } account_t;
 
 account_t * const *current_account;
