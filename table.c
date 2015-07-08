@@ -135,6 +135,7 @@ void int_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
     int v;
 
     v = va_arg(ap, int);
+    val->f = FALSE;
     val->v = (uintptr_t) v;
     val->l = snprintf(NULL, 0, "%d", v);
     if (val->l > c->max_len) {
@@ -147,6 +148,7 @@ void bool_store(table_t *t, va_list ap, column_t *c, value_t *val)
     bool v;
 
     v = va_arg(ap, bool);
+    val->f = FALSE;
     val->v = (uintptr_t) v;
     val->l = t->max_false_true_len;
     if (val->l > c->max_len) {
@@ -159,6 +161,7 @@ void enum_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
     size_t v;
 
     v = va_arg(ap, size_t);
+    val->f = FALSE;
     val->v = (uintptr_t) /*c->enum_values[*/v/*]*/;
     val->l = c->enum_values_len[v];
     if (val->l > c->max_len) {
@@ -215,7 +218,7 @@ void datetime_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
     } else {
         val->l = strftime(buffer, ARRAY_SIZE(buffer), "%x %X", &v);
         assert(val->l > 0);
-        val->v = (uintptr_t) strdup(buffer);
+        val->v = (uintptr_t) strdup(buffer); // TODO: use and keep a time_t? (easier for sorting?) ; do the strdup (+ redo strftime & co) in display?
         val->f = TRUE;
     }
     if (val->l > c->max_len) {
@@ -684,12 +687,12 @@ void table_display(table_t *t, uint32_t flags)
                         }
                     }
                     free(breaks[i]);
-                    // <TODO: better place in row_destroy>
-                    if (r->values[i].f) {
-                        free((void *) r->values[i].v);
-                    }
-                    // </TODO>
                 }
+                // <TODO: better place in row_destroy>
+                if (r->values[i].f) {
+                    free((void *) r->values[i].v);
+                }
+                // </TODO>
             }
         }
         iterator_close(&it);
