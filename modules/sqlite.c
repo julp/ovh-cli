@@ -138,6 +138,70 @@ static void statement_iterator_close(void *state)
     free(sss);
 }
 
+bool statement_fetch(sqlite3_stmt *stmt, error_t **error, ...)
+{
+    bool ret;
+    va_list ap;
+
+    ret = FALSE;
+    va_start(ap, error);
+    switch (sqlite3_step(stmt)) {
+        case SQLITE_ROW:
+        {
+            int i, colcount;
+
+            colcount = sqlite3_column_count(stmt);
+            for (i = 0; i < colcount; i++) {
+                switch (sqlite3_column_type(stmt, i)) {
+                    case SQLITE_INTEGER:
+                    {
+                        int *v;
+
+                        v = va_arg(ap, int *);
+                        *v = sqlite3_column_int(stmt, i);
+                        break;
+                    }
+                    case SQLITE_FLOAT:
+                        // ?
+                        break;
+                    case SQLITE_TEXT:
+                    {
+                        char **uv;
+                        const unsigned char *sv;
+
+                        uv = va_arg(ap, char **);
+                        sv = sqlite3_column_text(stmt, i);
+                        if (NULL == sv) {
+                            *uv = NULL;
+                        } else {
+                            *uv = strdup((char *) sv);
+                        }
+                        break;
+                    }
+                    case SQLITE_BLOB:
+                        break;
+                    case SQLITE_NULL:
+                        // ?
+                        break;
+                    default:
+                        assert(FALSE);
+                        break;
+                }
+            }
+            ret = TRUE;
+            break;
+        }
+        case SQLITE_DONE:
+            break;
+        default:
+            error_set(error, WARN, _(""));
+            break;
+    }
+    va_end(ap);
+
+    return ret;
+}
+
 void statement_to_iterator(Iterator *it, sqlite3_stmt *stmt, const char *outbinds, ...)
 {
     va_list ap;
@@ -156,15 +220,12 @@ void statement_to_iterator(Iterator *it, sqlite3_stmt *stmt, const char *outbind
             switch (outbinds[i]) {
                 case 'b':
                     sss->output_binds[i].type = SQLITE_TYPE_BOOL;
-//                     sss->output_binds[i].ptr = va_arg(ap, void *);
                     break;
                 case 'i':
                     sss->output_binds[i].type = SQLITE_TYPE_INT;
-//                     sss->output_binds[i].ptr = va_arg(ap, void *);
                     break;
                 case 's':
                     sss->output_binds[i].type = SQLITE_TYPE_STRING;
-//                     *((char ***) sss->output_binds[i].ptr) = /*(void *)*/ va_arg(ap, char **);
                     break;
                 default:
                     assert(FALSE);
@@ -209,6 +270,16 @@ void statement_batched_finalize(sqlite3_stmt **preprepared, size_t count)
     for (i = 0; i < count; i++) {
         sqlite3_finalize(preprepared[i]);
     }
+}
+
+int sqlite_last_insert_id(void)
+{
+    return sqlite3_last_insert_rowid(db);
+}
+
+int sqlite_affected_rows(void)
+{
+    return sqlite3_changes(db);
 }
 
 void create_or_migrate(const char *table_name, const char *create_stmt, sqlite_migration_t *migrations, size_t migrations_count/*, error_t **error*/)

@@ -124,7 +124,7 @@ bool request_sign(request_t *req, error_t **error)
     EVP_DigestInit_ex(&ctx, md, NULL);
     EVP_DigestUpdate(&ctx, current_application->secret, strlen(current_application->secret));
     EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
-    EVP_DigestUpdate(&ctx, (*current_account)->consumer_key, strlen((*current_account)->consumer_key));
+    EVP_DigestUpdate(&ctx, current_account->consumer_key, strlen(current_account->consumer_key));
     EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
     EVP_DigestUpdate(&ctx, methods[req->method].name, methods[req->method].name_len);
     EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
@@ -157,7 +157,7 @@ bool request_sign(request_t *req, error_t **error)
     // X-Ovh-Timestamp header
     request_add_header2(req, "X-Ovh-Timestamp: ", buffer, error);
     // X-Ovh-Consumer header
-    request_add_header2(req, "X-Ovh-Consumer: ", (*current_account)->consumer_key, error);
+    request_add_header2(req, "X-Ovh-Consumer: ", current_account->consumer_key, error);
 
     return TRUE;
 }
@@ -616,15 +616,15 @@ const char *request_consumer_key(time_t *expires_at, error_t **error)
         xmlFreeDoc(doc);
         request_destroy(req);
     }
-    if (NULL == (*current_account)->password || '\0' == *(*current_account)->password) {
+    if (NULL == current_account->password || '\0' == *current_account->password) {
         error_set(
             error,
             NOTICE,
             _("you have not registered your password so you have to confirm the current consumer key %s yourself by validating it at: %s\n" \
             "Once done, if you choose to set a limited validity, don't forget to run: ovh account %s update expires in \"<duration>\""),
-            (*current_account)->consumer_key,
+            current_account->consumer_key,
             validationUrl,
-            (*current_account)->account
+            current_account->name
         );
         *expires_at = 0;
     } else {
@@ -685,8 +685,8 @@ const char *request_consumer_key(time_t *expires_at, error_t **error)
         // POST validationUrl
         req = request_new(REQUEST_FLAG_NONE, HTTP_POST, NULL, "%S", validationUrl);
         request_add_post_field(req, "credentialToken", token);
-        request_add_post_field(req, account_field_name, (*current_account)->account);
-        request_add_post_field(req, password_field_name, (*current_account)->password);
+        request_add_post_field(req, account_field_name, current_account->name);
+        request_add_post_field(req, password_field_name, current_account->password);
 //         request_add_post_field(req, "duration", "0");
         request_add_post_field(req, "duration", STRINGIFY_EXPANDED(DEFAULT_CONSUMER_KEY_EXPIRATION));
         request_execute(req, RESPONSE_IGNORE, NULL, error); // TODO: check returned value
