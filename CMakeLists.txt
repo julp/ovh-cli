@@ -2,6 +2,12 @@ cmake_minimum_required(VERSION 2.8.8)
 
 project(ovh-cli C)
 
+set(OVH_CLI_VERSION_MAJOR 0)
+set(OVH_CLI_VERSION_MINOR 0)
+set(OVH_CLI_VERSION_PATCH 0)
+
+math(EXPR OVH_CLI_VERSION_NUMBER "${OVH_CLI_VERSION_MAJOR} * 1000 + ${OVH_CLI_VERSION_MINOR} * 100 + ${OVH_CLI_VERSION_PATCH}")
+
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -Wall -Wextra -std=c99 -Wwrite-strings -Wstrict-prototypes -Wuninitialized -Wunreachable-code -Wno-comment -Wnonnull -Wunreachable-code")
 add_definitions(-D_GNU_SOURCE)
 
@@ -92,7 +98,7 @@ option(PRINT_OVH_ID "Enable/disable display of internal OVH identifiers" OFF)
 
 set(
     BUILTIN_MODULES
-    modules/openssl.c modules/curl.c modules/libxml.c modules/api.c modules/conv.c modules/base.c
+    modules/sqlite.c modules/openssl.c modules/curl.c modules/libxml.c modules/api.c modules/conv.c modules/base.c
     commands/account.c
 )
 
@@ -109,7 +115,7 @@ configure_file(
     @ONLY
 )
 
-add_executable(ovh main.c sqlite.c graph.c json.c error.c util.c date.c table.c graphic.c
+add_executable(ovh main.c graph.c json.c error.c util.c date.c table.c graphic.c
     struct/iterator.c struct/hashtable.c struct/dptrarray.c struct/xtring.c
     ${BUILTIN_MODULES} ${EXTRA_MODULES_ENABLED} ${MISC_SOURCES}
 )

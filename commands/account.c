@@ -1,25 +1,15 @@
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <pwd.h>
 #include <stdio.h>
 #include <string.h>
-#include <errno.h>
 
 #include "common.h"
 #include "command.h"
 #include "date.h"
 #include "endpoints.h"
 #include "table.h"
-#include "sqlite.h"
 #include "modules/api.h"
+#include "modules/sqlite.h"
 #include "struct/hashtable.h"
 #include "account_api.h"
-
-#include <limits.h>
-#if !defined(MAXPATHLEN) && defined(PATH_MAX)
-# define MAXPATHLEN PATH_MAX
-#endif /* !MAXPATHLEN && PATH_MAX */
 
 enum {
     DTOR_NOCALL,
@@ -27,7 +17,6 @@ enum {
 };
 
 typedef struct {
-    char path[MAXPATHLEN];
     HashTable *accounts;
     HashTable *applications; // int (index in endpoints - see endpoints.h) => application_t *
     account_t *autosel;
@@ -66,11 +55,36 @@ static account_command_data_t *acd = NULL;
 account_t * const *current_account;
 const application_t *current_application = NULL;
 
-/**
- * TODO:
- * - sqlite3_prepare_v2 only once each query (on demand? in ctor?)
- * - sqlite3_finalize only at the end (on dtor?)
- */
+enum {
+    // account
+    STMT_ACCOUNT_LIST,
+    STMT_ACCOUNT_UPDATE,
+    STMT_ACCOUNT_INSERT,
+    STMT_ACCOUNT_DELETE,
+    // non-generalized updates
+    STMT_ACCOUNT_UPDATE_KEY,
+    STMT_ACCOUNT_UPDATE_DEFAULT,
+    // application
+    STMT_APPLICATION_LIST,
+    STMT_APPLICATION_INSERT,
+    STMT_APPLICATION_DELETE,
+    // count
+    STMT_COUNT
+};
+
+static const char *statements[STMT_COUNT] = {
+    [ STMT_ACCOUNT_LIST ] = "SELECT * FROM accounts",
+    [ STMT_ACCOUNT_UPDATE ] = "UPDATE accounts SET password = IFNULL(?, password), consumer_key = IFNULL(?, consumer_key), expires_at = IFNULL(?, expires_at), endpoint_id = IFNULL(?, endpoint_id) WHERE name = ?",
+    [ STMT_ACCOUNT_INSERT ] = "INSERT INTO accounts(name, password, consumer_key, endpoint_id, is_default, expires_at) VALUES(?, ?, ?, ?, ?, ?)",
+    [ STMT_ACCOUNT_DELETE ] = "DELETE FROM accounts WHERE name = ?",
+    [ STMT_ACCOUNT_UPDATE_DEFAULT ] = "UPDATE accounts SET is_default = (name = ?)",
+    [ STMT_ACCOUNT_UPDATE_KEY ] = "UPDATE accounts SET consumer_key = ?, expires_at = ? WHERE name = ?",
+    [ STMT_APPLICATION_LIST ] = "SELECT * FROM applications",
+    [ STMT_APPLICATION_INSERT ] = "INSERT INTO applications(app_key, secret, endpoint_id) VALUES(?, ?, ?)",
+    [ STMT_APPLICATION_DELETE ] = "DELETE FROM applications WHERE endpoint_id = ?",
+};
+
+static sqlite3_stmt *prepared[STMT_COUNT];
 
 enum {
     EXPIRES_IN,
@@ -139,15 +153,11 @@ bool check_current_application_and_account(bool skip_CK_check, error_t **error)
     if (NULL == acd->current_account->consumer_key || (0 != acd->current_account->expires_at && acd->current_account->expires_at < time(NULL))) {
         // if we successfully had a CK, save it
         if (NULL != (acd->current_account->consumer_key = request_consumer_key(&acd->current_account->expires_at, error))) {
-            sqlite3_stmt *stmt;
-
-            sqlite3_prepare_v2(db, "UPDATE accounts SET consumer_key = ?, expires_at = ? WHERE name = ?", -1, &stmt, NULL);
-            sqlite3_bind_text(stmt, 1, acd->current_account->consumer_key, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-            sqlite3_bind_int(stmt, 2, acd->current_account->expires_at);
-            sqlite3_bind_text(stmt, 3, acd->current_account->account, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-            assert(SQLITE_DONE == sqlite3_step(stmt));
-            sqlite3_reset(stmt);
-            sqlite3_finalize(stmt);
+            sqlite3_bind_text(prepared[STMT_ACCOUNT_UPDATE_KEY], 1, acd->current_account->consumer_key, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+            sqlite3_bind_int(prepared[STMT_ACCOUNT_UPDATE_KEY], 2, acd->current_account->expires_at);
+            sqlite3_bind_text(prepared[STMT_ACCOUNT_UPDATE_KEY], 3, acd->current_account->account, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+            assert(SQLITE_DONE == sqlite3_step(prepared[STMT_ACCOUNT_UPDATE_KEY]));
+            sqlite3_reset(prepared[STMT_ACCOUNT_UPDATE_KEY]);
         }
     }
 
@@ -163,7 +173,6 @@ const char *account_current(void)
     }
 }
 
-// TODO: for compatibility
 void account_current_set_data(const char *name, void *data)
 {
     assert(NULL != acd->current_account);
@@ -171,7 +180,6 @@ void account_current_set_data(const char *name, void *data)
     hashtable_put(acd->current_account->modules_data, 0, name, data, NULL);
 }
 
-// TODO: for compatibility
 bool account_current_get_data(const char *name, void **data)
 {
     assert(NULL != acd->current_account);
@@ -214,18 +222,16 @@ static void application_dtor(void *data)
     free(app);
 }
 
-// TODO: for compatibility
+// TODO: for compatibility (SQLite => RAM)
 static bool account_late_init(error_t **error)
 {
     int id;
     Iterator it;
     bool isdefault;
-    sqlite3_stmt *stmt;
     account_t account = { 0 };
     application_t application = { 0 };
 
-    sqlite3_prepare_v2(db, "SELECT * FROM accounts", -1, &stmt, NULL);
-    statement_to_iterator(&it, stmt, "isssiii", &id, &account.account, &account.password, &account.consumer_key, &account.endpoint_id, &isdefault, &account.expires_at);
+    statement_to_iterator(&it, prepared[STMT_ACCOUNT_LIST], "isssiii", &id, &account.account, &account.password, &account.consumer_key, &account.endpoint_id, &isdefault, &account.expires_at);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         account_t *a;
 
@@ -239,10 +245,8 @@ static bool account_late_init(error_t **error)
         }
     }
     iterator_close(&it);
-    sqlite3_finalize(stmt);
 
-    sqlite3_prepare_v2(db, "SELECT * FROM applications", -1, &stmt, NULL);
-    statement_to_iterator(&it, stmt, "ssi", &application.key, &application.secret, &application.endpoint_id);
+    statement_to_iterator(&it, prepared[STMT_APPLICATION_LIST], "ssi", &application.key, &application.secret, &application.endpoint_id);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         application_t *app;
 
@@ -252,7 +256,6 @@ static bool account_late_init(error_t **error)
         hashtable_direct_put(acd->applications, 0, app->endpoint_id, app, NULL);
     }
     iterator_close(&it);
-    sqlite3_finalize(stmt);
 
     if (hashtable_size(acd->accounts) > 0) {
         if (NULL == acd->current_account) {
@@ -293,17 +296,13 @@ static void account_account_dtor(void *data)
         hashtable_destroy(account->modules_data);
     }
     free(account);
+
+    statement_batched_finalize(prepared, STMT_COUNT);
 }
 
 static bool account_early_init(void)
 {
-    char *home;
-
-    int ret;
-    char *errmsg;
-
-    // TODO: faire des requêtes de création des tables un champ du module pour que main se charge de les exécuter directement ?
-    ret = sqlite3_exec(db, "CREATE TABLE IF NOT EXISTS accounts(\n\
+    create_or_migrate("accounts", "CREATE TABLE accounts(\n\
         id INTEGER PRIMARY KEY,\n\
         name TEXT NOT NULL UNIQUE,\n\
         password TEXT,\n\
@@ -311,18 +310,14 @@ static bool account_early_init(void)
         endpoint_id INTEGER NOT NULL,\n\
         is_default INTEGER NOT NULL,\n\
         expires_at INTEGER NOT NULL\n\
-    );\n\
-    \n\
-    CREATE TABLE IF NOT EXISTS applications(\n\
+    )", NULL, 0);
+    create_or_migrate("applications", "CREATE TABLE applications(\n\
         app_key TEXT NOT NULL,\n\
         secret TEXT NOT NULL,\n\
         endpoint_id INTEGER NOT NULL UNIQUE\n\
-    )", NULL, NULL, &errmsg);
-    if (SQLITE_OK != ret) {
-//         error_set(error, FATAL, _("can't create tables for module %s: %s"), "account", errmsg);
-        debug("%s", errmsg);
-        sqlite3_free(errmsg);
-    }
+    )", NULL, 0);
+
+    statement_batched_prepare(statements, prepared, STMT_COUNT);
 
     // TODO: for compatibility
     acd = mem_new(*acd);
@@ -331,39 +326,6 @@ static bool account_early_init(void)
     acd->applications = hashtable_new(value_hash, value_equal, NULL, NULL, application_dtor);
     acd->accounts = hashtable_ascii_cs_new(NULL, NULL /* no dtor for key as it is also part of the value */, account_account_dtor);
     acd->modules_callbacks = hashtable_ascii_cs_new(NULL, NULL /* no dtor for key as it is also part of the value */, free);
-
-    // <TODO: move to main.c>
-    if (NULL == (home = getenv("HOME"))) {
-# ifdef _MSC_VER
-#  ifndef CSIDL_PROFILE
-#   define CSIDL_PROFILE 40
-#  endif /* CSIDL_PROFILE */
-        if (NULL == (home = getenv("USERPROFILE"))) {
-            HRESULT hr;
-            LPITEMIDLIST pidl = NULL;
-
-            hr = SHGetSpecialFolderLocation(NULL, CSIDL_PROFILE, &pidl);
-            if (S_OK == hr) {
-                SHGetPathFromIDList(pidl, buffer);
-                home = buffer;
-                CoTaskMemFree(pidl);
-            }
-        }
-# else
-        struct passwd *pwd;
-
-        if (NULL != (pwd = getpwuid(getuid()))) {
-            home = pwd->pw_dir;
-        }
-# endif /* _MSC_VER */
-    }
-
-    if (NULL != home) {
-        if (snprintf(acd->path, ARRAY_SIZE(acd->path), "%s%c%s", home, DIRECTORY_SEPARATOR, OVH_SHELL_CONFIG_FILE) >= (int) ARRAY_SIZE(acd->path)) {
-            return FALSE;
-        }
-    }
-    // </TODO: move to main.c>
 
     return TRUE;
 }
@@ -392,7 +354,6 @@ static command_status_t account_list(COMMAND_ARGS)
     bool isdefault;
     table_t *t;
     Iterator it;
-    sqlite3_stmt *stmt;
     account_t account = { 0 };
 
     USED(arg);
@@ -407,15 +368,13 @@ static command_status_t account_list(COMMAND_ARGS)
         _("current"), TABLE_TYPE_BOOLEAN,
         _("default"), TABLE_TYPE_BOOLEAN
     );
-    sqlite3_prepare_v2(db, "SELECT * FROM accounts", -1, &stmt, NULL);
-    statement_to_iterator(&it, stmt, "isssiii", &id, &account.account, &account.password, &account.consumer_key, &account.endpoint_id, &isdefault, &account.expires_at);
+    statement_to_iterator(&it, prepared[STMT_ACCOUNT_LIST], "isssiii", &id, &account.account, &account.password, &account.consumer_key, &account.endpoint_id, &isdefault, &account.expires_at);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         table_store(t, account.account, account.consumer_key, timestamp_to_tm(account.expires_at), NULL != account.password, account.endpoint_id, FALSE /* TODO */, isdefault);
         free(account.password);
     }
     iterator_close(&it);
-    sqlite3_finalize(stmt);
     table_display(t, TABLE_FLAG_NONE);
     table_destroy(t);
 
@@ -502,48 +461,41 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
         a->expires_at = expires_at;
     }
     if (!update) {
-        sqlite3_stmt *stmt;
         // if this is the first account, set it as current
         if (0 == hashtable_size(acd->accounts)) {
             account_set_current(a, TRUE);
         }
         hashtable_quick_put(acd->accounts, 0, h, a->account, a, NULL);
 
-        sqlite3_prepare_v2(db, "INSERT INTO accounts(name, password, consumer_key, endpoint_id, is_default, expires_at) VALUES(?, ?, ?, ?, ?, ?)", -1, &stmt, NULL);
-        sqlite3_bind_text(stmt, 1, a->account, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-        sqlite3_bind_text(stmt, 2, a->password, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-        sqlite3_bind_text(stmt, 3, a->consumer_key, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-        sqlite3_bind_int(stmt, 4, a->endpoint_id);
-        sqlite3_bind_int(stmt, 5, 0);
-        sqlite3_bind_int(stmt, 6, a->expires_at);
-        assert(SQLITE_DONE == sqlite3_step(stmt));
-        sqlite3_reset(stmt);
-        sqlite3_finalize(stmt);
+        sqlite3_bind_text(prepared[STMT_ACCOUNT_INSERT], 1, a->account, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+        sqlite3_bind_text(prepared[STMT_ACCOUNT_INSERT], 2, a->password, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+        sqlite3_bind_text(prepared[STMT_ACCOUNT_INSERT], 3, a->consumer_key, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+        sqlite3_bind_int(prepared[STMT_ACCOUNT_INSERT], 4, a->endpoint_id);
+        sqlite3_bind_int(prepared[STMT_ACCOUNT_INSERT], 5, 0);
+        sqlite3_bind_int(prepared[STMT_ACCOUNT_INSERT], 6, a->expires_at);
+        assert(SQLITE_DONE == sqlite3_step(prepared[STMT_ACCOUNT_INSERT]));
+        sqlite3_reset(prepared[STMT_ACCOUNT_INSERT]);
     } else {
-        sqlite3_stmt *stmt;
-
-        sqlite3_prepare_v2(db, "UPDATE accounts SET password = IFNULL(?, password), consumer_key = IFNULL(?, consumer_key), expires_at = IFNULL(?, expires_at), endpoint_id = IFNULL(?, endpoint_id) WHERE name = ?", -1, &stmt, NULL);
         if (NULL != args->password) {
-            sqlite3_bind_text(stmt, 1, a->password, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+            sqlite3_bind_text(prepared[STMT_ACCOUNT_UPDATE], 1, a->password, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
         } else {
-            sqlite3_bind_null(stmt, 1);
+            sqlite3_bind_null(prepared[STMT_ACCOUNT_UPDATE], 1);
         }
         if (NULL != args->consumer_key) {
-            sqlite3_bind_text(stmt, 2, a->consumer_key, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-            sqlite3_bind_int(stmt, 3, a->expires_at);
+            sqlite3_bind_text(prepared[STMT_ACCOUNT_UPDATE], 2, a->consumer_key, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+            sqlite3_bind_int(prepared[STMT_ACCOUNT_UPDATE], 3, a->expires_at);
         } else {
-            sqlite3_bind_null(stmt, 2);
-            sqlite3_bind_null(stmt, 3);
+            sqlite3_bind_null(prepared[STMT_ACCOUNT_UPDATE], 2);
+            sqlite3_bind_null(prepared[STMT_ACCOUNT_UPDATE], 3);
         }
         if (args->endpoint_present) {
-            sqlite3_bind_int(stmt, 4, a->endpoint_id);
+            sqlite3_bind_int(prepared[STMT_ACCOUNT_UPDATE], 4, a->endpoint_id);
         } else {
-            sqlite3_bind_null(stmt, 4);
+            sqlite3_bind_null(prepared[STMT_ACCOUNT_UPDATE], 4);
         }
-        sqlite3_bind_text(stmt, 5, a->account, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-        assert(SQLITE_DONE == sqlite3_step(stmt));
-        sqlite3_reset(stmt);
-        sqlite3_finalize(stmt);
+        sqlite3_bind_text(prepared[STMT_ACCOUNT_UPDATE], 5, a->account, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+        assert(SQLITE_DONE == sqlite3_step(prepared[STMT_ACCOUNT_UPDATE]));
+        sqlite3_reset(prepared[STMT_ACCOUNT_UPDATE]);
     }
 
     return COMMAND_SUCCESS;
@@ -575,13 +527,10 @@ static command_status_t account_default_set(COMMAND_ARGS)
     assert(NULL != args->account);
     if ((ret = hashtable_get(acd->accounts, args->account, &ptr))) {
         acd->autosel = ptr;
-        sqlite3_stmt *stmt;
 
-        sqlite3_prepare_v2(db, "UPDATE accounts SET is_default = (name = ?)", -1, &stmt, NULL);
-        sqlite3_bind_text(stmt, 1, args->account, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-        assert(SQLITE_DONE == sqlite3_step(stmt));
-        sqlite3_reset(stmt);
-        sqlite3_finalize(stmt);
+        sqlite3_bind_text(prepared[STMT_ACCOUNT_UPDATE_DEFAULT], 1, args->account, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+        assert(SQLITE_DONE == sqlite3_step(prepared[STMT_ACCOUNT_UPDATE_DEFAULT]));
+        sqlite3_reset(prepared[STMT_ACCOUNT_UPDATE_DEFAULT]);
     } else {
         UNEXISTANT_ACCOUNT;
     }
@@ -604,13 +553,9 @@ static command_status_t account_delete(COMMAND_ARGS)
         acd->current_account = NULL;
     }
     if ((ret = hashtable_delete(acd->accounts, args->account, DTOR_CALL))) {
-        sqlite3_stmt *stmt;
-
-        sqlite3_prepare_v2(db, "DELETE FROM accounts WHERE name = ?", -1, &stmt, NULL);
-        sqlite3_bind_text(stmt, 1, args->account, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-        assert(SQLITE_DONE == sqlite3_step(stmt));
-        sqlite3_reset(stmt);
-        sqlite3_finalize(stmt);
+        sqlite3_bind_text(prepared[STMT_ACCOUNT_DELETE], 1, args->account, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+        assert(SQLITE_DONE == sqlite3_step(prepared[STMT_ACCOUNT_DELETE]));
+        sqlite3_reset(prepared[STMT_ACCOUNT_DELETE]);
     } else {
         UNEXISTANT_ACCOUNT;
     }
@@ -640,7 +585,6 @@ static command_status_t application_list(COMMAND_ARGS)
 {
     table_t *t;
     Iterator it;
-    sqlite3_stmt *stmt;
     application_t application = { 0 };
 
     USED(arg);
@@ -652,14 +596,12 @@ static command_status_t application_list(COMMAND_ARGS)
         _("key"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
         _("secret"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE
     );
-    sqlite3_prepare_v2(db, "SELECT * FROM applications", -1, &stmt, NULL);
-    statement_to_iterator(&it, stmt, "ssi", &application.key, &application.secret, &application.endpoint_id);
+    statement_to_iterator(&it, prepared[STMT_APPLICATION_LIST], "ssi", &application.key, &application.secret, &application.endpoint_id);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         table_store(t, application.endpoint_id, application.key, application.secret);
     }
     iterator_close(&it);
-    sqlite3_finalize(stmt);
     table_display(t, TABLE_FLAG_NONE);
     table_destroy(t);
 
@@ -668,7 +610,6 @@ static command_status_t application_list(COMMAND_ARGS)
 
 static command_status_t application_add(COMMAND_ARGS)
 {
-    sqlite3_stmt *stmt;
     application_t *app;
     application_argument_t *args;
 
@@ -684,13 +625,11 @@ static command_status_t application_add(COMMAND_ARGS)
     app->endpoint_id = args->endpoint;
     hashtable_direct_put(acd->applications, 0, app->endpoint_id, app, NULL);
 
-    sqlite3_prepare_v2(db, "INSERT INTO applications(app_key, secret, endpoint_id) VALUES(?, ?, ?)", -1, &stmt, NULL);
-    sqlite3_bind_text(stmt, 1, app->key, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-    sqlite3_bind_text(stmt, 2, app->secret, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-    sqlite3_bind_int(stmt, 3, app->endpoint_id);
-    assert(SQLITE_DONE == sqlite3_step(stmt));
-    sqlite3_reset(stmt);
-    sqlite3_finalize(stmt);
+    sqlite3_bind_text(prepared[STMT_APPLICATION_INSERT], 1, app->key, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+    sqlite3_bind_text(prepared[STMT_APPLICATION_INSERT], 2, app->secret, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+    sqlite3_bind_int(prepared[STMT_APPLICATION_INSERT], 3, app->endpoint_id);
+    assert(SQLITE_DONE == sqlite3_step(prepared[STMT_APPLICATION_INSERT]));
+    sqlite3_reset(prepared[STMT_APPLICATION_INSERT]);
 
     return COMMAND_SUCCESS;
 }
@@ -703,13 +642,9 @@ static command_status_t application_delete(COMMAND_ARGS)
     USED(mainopts);
     args = (application_argument_t *) arg;
     if (hashtable_direct_delete(acd->applications, args->endpoint, TRUE)) {
-        sqlite3_stmt *stmt;
-
-        sqlite3_prepare_v2(db, "DELETE FROM applications WHERE endpoint_id = ?", -1, &stmt, NULL);
-        sqlite3_bind_int(stmt, 1, args->endpoint);
-        assert(SQLITE_DONE == sqlite3_step(stmt));
-        sqlite3_reset(stmt);
-        sqlite3_finalize(stmt);
+        sqlite3_bind_int(prepared[STMT_APPLICATION_DELETE], 1, args->endpoint);
+        assert(SQLITE_DONE == sqlite3_step(prepared[STMT_APPLICATION_DELETE]));
+        sqlite3_reset(prepared[STMT_APPLICATION_DELETE]);
     } else {
         error_set(error, NOTICE, _("no application associated to endpoint %s"), endpoint_names[args->endpoint]);
     }

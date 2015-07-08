@@ -47,7 +47,7 @@ typedef struct {
 
 static bool http_log = TRUE;
 
-bool api_ctor(void)
+static bool api_ctor(void)
 {
     md = EVP_sha1();
 
@@ -558,8 +558,6 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
     return NULL != *output;
 }
 
-#define STRINGIFY(x) #x
-#define STRINGIFY_EXPANDED(x) STRINGIFY(x)
 #define DEFAULT_CONSUMER_KEY_EXPIRATION 86400 /* 1 day */
 
 const char *request_consumer_key(time_t *expires_at, error_t **error)

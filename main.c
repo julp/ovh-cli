@@ -17,6 +17,7 @@ typedef struct {
     DPtrArray *possibilities;
 } editline_data_t;
 
+extern module_t sqlite_module;
 extern module_t openssl_module;
 extern module_t curl_module;
 extern module_t libxml_module;
@@ -100,6 +101,7 @@ const endpoint_t *endpoint_by_name(const char *name/*, error_t **error*/)
 #endif
 
 static const module_t */*builtin_*/modules[] = {
+    &sqlite_module,
     &openssl_module,
     &curl_module,
     &libxml_module,
@@ -298,12 +300,9 @@ int main(int argc, char **argv)
     g = graph_new();
     ret = EXIT_SUCCESS;
     bzero(&mainopts, sizeof(mainopts));
-    if (SQLITE_OK != sqlite3_open("/tmp/ovh.db", &db)) {
-        printf("%s\n", sqlite3_errmsg(db));
-    }
     for (i = 0; i < ARRAY_SIZE(modules); i++) {
         if (NULL != modules[i]->early_init) {
-            modules[i]->early_init();
+            modules[i]->early_init(); // TODO: check returned value
         }
     }
     atexit(cleanup);
@@ -395,7 +394,6 @@ int main(int argc, char **argv)
         print_error(error);
         convert_array_free(argc, argv, utf8_argv);
     }
-    sqlite3_close(db);
 
     return ret;
 }

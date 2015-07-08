@@ -23,6 +23,7 @@
 * libedit (autocompletion)
 * libiconv
 * gettext (optional)
+* sqlite3
 
 ## Install
 

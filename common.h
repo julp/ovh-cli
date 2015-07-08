@@ -64,7 +64,7 @@
 
 # include "config.h"
 # define DIRECTORY_SEPARATOR '/'
-# define OVH_SHELL_CONFIG_FILE ".ovh"
+# define OVH_DB_FILENAME ".ovh.sqlite"
 
 # define ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
 # define STR_LEN(str)      (ARRAY_SIZE(str) - 1)
@@ -155,6 +155,9 @@ typedef void *(*DupFunc)(const void *);
 #  define YELLOW(str) str
 #  define GRAY(str)   str
 # endif /* DEBUG */
+
+# define STRINGIFY(x) #x
+# define STRINGIFY_EXPANDED(x) STRINGIFY(x)
 
 #ifdef DEBUG
 # ifdef _MSC_VER

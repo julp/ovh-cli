@@ -38,6 +38,5 @@ typedef struct {
 } module_t;
 
 # include <sqlite3.h>
-sqlite3 *db;
 
 #endif /* !COMMAND_H */
