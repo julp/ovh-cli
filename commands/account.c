@@ -85,7 +85,7 @@ static const char *statements[STMT_COUNT] = {
     [ STMT_ACCOUNT_INSERT ]         = "INSERT INTO accounts(name, password, consumer_key, endpoint_id, is_default, expires_at) VALUES(?, ?, ?, ?, ?, ?)",
     [ STMT_ACCOUNT_DELETE ]         = "DELETE FROM accounts WHERE name = ?",
     [ STMT_ACCOUNT_LOAD ]           = "SELECT * FROM accounts WHERE name = ?",
-    [ STMT_ACCOUNT_LOAD_DEFAULT ]   = "SELECT * FROM accounts WHERE is_default = 1",
+    [ STMT_ACCOUNT_LOAD_DEFAULT ]   = "SELECT * FROM accounts ORDER BY is_default DESC LIMIT 1",
     [ STMT_ACCOUNT_UPDATE_DEFAULT ] = "UPDATE accounts SET is_default = (name = ?)",
     [ STMT_ACCOUNT_UPDATE_KEY ]     = "UPDATE accounts SET consumer_key = ?, expires_at = ? WHERE name = ?",
     [ STMT_APPLICATION_LIST ]       = "SELECT * FROM applications",
