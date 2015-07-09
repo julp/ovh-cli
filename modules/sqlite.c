@@ -14,7 +14,8 @@
 typedef enum {
     SQLITE_TYPE_BOOL,
     SQLITE_TYPE_INT,
-    SQLITE_TYPE_STRING
+    SQLITE_TYPE_STRING,
+    SQLITE_TYPE_IGNORE
 } sqlite_bind_type_t;
 
 typedef struct {
@@ -31,6 +32,12 @@ typedef struct {
 static sqlite3 *db;
 static int user_version;
 static char db_path[MAXPATHLEN];
+
+/**
+ * NOTE:
+ * - for sqlite3_column_* functions, the first column is 0
+ * - in the other hand, for sqlite3_bind_* functions, the first parameter is 1
+ */
 
 enum {
     // account
@@ -102,6 +109,9 @@ static void statement_iterator_current(const void *collection, void **state, voi
                     }
                     break;
                 }
+                case SQLITE_TYPE_IGNORE:
+                    // NOP
+                    break;
                 default:
                     assert(FALSE);
                     break;
@@ -138,70 +148,6 @@ static void statement_iterator_close(void *state)
     free(sss);
 }
 
-bool statement_fetch(sqlite3_stmt *stmt, error_t **error, ...)
-{
-    bool ret;
-    va_list ap;
-
-    ret = FALSE;
-    va_start(ap, error);
-    switch (sqlite3_step(stmt)) {
-        case SQLITE_ROW:
-        {
-            int i, colcount;
-
-            colcount = sqlite3_column_count(stmt);
-            for (i = 0; i < colcount; i++) {
-                switch (sqlite3_column_type(stmt, i)) {
-                    case SQLITE_INTEGER:
-                    {
-                        int *v;
-
-                        v = va_arg(ap, int *);
-                        *v = sqlite3_column_int(stmt, i);
-                        break;
-                    }
-                    case SQLITE_FLOAT:
-                        // ?
-                        break;
-                    case SQLITE_TEXT:
-                    {
-                        char **uv;
-                        const unsigned char *sv;
-
-                        uv = va_arg(ap, char **);
-                        sv = sqlite3_column_text(stmt, i);
-                        if (NULL == sv) {
-                            *uv = NULL;
-                        } else {
-                            *uv = strdup((char *) sv);
-                        }
-                        break;
-                    }
-                    case SQLITE_BLOB:
-                        break;
-                    case SQLITE_NULL:
-                        // ?
-                        break;
-                    default:
-                        assert(FALSE);
-                        break;
-                }
-            }
-            ret = TRUE;
-            break;
-        }
-        case SQLITE_DONE:
-            break;
-        default:
-            error_set(error, WARN, _(""));
-            break;
-    }
-    va_end(ap);
-
-    return ret;
-}
-
 void statement_to_iterator(Iterator *it, sqlite3_stmt *stmt, const char *outbinds, ...)
 {
     va_list ap;
@@ -226,6 +172,11 @@ void statement_to_iterator(Iterator *it, sqlite3_stmt *stmt, const char *outbind
                     break;
                 case 's':
                     sss->output_binds[i].type = SQLITE_TYPE_STRING;
+                    break;
+                case ' ':
+                case '-':
+                    // ignore
+                    sss->output_binds[i].type = SQLITE_TYPE_IGNORE;
                     break;
                 default:
                     assert(FALSE);
@@ -321,7 +272,7 @@ void create_or_migrate(const char *table_name, const char *create_stmt, sqlite_m
     }
 }
 
-int64_t statement_execute(sqlite3_stmt *stmt, /*error_t **error, */const char *inbinds, ...)
+void statement_bind(sqlite3_stmt *stmt, const char *inbinds, ...)
 {
     va_list ap;
     const char *p;
@@ -338,17 +289,17 @@ int64_t statement_execute(sqlite3_stmt *stmt, /*error_t **error, */const char *i
 #endif
     va_start(ap, inbinds);
     for (p = inbinds; '\0' != *p; p++) {
-        switch (*inbinds) {
+        switch (*p) {
             case 'n':
                 va_arg(ap, void *);
-                sqlite3_bind_null(stmt, p - inbinds);
+                sqlite3_bind_null(stmt, p - inbinds + 1);
                 break;
             case 'd':
             {
                 double v;
 
                 v = va_arg(ap, double);
-                sqlite3_bind_double(stmt, p - inbinds, v);
+                sqlite3_bind_double(stmt, p - inbinds + 1, v);
                 break;
             }
             case 'b':
@@ -357,7 +308,7 @@ int64_t statement_execute(sqlite3_stmt *stmt, /*error_t **error, */const char *i
                 int v;
 
                 v = va_arg(ap, int);
-                sqlite3_bind_int(stmt, p - inbinds, v);
+                sqlite3_bind_int(stmt, p - inbinds + 1, v);
                 break;
             }
             case 's':
@@ -365,7 +316,7 @@ int64_t statement_execute(sqlite3_stmt *stmt, /*error_t **error, */const char *i
                 char *v;
 
                 v = va_arg(ap, char *);
-                sqlite3_bind_text(stmt, p - inbinds, v, -1, SQLITE_TRANSIENT);
+                sqlite3_bind_text(stmt, p - inbinds + 1, v, -1, SQLITE_TRANSIENT);
                 break;
             }
             default:
@@ -374,10 +325,68 @@ int64_t statement_execute(sqlite3_stmt *stmt, /*error_t **error, */const char *i
         }
     }
     va_end(ap);
-    sqlite3_step(stmt); // pas compatible avec SELECT
+}
 
-    return sqlite3_changes(db);
-    return sqlite3_last_insert_rowid(db);
+bool statement_fetch(sqlite3_stmt *stmt, error_t **error, const char *outbinds, ...)
+{
+    bool ret;
+    va_list ap;
+
+    ret = FALSE;
+    va_start(ap, outbinds);
+    switch (sqlite3_step(stmt)) {
+        case SQLITE_ROW:
+        {
+            const char *p;
+
+            assert(((size_t) sqlite3_column_count(stmt)) >= strlen(outbinds)); // allow unused result columns at the end
+            for (p = outbinds; '\0' != *p; p++) {
+                switch (*p) {
+                    case 'b':
+                    case 'i':
+                    {
+                        int *v;
+
+                        v = va_arg(ap, int *);
+                        *v = sqlite3_column_int(stmt, p - outbinds);
+                        break;
+                    }
+                    case 's':
+                    {
+                        char **uv;
+                        const unsigned char *sv;
+
+                        uv = va_arg(ap, char **);
+                        sv = sqlite3_column_text(stmt, p - outbinds);
+                        if (NULL == sv) {
+                            *uv = NULL;
+                        } else {
+                            *uv = strdup((char *) sv);
+                        }
+                        break;
+                    }
+                    case ' ':
+                    case '-':
+                        // ignore
+                        break;
+                    default:
+                        assert(FALSE);
+                        break;
+                }
+            }
+            ret = TRUE;
+            break;
+        }
+        case SQLITE_DONE:
+            // empty result set (no error and return FALSE to caller, it should known it doesn't remain any data to read)
+            break;
+        default:
+            error_set(error, WARN, _("%s"), sqlite3_errmsg(db));
+            break;
+    }
+    va_end(ap);
+
+    return ret;
 }
 
 static bool sqlite_early_ctor(void)

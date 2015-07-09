@@ -42,6 +42,9 @@ typedef struct {
     char *secret;
 } application_argument_t;
 
+#define NULL_OR_EMPTY(s) \
+    (NULL == (s) || '\0' == *(s))
+
 #define UNEXISTANT_ACCOUNT \
     do { \
         error_set(error, WARN, _("no account named '%s'"), args->account); \
@@ -78,6 +81,9 @@ enum {
     // count
     STMT_COUNT
 };
+
+#define ACCOUNT_BINDS "isssiii"
+#define APPLICATION_BINDS "ssi"
 
 static const char *statements[STMT_COUNT] = {
     [ STMT_ACCOUNT_LIST ]           = "SELECT * FROM accounts",
@@ -137,21 +143,26 @@ static bool account_set_current(const char *name, error_t **error)
         account_flush();
         if (NULL == name) {
             stmt = STMT_ACCOUNT_LOAD_DEFAULT;
+            statement_bind(prepared[stmt], "");
         } else {
             stmt = STMT_ACCOUNT_LOAD;
-            sqlite3_bind_text(prepared[stmt], 1, name, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+//             sqlite3_bind_text(prepared[stmt], 1, name, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
+            statement_bind(prepared[stmt], "s", name);
         }
-        if (statement_fetch(prepared[stmt], error, &acd.current_account.id, &acd.current_account.name, &acd.current_account.password, &acd.current_account.consumer_key, &acd.current_account.endpoint_id, &acd.current_account.isdefault, &acd.current_account.expires_at)) {
-            sqlite3_reset(prepared[stmt]);
-            sqlite3_bind_int(prepared[STMT_APPLICATION_LOAD], 1, acd.current_account.endpoint_id);
-            if (statement_fetch(prepared[STMT_APPLICATION_LOAD], error, &acd.current_application.key, &acd.current_application.secret, &acd.current_application.endpoint_id)) {
-                sqlite3_reset(prepared[STMT_APPLICATION_LOAD]);
+        if (statement_fetch(prepared[stmt], error, ACCOUNT_BINDS, &acd.current_account.id, &acd.current_account.name, &acd.current_account.password, &acd.current_account.consumer_key, &acd.current_account.endpoint_id, &acd.current_account.isdefault, &acd.current_account.expires_at)) {
+//             sqlite3_reset(prepared[stmt]);
+debug("acd.current_account.endpoint_id = %d", acd.current_account.id);
+            statement_bind(prepared[STMT_APPLICATION_LOAD], "i", acd.current_account.endpoint_id);
+            if (statement_fetch(prepared[STMT_APPLICATION_LOAD], error, APPLICATION_BINDS, &acd.current_application.key, &acd.current_application.secret, &acd.current_application.endpoint_id)) {
+//                 sqlite3_reset(prepared[STMT_APPLICATION_LOAD]);
             } else {
-                // ?
+                return FALSE;
             }
         } else {
-            // ?
+            return FALSE;
         }
+        // check for valid CK
+//         check_current_application_and_account(FALSE, error);
         // notify modules
         hashtable_to_iterator(&it, acd.modules_callbacks);
         for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
@@ -188,15 +199,17 @@ static bool account_set_current(const char *name, error_t **error)
 
 bool check_current_application_and_account(bool skip_CK_check, error_t **error)
 {
-    if (NULL == current_account) {
+    if (NO_ACTIVE_ACCOUNT) {
         error_set(error, WARN, _("no current account"));
         return FALSE;
     }
-//     if (NULL == acd.current_account.endpoint_id) {
-//         error_set(error, WARN, _("no endpoint associated to account '%s'"), acd.current_account.name);
-//         return FALSE;
-//     }
-    if (NULL == current_application) {
+#if 0
+    if (NULL == acd.current_account.endpoint_id) {
+        error_set(error, WARN, _("no endpoint associated to account '%s'"), acd.current_account.name);
+        return FALSE;
+    }
+#endif
+    if (NULL_OR_EMPTY(acd.current_application.key)) {
         error_set(error, WARN, _("no application registered for endpoint '%s'"), endpoint_names[acd.current_account.endpoint_id]);
         return FALSE;
     }
@@ -204,7 +217,7 @@ bool check_current_application_and_account(bool skip_CK_check, error_t **error)
         return TRUE;
     }
     // if no CK is defined or it is expired, get one
-    if (NULL == acd.current_account.consumer_key || (0 != acd.current_account.expires_at && acd.current_account.expires_at < time(NULL))) {
+    if (NULL_OR_EMPTY(acd.current_account.consumer_key) || (0 != acd.current_account.expires_at && acd.current_account.expires_at < time(NULL))) {
         // if we successfully had a CK, save it
         if (NULL != (acd.current_account.consumer_key = request_consumer_key(&acd.current_account.expires_at, error))) {
             sqlite3_bind_text(prepared[STMT_ACCOUNT_UPDATE_KEY], 1, acd.current_account.consumer_key, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
@@ -360,7 +373,7 @@ static command_status_t account_list(COMMAND_ARGS)
         _("current"), TABLE_TYPE_BOOLEAN,
         _("default"), TABLE_TYPE_BOOLEAN
     );
-    statement_to_iterator(&it, prepared[STMT_ACCOUNT_LIST], "isssiii", &account.id, &account.name, &account.password, &account.consumer_key, &account.endpoint_id, &account.isdefault, &account.expires_at);
+    statement_to_iterator(&it, prepared[STMT_ACCOUNT_LIST], ACCOUNT_BINDS, &account.id, &account.name, &account.password, &account.consumer_key, &account.endpoint_id, &account.isdefault, &account.expires_at);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         table_store(t, account.name, account.consumer_key, account.expires_at, NULL != account.password, account.endpoint_id, acd.current_account.id == account.id, account.isdefault);
@@ -563,7 +576,7 @@ static command_status_t application_list(COMMAND_ARGS)
         _("key"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
         _("secret"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE
     );
-    statement_to_iterator(&it, prepared[STMT_APPLICATION_LIST], "ssi", &application.key, &application.secret, &application.endpoint_id);
+    statement_to_iterator(&it, prepared[STMT_APPLICATION_LIST], APPLICATION_BINDS, &application.key, &application.secret, &application.endpoint_id);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         table_store(t, application.endpoint_id, application.key, application.secret);
