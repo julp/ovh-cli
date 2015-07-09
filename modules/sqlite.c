@@ -449,9 +449,10 @@ static bool sqlite_early_ctor(void)
 static bool sqlite_late_ctor(error_t **error)
 {
     if (OVH_CLI_VERSION_NUMBER > user_version) {
-//         sqlite3_bind_int(prepared[STMT_SET_USER_VERSION], 1, OVH_CLI_VERSION_NUMBER);
-        assert(SQLITE_DONE == sqlite3_step(prepared[STMT_SET_USER_VERSION]));
-        sqlite3_reset(prepared[STMT_SET_USER_VERSION]);
+//         statement_bind(prepared[STMT_SET_USER_VERSION], "i", OVH_CLI_VERSION_NUMBER); // PRAGMA doesn't handle parameter
+        statement_bind(prepared[STMT_SET_USER_VERSION], "");
+        statement_fetch(prepared[STMT_SET_USER_VERSION], error, "");
+//         sqlite3_reset(prepared[STMT_SET_USER_VERSION]);
     }
 
     return TRUE;
