@@ -5,6 +5,7 @@
 
 #include "common.h"
 #include "command.h"
+#include "modules/sqlite.h"
 #include "struct/xtring.h"
 #include "struct/hashtable.h"
 
@@ -528,10 +529,30 @@ static int strcmpp(const void *p1, const void *p2, void *UNUSED(arg))
     return strcmp(*(char * const *) p1, *(char * const *) p2);
 }
 
+bool complete_from_statement(void *UNUSED(parsed_arguments), const char *current_argument, size_t UNUSED(current_argument_len), DPtrArray *possibilities, void *data)
+{
+    char *v;
+    Iterator it;
+    sqlite3_stmt *stmt;
+
+    assert(NULL != data);
+    stmt = (sqlite3_stmt *) data;
+    statement_bind(stmt, "s", current_argument);
+    statement_to_iterator(&it, stmt, "s", &v);
+    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        iterator_current(&it, NULL);
+        dptrarray_push(possibilities, v); // TODO: values need to be freed
+    }
+    iterator_close(&it);
+
+    return TRUE;
+}
+
 bool complete_from_hashtable_keys(void *UNUSED(parsed_arguments), const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *data)
 {
     Iterator it;
 
+    assert(NULL != data);
     hashtable_to_iterator(&it, (HashTable *) data);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         void *k;
