@@ -6,26 +6,24 @@
 #define HOUR (60 * MINUTE)
 #define DAY (24 * HOUR)
 
-bool date_parse_simple(const char *date, const char *format, time_t *tm, error_t **error)
+bool date_parse_to_timestamp(const char *date, const char *format, time_t *tm)
 {
     char *endptr;
     struct tm ltm = { 0 };
 
-    if (NULL == (endptr = strptime(date, NULL == format ? "%F" : format, &ltm))) {
-        error_set(error, NOTICE, "unable to parse date: %s", date);
-    } else {
+    if (NULL != (endptr = strptime(date, NULL == format ? "%F" : format, &ltm))) {
         *tm = mktime(&ltm);
     }
 
     return NULL != endptr;
 }
 
-bool date_parse(const char *date, const char *format, struct tm *tm, error_t **error)
+bool date_parse(const char *date, const char *format, struct tm *tm, error_t **error) /* DEPRECATED */
 {
     char *endptr;
 
     if (NULL == (endptr = strptime(date, format, tm))) {
-        error_set(error, NOTICE, "unable to parse date: %s", date);
+        error_set(error, NOTICE, _("unable to parse date: %s"), date);
     }
 
     return NULL != endptr;

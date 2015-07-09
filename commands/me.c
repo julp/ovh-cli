@@ -182,23 +182,23 @@ static command_status_t me_credential_list(COMMAND_ARGS)
                 application_t *app;
                 int64_t applicationId;
                 const char *stringified_rules;
-                struct tm lastUse, expiration, creation;
+                time_t lastUse, expiration, creation;
 
                 app = NULL;
                 stringified_rules = "-";
                 root = json_document_get_root(doc);
+                lastUse = expiration = creation = 0;
                 json_object_get_property(root, "status", &v);
                 credentialStatus = json_get_enum(v, credential_status, 0);
                 JSON_GET_PROP_INT(root, "applicationId", applicationId);
                 json_object_get_property(root, "lastUse", &v);
-                bzero(&lastUse, sizeof(lastUse));
                 if (json_null != v) {
-                    date_parse(json_get_string(v), "%FT%T%z", &lastUse, NULL);
+                    date_parse_to_timestamp(json_get_string(v), "%FT%T%z", &lastUse);
                 }
                 json_object_get_property(root, "creation", &v);
-                date_parse(json_get_string(v), "%FT%T%z", &creation, NULL);
+                date_parse_to_timestamp(json_get_string(v), "%FT%T%z", &creation);
                 json_object_get_property(root, "expiration", &v);
-                date_parse(json_get_string(v), "%FT%T%z", &expiration, NULL);
+                date_parse_to_timestamp(json_get_string(v), "%FT%T%z", &expiration);
                 json_object_get_property(root, "rules", &v);
                 {
                     Iterator it;

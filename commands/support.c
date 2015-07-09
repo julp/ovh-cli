@@ -231,7 +231,7 @@ static command_status_t support_tickets_read(COMMAND_ARGS)
             json_object_get_property(v, "from", &f);
             from = json_get_enum(f, authors, -1);
             assert(-1 != from);
-            table_store(t, from, timestamp_to_tm(created_at), timestamp_to_tm(update_at), body);
+            table_store(t, from, created_at, update_at, body);
         }
         iterator_close(&it);
         json_document_destroy(doc);

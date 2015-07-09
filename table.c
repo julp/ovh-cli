@@ -28,7 +28,7 @@ struct table_t {
     resource_t *strings;
     size_t columns_count;
     const char *false_true_string[2];
-    size_t false_true_len[2], max_false_true_len;
+    size_t false_true_len[2], max_false_true_len, max_datetime_len;
 };
 
 typedef struct {
@@ -80,7 +80,7 @@ const char * const false_true[] = {
  * - column titles are expected to be already in "local" charset (gettext, if they are translated, will do it for us)
  * - same for "true"/"false"
  * - columns data are expected to be in UTF-8, we handle their conversion
- * - TABLE_TYPE_DATETIME is not intended for format with non-fixed length output (simple formats like dd/mm/yyyy, yyyy-mm-dd, etc)
+ * - TABLE_TYPE_DATETIME is not intended for format with non-fixed length output (only simple formats like dd/mm/yyyy, yyyy-mm-dd, etc)
  **/
 
 /**
@@ -205,24 +205,16 @@ print_error(error);
     }
 }
 
-void datetime_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
+void datetime_store(table_t *t, va_list ap, column_t *c, value_t *val)
 {
-    struct tm v;
-    char buffer[512];
-    struct tm ltm = { 0 };
+    time_t v;
 
-    v = va_arg(ap, struct tm);
-    if (0 == memcmp(&v, &ltm, sizeof(ltm))) {
-        val->v = (uintptr_t) "-";
-        val->l = STR_LEN("-");
-    } else {
-        val->l = strftime(buffer, ARRAY_SIZE(buffer), "%x %X", &v);
-        assert(val->l > 0);
-        val->v = (uintptr_t) strdup(buffer); // TODO: use and keep a time_t? (easier for sorting?) ; do the strdup (+ redo strftime & co) in display?
-        val->f = TRUE;
-    }
+    v = va_arg(ap, time_t);
+    val->f = FALSE;
+    val->v = (uintptr_t) v;
+    val->l = t->max_datetime_len;
     if (val->l > c->max_len) {
-        c->len = c->min_len = c->max_len = val->l;
+        c->len = c->min_len = c->max_len = t->max_datetime_len;
     }
 }
 
@@ -259,6 +251,9 @@ table_t *table_new(size_t columns_count, ...)
     t->false_true_string[TRUE] = _("true");
     cplen(t->false_true_string[TRUE], &t->false_true_len[TRUE], NULL);
     t->max_false_true_len = MAX(t->false_true_len[FALSE], t->false_true_len[TRUE]);
+    // </>
+    // preflight datetime length
+    t->max_datetime_len = STR_LEN("yyyy/mm/dd hh:ii:ss");
     // </>
     t->columns_count = columns_count;
     t->columns = mem_new_n(*t->columns, columns_count);
@@ -538,6 +533,8 @@ void table_sort(table_t *t, size_t colno/*, int order*/)
             cmpfn = strcmpp;
             break;
         case TABLE_TYPE_INT:
+        case TABLE_TYPE_BOOL:
+        case TABLE_TYPE_DATETIME:
             cmpfn = intcmpp;
             break;
         default:
@@ -662,9 +659,16 @@ void table_display(table_t *t, uint32_t flags)
                                 written = t->false_true_len[r->values[i].v];
                                 break;
                             case TABLE_TYPE_DATETIME:
-                                fputs((const char *) r->values[i].v, stdout);
-                                written = k = r->values[i].l;
+                            {
+                                char buffer[512];
+
+                                if ((time_t) 0 == (time_t) r->values[i].v || (written = strftime(buffer, ARRAY_SIZE(buffer), "%x %X", localtime((time_t *) &r->values[i].v))) < 1) {
+                                    written = STR_LEN("-");
+                                    memcpy(buffer, "-", STR_SIZE("-"));
+                                }
+                                fputs(buffer, stdout);
                                 break;
+                            }
                             default:
                                 assert(FALSE);
                                 break;

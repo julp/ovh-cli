@@ -363,7 +363,7 @@ static command_status_t account_list(COMMAND_ARGS)
     statement_to_iterator(&it, prepared[STMT_ACCOUNT_LIST], "isssiii", &account.id, &account.name, &account.password, &account.consumer_key, &account.endpoint_id, &account.isdefault, &account.expires_at);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
-        table_store(t, account.name, account.consumer_key, timestamp_to_tm(account.expires_at), NULL != account.password, account.endpoint_id, acd.current_account.id == account.id, account.isdefault);
+        table_store(t, account.name, account.consumer_key, account.expires_at, NULL != account.password, account.endpoint_id, acd.current_account.id == account.id, account.isdefault);
         free(account.password);
     }
     iterator_close(&it);
@@ -397,17 +397,11 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
                 expires_at += time(NULL);
                 break;
             case EXPIRES_AT:
-            {
-                char *endptr;
-                struct tm ltm = { 0 };
-
-                if (NULL == (endptr = strptime(args->expiration, "%c", &ltm))) {
+                if (!date_parse_to_timestamp(args->expiration, "%c", &expires_at)) {
                     error_set(error, WARN, _("command aborted: unable to parse expiration date '%s'"), args->expiration);
                     return COMMAND_USAGE;
                 }
-                expires_at = mktime(&ltm);
                 break;
-            }
             default:
                 assert(FALSE);
         }
