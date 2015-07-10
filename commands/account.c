@@ -190,6 +190,21 @@ static bool account_set_current(const char *name, error_t **error)
     return TRUE;
 }
 
+void account_invalidate_consumer_key(error_t **UNUSED(error))
+{
+    free((void *) acd.current_account.consumer_key);
+    acd.current_account.consumer_key = NULL;
+//     acd.current_account.expires_at = 0;
+    /**
+     * error is unused for now, it depends if we make the choice to UPDATE
+     * the database now to be sure that the consumer key is not used anymore
+     * or if we wait the generation of a new one
+     *
+     * for now, just invalidate in memory and wait the generation of a new
+     * one before updating the account in database
+     */
+}
+
 bool check_current_application_and_account(bool skip_CK_check, error_t **error)
 {
     if (NO_ACTIVE_ACCOUNT) {

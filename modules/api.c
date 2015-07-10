@@ -491,10 +491,11 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
                 json_value_t root, reason;
 
                 root = json_document_get_root(doc);
-                if (json_object_get_property(root, "message", &reason)) {
+                if (403L == req->http_status && json_object_get_property(root, "errorCode", &reason) && 0 == strcmp(json_get_string(reason), "INVALID_CREDENTIAL")) {
+                    account_invalidate_consumer_key(error);
+                } else if (json_object_get_property(root, "message", &reason)) {
                     error_set(error, NOTICE, json_get_string(reason));
                 }
-                // if property "errorCode" exists and its value is "INVALID_CREDENTIAL", we should invalidate consumer key?
                 json_document_destroy(doc);
             }
         } else {
