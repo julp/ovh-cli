@@ -174,7 +174,6 @@ void string_store(table_t *t, va_list ap, column_t *c, value_t *val)
     char *s_local;
     error_t *error;
     const char *s_utf8;
-    extern void print_error(error_t *); // TODO: temporary "fix" to remove warnings due to usage of print_error in this function
 
     // TODO: real error handling! Let caller handle this by adding a error_t **error in argument?
 error = NULL;
