@@ -538,7 +538,7 @@ bool complete_from_statement(void *UNUSED(parsed_arguments), const char *current
     assert(NULL != data);
     stmt = (sqlite3_stmt *) data;
     statement_bind(stmt, "s", current_argument);
-    statement_to_iterator(&it, stmt, "s", &v);
+    statement_to_iterator(&it, stmt, "s", &v); // TODO: bind only current_argument_len first characters of current_argument?
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         dptrarray_push(possibilities, v); // TODO: values need to be freed
