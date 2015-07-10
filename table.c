@@ -1,4 +1,6 @@
 #include <string.h>
+#include <wchar.h>
+#include <locale.h>
 
 #include "common.h"
 #include "table.h"
@@ -90,8 +92,6 @@ const char * const false_true[] = {
  * - map TABLE_TYPE_BOOL on TABLE_TYPE_ENUM ? (copy t->false_true* to t->columns[i].enum*)
  **/
 
-#include <wchar.h>
-#include <locale.h>
 // TODO: if the string contains \n: return length of the longest line?
 static bool cplen(const char *string, size_t *string_len, error_t **error)
 {
