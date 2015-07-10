@@ -9,7 +9,7 @@
 #include "struct/xtring.h"
 #include "struct/hashtable.h"
 
-static bool me_ctor(void)
+static bool me_ctor(error_t **UNUSED(error))
 {
     // NOP (for now)
 

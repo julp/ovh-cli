@@ -294,9 +294,9 @@ static void account_data_dtor(void *data)
     }
 }
 
-static bool account_early_ctor(void)
+static bool account_early_ctor(error_t **error)
 {
-    create_or_migrate("accounts", "CREATE TABLE accounts(\n\
+    if (!create_or_migrate("accounts", "CREATE TABLE accounts(\n\
         id INTEGER NOT NULL PRIMARY KEY,\n\
         name TEXT NOT NULL UNIQUE,\n\
         password TEXT,\n\
@@ -304,12 +304,16 @@ static bool account_early_ctor(void)
         endpoint_id INTEGER NOT NULL,\n\
         is_default INTEGER NOT NULL,\n\
         expires_at INTEGER NOT NULL\n\
-    )", NULL, 0);
-    create_or_migrate("applications", "CREATE TABLE applications(\n\
+    )", NULL, 0, error)) {
+        return FALSE;
+    }
+    if (!create_or_migrate("applications", "CREATE TABLE applications(\n\
         app_key TEXT NOT NULL,\n\
         secret TEXT NOT NULL,\n\
         endpoint_id INTEGER NOT NULL UNIQUE\n\
-    )", NULL, 0);
+    )", NULL, 0, error)) {
+        return FALSE;
+    }
 
     statement_batched_prepare(statements, prepared, STMT_COUNT);
 

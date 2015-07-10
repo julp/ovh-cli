@@ -4,7 +4,7 @@
 
 #define PACKAGE "ovh-cli"
 
-bool nls_ctor(void)
+bool nls_ctor(error_t **UNUSED(error))
 {
     setlocale(LC_ALL, "");
 #ifndef HAVE_STRTOD_L

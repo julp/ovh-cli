@@ -13,7 +13,7 @@ typedef struct {
 int sqlite_affected_rows(void);
 int sqlite_last_insert_id(void);
 
-void create_or_migrate(const char *, const char *, sqlite_migration_t *, size_t);
+bool create_or_migrate(const char *, const char *, sqlite_migration_t *, size_t, error_t **);
 
 void statement_bind(sqlite3_stmt *, const char *, ...);
 bool statement_fetch(sqlite3_stmt *, error_t **, const char *, ...);

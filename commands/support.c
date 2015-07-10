@@ -10,7 +10,7 @@
 
 #define MODULE_NAME "support"
 
-static bool support_ctor(void)
+static bool support_ctor(error_t **UNUSED(error))
 {
     // NOP (for now)
 

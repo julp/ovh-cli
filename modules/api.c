@@ -47,7 +47,7 @@ typedef struct {
 
 static bool http_log = TRUE;
 
-static bool api_ctor(void)
+static bool api_ctor(error_t **UNUSED(error))
 {
     md = EVP_sha1();
 

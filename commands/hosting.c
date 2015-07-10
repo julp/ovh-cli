@@ -148,7 +148,7 @@ static void hosting_on_set_account(void **data)
     }
 }
 
-static bool hosting_ctor(void)
+static bool hosting_ctor(error_t **UNUSED(error))
 {
     account_register_module_callbacks(MODULE_NAME, service_set_destroy, hosting_on_set_account);
 

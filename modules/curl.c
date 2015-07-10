@@ -2,7 +2,7 @@
 #include "common.h"
 #include "command.h"
 
-static bool curl_ctor(void)
+static bool curl_ctor(error_t **UNUSED(error))
 {
     return CURLE_OK == curl_global_init(CURL_GLOBAL_ALL);
 }

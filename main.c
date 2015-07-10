@@ -302,13 +302,17 @@ int main(int argc, char **argv)
     bzero(&mainopts, sizeof(mainopts));
     for (i = 0; i < ARRAY_SIZE(modules); i++) {
         if (NULL != modules[i]->early_init) {
-            modules[i]->early_init(); // TODO: check returned value
+            if (!modules[i]->early_init(&error)) {
+                print_error(error);
+            }
         }
     }
     atexit(cleanup);
     for (i = 0; i < ARRAY_SIZE(modules); i++) {
         if (NULL != modules[i]->late_init) {
-            modules[i]->late_init(&error);
+            if (!modules[i]->late_init(&error)) {
+                print_error(error);
+            }
         }
     }
     for (i = 0; i < ARRAY_SIZE(modules); i++) {

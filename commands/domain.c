@@ -138,7 +138,7 @@ static void domain_on_set_account(void **data)
     }
 }
 
-static bool domain_ctor(void)
+static bool domain_ctor(error_t **UNUSED(error))
 {
     account_register_module_callbacks(MODULE_NAME, domain_set_destroy, domain_on_set_account);
 

@@ -233,7 +233,7 @@ int sqlite_affected_rows(void)
     return sqlite3_changes(db);
 }
 
-void create_or_migrate(const char *table_name, const char *create_stmt, sqlite_migration_t *migrations, size_t migrations_count/*, error_t **error*/)
+bool create_or_migrate(const char *table_name, const char *create_stmt, sqlite_migration_t *migrations, size_t migrations_count, error_t **error)
 {
     int ret;
     size_t i;
@@ -242,9 +242,8 @@ void create_or_migrate(const char *table_name, const char *create_stmt, sqlite_m
 
     ret = snprintf(buffer, ARRAY_SIZE(buffer), "PRAGMA table_info(\"%s\")", table_name);
     if (ret < 0 || ((size_t) ret) >= ARRAY_SIZE(buffer)) {
-//         error_set(error, FATAL, _("can't create table %s: %s"), table_name, _("buffer overflow"));
-        debug(_("can't create table %s: %s"), table_name, _("buffer overflow"));
-        return;
+        error_set(error, FATAL, _("can't create table %s: %s"), table_name, _("buffer overflow"));
+        return FALSE;
     }
     if (SQLITE_OK == (ret = sqlite3_prepare_v2(db, buffer, -1, &stmt, NULL))) {
         switch (sqlite3_step(stmt)) {
@@ -259,17 +258,18 @@ void create_or_migrate(const char *table_name, const char *create_stmt, sqlite_m
                 }
                 break;
             default:
-                // error
+                // NOP: error is handled below
                 break;
         }
         sqlite3_reset(stmt);
         sqlite3_finalize(stmt);
     }
     if (SQLITE_OK != ret) {
-//         error_set(error, FATAL, "%s", errmsg);
-        debug("%s", errmsg);
+        error_set(error, FATAL, "%s", errmsg);
         sqlite3_free(errmsg);
     }
+
+    return SQLITE_OK == ret;
 }
 
 void statement_bind(sqlite3_stmt *stmt, const char *inbinds, ...)
@@ -389,7 +389,7 @@ bool statement_fetch(sqlite3_stmt *stmt, error_t **error, const char *outbinds, 
     return ret;
 }
 
-static bool sqlite_early_ctor(void)
+static bool sqlite_early_ctor(error_t **error)
 {
     int ret;
     char *home;
@@ -429,16 +429,14 @@ static bool sqlite_early_ctor(void)
     }
     // open database
     if (SQLITE_OK != (ret = sqlite3_open(db_path, &db))) {
-//         error_set(error, FATAL, _("can't open sqlite database %s: %s"), db_path, sqlite3_errmsg(db));
-        printf(_("can't open sqlite database %s: %s"), db_path, sqlite3_errmsg(db));
+        error_set(error, FATAL, _("can't open sqlite database %s: %s"), db_path, sqlite3_errmsg(db));
         return FALSE;
     }
     // preprepare own statement
     statement_batched_prepare(statements, prepared, STMT_COUNT);
     // fetch user_version
     if (SQLITE_ROW != sqlite3_step(prepared[STMT_GET_USER_VERSION])) {
-//         error_set(error, FATAL, _("can't retrieve database version: %s"), db_path, sqlite3_errmsg(db));
-        printf(_("can't retrieve database version: %s"), sqlite3_errmsg(db));
+        error_set(error, FATAL, _("can't retrieve database version: %s"), sqlite3_errmsg(db));
         return FALSE;
     }
     user_version = sqlite3_column_int(prepared[STMT_GET_USER_VERSION], 0);
@@ -455,7 +453,7 @@ static bool sqlite_late_ctor(error_t **error)
 //         sqlite3_reset(prepared[STMT_SET_USER_VERSION]);
     }
 
-    return TRUE;
+    return NULL == *error;
 }
 
 static void sqlite_dtor(void)

@@ -9,7 +9,7 @@
 
 static const char *input_encoding, *output_encoding = "UTF-8";
 
-static bool convert_ctor(void)
+static bool convert_ctor(error_t **UNUSED(error))
 {
 #ifdef BSD
     {

@@ -32,7 +32,7 @@ typedef struct {
     const char *name;
     void (*register_commands)(graph_t *);
     void (*register_rules)(json_value_t, bool);
-    bool (*early_init)(void);
+    bool (*early_init)(error_t **);
     bool (*late_init)(error_t **);
     void (*dtor)(void);
 } module_t;

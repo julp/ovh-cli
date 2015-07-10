@@ -5,7 +5,7 @@
 #include "common.h"
 #include "command.h"
 
-static bool libxml_ctor(void)
+static bool libxml_ctor(error_t **UNUSED(error))
 {
     xmlInitParser();
     xmlXPathInit();

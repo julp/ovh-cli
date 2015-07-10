@@ -82,7 +82,7 @@ static void key_on_set_account(void **data)
     }
 }
 
-static bool key_ctor(void)
+static bool key_ctor(error_t **UNUSED(error))
 {
     account_register_module_callbacks(MODULE_NAME, key_set_destroy, key_on_set_account);
 

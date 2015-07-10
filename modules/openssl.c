@@ -3,7 +3,7 @@
 #include "common.h"
 #include "command.h"
 
-static bool openssl_ctor(void)
+static bool openssl_ctor(error_t **UNUSED(error))
 {
     SSL_library_init();
     OpenSSL_add_all_digests();
