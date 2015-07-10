@@ -7,6 +7,7 @@
 #include "util.h"
 #include "table.h"
 #include "modules/api.h"
+#include "modules/sqlite.h"
 #include "commands/account.h"
 #include "struct/hashtable.h"
 
@@ -27,6 +28,32 @@
  * - tasks
  * - ...
  **/
+
+enum {
+    // dedicated
+    STMT_DEDICATED_LIST,
+    STMT_DEDICATED_UPSERT,
+    // specialized read (select)
+    STMT_DEDICATED_COMPLETION,
+    // boot
+    STMT_BOOT_UPSERT,
+    STMT_BOOT_COMPLETION,
+    // dedicated <=> boot
+    STMT_B_D_LINK,
+    // count
+    STMT_COUNT
+};
+
+static const char *statements[STMT_COUNT] = {
+    [ STMT_DEDICATED_LIST ] = "SELECT * FROM dedicated",
+    [ STMT_DEDICATED_UPSERT ] = "INSERT OR REPLACE INTO dedicated(id, name, datacenter, professional_use, support_level, commercial_range, ip, os, state, reverse, monitoring, rack, root_device, link_speed, boot_id, engaged_up_to, contact_billing, expiration, contact_tech, contact_admin, creation) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    [ STMT_DEDICATED_COMPLETION ] = "SELECT name FROM dedicated",
+    [ STMT_BOOT_UPSERT ] =  "INSERT OR REPLACE INTO boots(id, boot_type, kernel, description) VALUES(?, ?, ?, ?)",
+    [ STMT_BOOT_COMPLETION ] = "SELECT kernel FROM boots WHERE kernel LIKE ? || '%'", // TODO: pick up only the boots of the targetted server
+    [ STMT_B_D_LINK ] = "INSERT OR IGNORE INTO boots_dedicated(boot_id, dedicated_id) VALUES(?, ?)",
+};
+
+static sqlite3_stmt *prepared[STMT_COUNT];
 
 // describe all dedicated servers owned by a given account
 typedef struct {
@@ -53,13 +80,67 @@ typedef struct {
     char *rootDevice;
     uint32_t linkSpeed;
     uint32_t bootId;
+    time_t engagedUpTo;
+    char *contactBilling;
+    time_t expiration;
+    char *contactTech;
+    char *contactAdmin;
+    time_t creation;
 } server_t;
+
+typedef struct {
+    int boot_type;
+    char *boot_name;
+    char *server_name;
+    char *reverse;
+    uint32_t mrtg_period;
+    uint32_t mrtg_type;
+} dedicated_argument_t;
+
+static const char * const datacenters[] = {
+    "bhs1",
+    "bhs2",
+    "bhs3",
+    "bhs4",
+    "dc1",
+    "gra1",
+    "gsw",
+    "p19",
+    "rbx-hz",
+    "rbx1",
+    "rbx2",
+    "rbx3",
+    "rbx4",
+    "rbx5",
+    "rbx6",
+    "sbg1",
+    "sbg2",
+    "sbg3",
+    "sbg4",
+    NULL
+};
 
 static const char * const boot_types[] = {
     "harddisk",
     "ipxeCustomerScript",
     "network",
     "rescue",
+    NULL
+};
+
+static const char * const support_levels[] = {
+    "critical",
+    "fastpath",
+    "gs",
+    "pro",
+    NULL
+};
+
+static const char * const states[] = {
+    "error",
+    "hacked",
+    "hackedBlocked",
+    "ok",
     NULL
 };
 
@@ -106,6 +187,9 @@ static void server_destroy(void *data)
     FREE(s, reverse);
     FREE(s, rack);
     FREE(s, rootDevice);
+    FREE(s, contactBilling);
+    FREE(s, contactAdmin);
+    FREE(s, contactTech);
     free(s);
 }
 
@@ -136,7 +220,12 @@ static server_t *server_new(void)
     INIT(s, reverse);
     INIT(s, rack);
     INIT(s, rootDevice);
+    INIT(s, contactBilling);
+    INIT(s, contactAdmin);
+    INIT(s, contactTech);
     s->boots_uptodate = FALSE;
+    s->engagedUpTo = (time_t) 0;
+    s->bootId = s->linkSpeed = 0;
     s->boots = hashtable_ascii_cs_new((DupFunc) strdup, free, boot_destroy);
 
     return s;
@@ -166,21 +255,84 @@ static void dedicated_on_set_account(void **data)
     }
 }
 
-static bool dedicated_ctor(error_t **UNUSED(error))
+static bool dedicated_ctor(error_t **error)
 {
+    if (!create_or_migrate("boots", "CREATE TABLE boots(\n\
+        id INTEGER NOT NULL PRIMARY KEY, -- OVH ID (bootId)\n\
+        boot_type INT NOT NULL, -- enum\n\
+        kernel TEXT NOT NULL,\n\
+        description TEXT NOT NULL\n\
+    )", NULL, 0, error)) {
+        return FALSE;
+    }
+    if (!create_or_migrate("dedicated", "CREATE TABLE dedicated(\n\
+        -- From GET /dedicated/server/{serviceName}\n\
+        id INTEGER NOT NULL PRIMARY KEY, -- OVH ID (serverId)\n\
+        name TEXT NOT NULL UNIQUE,\n\
+        datacenter INT NOT NULL, -- enum\n\
+        professional_use INT NOT NULL, -- bool\n\
+        support_level INT NOT NULL, -- enum\n\
+        commercial_range TEXT, -- nullable\n\
+        ip TEXT NOT NULL, -- unique ?\n\
+        os TEXT NOT NULL,\n\
+        state INT NOT NULL, -- enum\n\
+        reverse TEXT, -- nullable\n\
+        monitoring INT NOT NULL, -- bool\n\
+        rack TEXT NOT NULL,\n\
+        root_device TEXT, -- nullable\n\
+        link_speed INT, -- nullable\n\
+        boot_id INT REFERENCES boots(id) ON UPDATE CASCADE ON DELETE CASCADE,\n\
+        -- From GET /dedicated/server/{serviceName}/serviceInfos\n\
+        -- status INT NOT NULL, -- enum\n\
+        engaged_up_to INT, -- data, nullable\n\
+        -- possibleRenewPeriod: array of int (JSON response)\n\
+        contact_billing TEXT NOT NULL,\n\
+        -- renew: subobkect (JSON response)\n\
+        -- domain TEXT NOT NULL, -- same as name?\n\
+        expiration INT NOT NULL, -- date\n\
+        contact_tech TEXT NOT NULL,\n\
+        contact_admin TEXT NOT NULL,\n\
+        creation INT NOT NULL -- date\n\
+    )", NULL, 0, error)) {
+        return FALSE;
+    }
+    if (!create_or_migrate("boots_dedicated", "CREATE TABLE boots_dedicated(\n\
+        dedicated_id INT NOT NULL REFERENCES dedicated(id) ON UPDATE CASCADE ON DELETE CASCADE,\n\
+        boot_id INT NOT NULL REFERENCES boots(id) ON UPDATE CASCADE ON DELETE CASCADE,\n\
+        PRIMARY KEY (dedicated_id, boot_id)\n\
+    )", NULL, 0, error)) {
+        return FALSE;
+    }
+
+    statement_batched_prepare(statements, prepared, STMT_COUNT);
+
     account_register_module_callbacks(MODULE_NAME, server_set_destroy, dedicated_on_set_account);
 
     return TRUE;
 }
 
-typedef struct {
-    int boot_type;
-    char *boot_name;
-    char *server_name;
-    char *reverse;
-    uint32_t mrtg_period;
-    uint32_t mrtg_type;
-} dedicated_argument_t;
+static void dedicated_dtor(void)
+{
+    statement_batched_finalize(prepared, STMT_COUNT);
+}
+
+static int string_to_enum(const char *value, const char * const *collection, int fallback)
+{
+    int ret;
+    const char * const *v;
+
+    ret = fallback;
+    if (NULL != value) {
+        for (v = collection; NULL != *v; v++) {
+            if (0 == strcmp(value, *v)) {
+                ret = v - collection;
+                break;
+            }
+        }
+    }
+
+    return ret;
+}
 
 static server_t *fetch_server(server_set_t *ss, const char * const server_name, bool force, error_t **error)
 {
@@ -199,6 +351,7 @@ static server_t *fetch_server(server_set_t *ss, const char * const server_name, 
         request_destroy(req);
         if (request_success) {
             json_value_t root, propvalue;
+            char binds[] = "isibisssisbssiiisissi";
 
             root = json_document_get_root(doc);
             JSON_GET_PROP_STRING(root, "datacenter", s->datacenter);
@@ -207,18 +360,70 @@ static server_t *fetch_server(server_set_t *ss, const char * const server_name, 
             JSON_GET_PROP_STRING(root, "ip", s->ip);
             JSON_GET_PROP_STRING(root, "name", s->name);
             JSON_GET_PROP_STRING(root, "commercialRange", s->commercialRange);
+            if (NULL == s->commercialRange) {
+                binds[5] = 'n';
+            }
             JSON_GET_PROP_STRING(root, "os", s->os);
             JSON_GET_PROP_STRING(root, "state", s->state);
             JSON_GET_PROP_STRING(root, "reverse", s->reverse);
+            if (NULL == s->reverse) {
+                binds[9] = 'n';
+            }
             JSON_GET_PROP_INT(root, "serverId", s->serverId);
             JSON_GET_PROP_BOOL(root, "monitoring", s->monitoring);
             JSON_GET_PROP_STRING(root, "rack", s->rack);
             JSON_GET_PROP_STRING(root, "rootDevice", s->rootDevice);
+            if (NULL == s->rootDevice) {
+                binds[12] = 'n';
+            }
             json_object_get_property(root, "linkSpeed", &propvalue);
-            s->linkSpeed = json_null == propvalue ? 0 : json_get_integer(propvalue);
+//             s->linkSpeed = json_null == propvalue ? 0 : json_get_integer(propvalue);
+            if (json_null == propvalue) {
+                binds[13] = 'n';
+            } else {
+                s->linkSpeed = json_get_integer(propvalue);
+            }
             json_object_get_property(root, "bootId", &propvalue);
-            s->bootId = json_null == propvalue ? 0 : json_get_integer(propvalue);
+//             s->bootId = json_null == propvalue ? 0 : json_get_integer(propvalue);
+            if (json_null == propvalue) {
+                binds[14] = 'n';
+            } else {
+                s->bootId = json_get_integer(propvalue);
+            }
             json_document_destroy(doc);
+            {
+                request_t *req;
+                json_document_t *doc;
+
+                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s/serviceInfos", server_name);
+                request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+                request_destroy(req);
+                if (request_success) {
+                    json_value_t root, propvalue;
+
+                    root = json_document_get_root(doc);
+                    JSON_GET_PROP_STRING(root, "contactAdmin", s->contactAdmin);
+                    JSON_GET_PROP_STRING(root, "contactBilling", s->contactBilling);
+                    JSON_GET_PROP_STRING(root, "contactTech", s->contactTech);
+                    json_object_get_property(root, "engagedUpTo", &propvalue);
+                    if (json_null != propvalue) {
+                        date_parse_to_timestamp(json_get_string(propvalue), "%F", &s->engagedUpTo);
+                    }
+                    json_object_get_property(root, "expiration", &propvalue);
+                    date_parse_to_timestamp(json_get_string(propvalue), "%F", &s->expiration);
+                    json_object_get_property(root, "creation", &propvalue);
+                    date_parse_to_timestamp(json_get_string(propvalue), "%F", &s->creation);
+                    statement_bind( /* e = enum (int), d = date (int), |n = or NULL */
+                        prepared[STMT_DEDICATED_UPSERT], binds/*"isibisssisbssii" "isissi"*/,
+                        // id (i), name (s), datacenter (e), professional_use (b), support_level (e), commercial_range (s|n), ip (s), os (s), state (e), reverse (s|n), monitoring (b), rack (s), root_device (s|n), link_speed (i|n), boot_id (i|n)
+                        s->serverId, s->name, string_to_enum(s->datacenter, datacenters, -1), s->professionalUse, string_to_enum(s->supportLevel, support_levels, -1), s->commercialRange, s->ip, s->os, string_to_enum(s->state, states, -1), s->reverse, s->monitoring, s->rack, s->rootDevice, s->linkSpeed, s->bootId,
+                        // engaged_up_to (d|n), contact_billing (s), expiration (d), contact_tech (s), contact_admin (s), creation (d)
+                        s->engagedUpTo, s->contactBilling, s->expiration, s->contactTech, s->contactAdmin, s->creation
+                    );
+                    statement_fetch(prepared[STMT_DEDICATED_UPSERT], error, "");
+                    json_document_destroy(doc);
+                }
+            }
         }
     }
 
@@ -259,7 +464,7 @@ static command_status_t fetch_servers(server_set_t *ss, bool force, error_t **er
     return COMMAND_SUCCESS;
 }
 
-static int parse_boot(HashTable *boots, json_document_t *doc)
+static int parse_boot(HashTable *boots, json_document_t *doc, error_t **error)
 {
     boot_t *b;
     json_value_t root, v;
@@ -273,6 +478,10 @@ static int parse_boot(HashTable *boots, json_document_t *doc)
     b->type = json_get_enum(v, boot_types, -1);
     hashtable_put(boots, 0, b->kernel, b, NULL);
     json_document_destroy(doc);
+
+    statement_bind(prepared[STMT_BOOT_UPSERT], "iiss", b->id, b->type, b->kernel, b->description);
+    statement_fetch(prepared[STMT_BOOT_UPSERT], error, "");
+    assert(1 == sqlite_affected_rows());
 
     return TRUE;
 }
@@ -312,7 +521,7 @@ static command_status_t fetch_server_boots(const char *server_name, server_t **s
                 request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error); // request_success is assumed to be TRUE before the first iteration
                 request_destroy(req);
                 // result
-                parse_boot((*s)->boots, doc);
+                parse_boot((*s)->boots, doc, error);
             }
             iterator_close(&it);
             json_document_destroy(doc);
@@ -745,6 +954,7 @@ static bool complete_servers(void *parsed_arguments, const char *current_argumen
     return complete_from_hashtable_keys(parsed_arguments, current_argument, current_argument_len, possibilities, ss->servers);
 }
 
+#ifdef WITOUT_SQLITE
 static bool complete_boots(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *UNUSED(data))
 {
     server_t *s;
@@ -770,6 +980,7 @@ static bool complete_boots(void *parsed_arguments, const char *current_argument,
 
     return request_success;
 }
+#endif
 
 static void dedicated_regcomm(graph_t *g)
 {
@@ -795,7 +1006,11 @@ static void dedicated_regcomm(graph_t *g)
     lit_rev_delete = argument_create_literal("delete", dedicated_reverse_delete);
 
     arg_server = argument_create_string(offsetof(dedicated_argument_t, server_name), "<server>", complete_servers, NULL);
+#ifdef WITOUT_SQLITE
     arg_boot = argument_create_string(offsetof(dedicated_argument_t, boot_name), "<boot>", complete_boots, NULL);
+#else
+    arg_boot = argument_create_string(offsetof(dedicated_argument_t, boot_name), "<boot>", complete_from_statement, prepared[STMT_BOOT_COMPLETION]);
+#endif
     arg_reverse = argument_create_string(offsetof(dedicated_argument_t, reverse), "<reverse>", NULL, NULL);
     arg_type = argument_create_choices(offsetof(dedicated_argument_t, mrtg_type), "<types>",  mrtg_types);
     arg_period = argument_create_choices(offsetof(dedicated_argument_t, mrtg_period), "<period>",  mrtg_periods);
@@ -834,5 +1049,5 @@ DECLARE_MODULE(dedicated) = {
     dedicated_register_rules,
     dedicated_ctor,
     NULL,
-    NULL
+    dedicated_dtor
 };
