@@ -166,7 +166,7 @@ static void dedicated_on_set_account(void **data)
     }
 }
 
-static bool dedicated_ctor(error_t **error)
+static bool dedicated_ctor(error_t **UNUSED(error))
 {
     account_register_module_callbacks(MODULE_NAME, server_set_destroy, dedicated_on_set_account);
 
