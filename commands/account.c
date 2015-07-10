@@ -156,8 +156,6 @@ static bool account_set_current(const char *name, error_t **error)
         } else {
             return FALSE;
         }
-        // check for valid CK
-//         check_current_application_and_account(FALSE, error);
         // notify modules
         hashtable_to_iterator(&it, acd.modules_callbacks);
         for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
@@ -198,12 +196,6 @@ bool check_current_application_and_account(bool skip_CK_check, error_t **error)
         error_set(error, WARN, _("no current account"));
         return FALSE;
     }
-#if 0
-    if (NULL == acd.current_account.endpoint_id) {
-        error_set(error, WARN, _("no endpoint associated to account '%s'"), acd.current_account.name);
-        return FALSE;
-    }
-#endif
     if (NULL_OR_EMPTY(acd.current_application.key)) {
         error_set(error, WARN, _("no application registered for endpoint '%s'"), endpoint_names[acd.current_account.endpoint_id]);
         return FALSE;
@@ -215,11 +207,6 @@ bool check_current_application_and_account(bool skip_CK_check, error_t **error)
     if (NULL_OR_EMPTY(acd.current_account.consumer_key) || (0 != acd.current_account.expires_at && acd.current_account.expires_at < time(NULL))) {
         // if we successfully had a CK, save it
         if (NULL != (acd.current_account.consumer_key = request_consumer_key(&acd.current_account.expires_at, error))) {
-//             sqlite3_bind_text(prepared[STMT_ACCOUNT_UPDATE_KEY], 1, acd.current_account.consumer_key, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-//             sqlite3_bind_int(prepared[STMT_ACCOUNT_UPDATE_KEY], 2, acd.current_account.expires_at);
-//             sqlite3_bind_text(prepared[STMT_ACCOUNT_UPDATE_KEY], 3, acd.current_account.name, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-//             assert(SQLITE_DONE == sqlite3_step(prepared[STMT_ACCOUNT_UPDATE_KEY]));
-//             sqlite3_reset(prepared[STMT_ACCOUNT_UPDATE_KEY]);
             statement_bind(prepared[STMT_ACCOUNT_UPDATE_KEY], "sis", acd.current_account.consumer_key, acd.current_account.expires_at, acd.current_account.name);
             statement_fetch(prepared[STMT_APPLICATION_LOAD], error, "");
         }
@@ -310,7 +297,7 @@ static void account_data_dtor(void *data)
 static bool account_early_ctor(void)
 {
     create_or_migrate("accounts", "CREATE TABLE accounts(\n\
-        id INTEGER PRIMARY KEY,\n\
+        id INTEGER NOT NULL PRIMARY KEY,\n\
         name TEXT NOT NULL UNIQUE,\n\
         password TEXT,\n\
         consumer_key TEXT,\n\
@@ -421,30 +408,22 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
         return COMMAND_USAGE;
     }
     account.password = NULL;
-    account.endpoint_id = 0; // TODO: temporary
+    account.endpoint_id = 0;
     account.consumer_key = NULL;
-    account.name = /*strdup*/(args->account);
+    account.name = args->account;
     if (args->endpoint_present) {
         account.endpoint_id = args->endpoint;
     }
     if (!update || NULL != args->password) { // for update, only if a new password is set
-        account.password = /*strdup*/(args->password);
+        account.password = args->password;
     }
     if (NULL != args->consumer_key) { // only if a new CK is set
-        account.consumer_key = /*strdup*/(args->consumer_key);
+        account.consumer_key = args->consumer_key;
         account.expires_at = expires_at;
     }
     if (!update) {
         HashTable *ht;
 
-//         sqlite3_bind_text(prepared[STMT_ACCOUNT_INSERT], 1, account.name, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-//         sqlite3_bind_text(prepared[STMT_ACCOUNT_INSERT], 2, account.password, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-//         sqlite3_bind_text(prepared[STMT_ACCOUNT_INSERT], 3, account.consumer_key, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-//         sqlite3_bind_int(prepared[STMT_ACCOUNT_INSERT], 4, account.endpoint_id);
-//         sqlite3_bind_int(prepared[STMT_ACCOUNT_INSERT], 5, 0);
-//         sqlite3_bind_int(prepared[STMT_ACCOUNT_INSERT], 6, account.expires_at);
-//         assert(SQLITE_DONE == sqlite3_step(prepared[STMT_ACCOUNT_INSERT]));
-//         sqlite3_reset(prepared[STMT_ACCOUNT_INSERT]);
         statement_bind(prepared[STMT_ACCOUNT_INSERT], "sssiii", account.name, account.password, account.consumer_key, account.endpoint_id, 0, account.expires_at);
         statement_fetch(prepared[STMT_ACCOUNT_INSERT], error, "");
         account.id = sqlite_last_insert_id();
@@ -469,21 +448,6 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
         ht = hashtable_ascii_cs_new(NULL, NULL, NULL);
         hashtable_direct_put(acd.modules_data, 0, account.id, ht, NULL);
     } else {
-#if 0
-        if (NULL != args->password) {
-            sqlite3_bind_text(prepared[STMT_ACCOUNT_UPDATE], 1, account.password, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-        }
-        if (NULL != args->consumer_key) {
-            sqlite3_bind_text(prepared[STMT_ACCOUNT_UPDATE], 2, account.consumer_key, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-            sqlite3_bind_int(prepared[STMT_ACCOUNT_UPDATE], 3, account.expires_at);
-        }
-        if (args->endpoint_present) {
-            sqlite3_bind_int(prepared[STMT_ACCOUNT_UPDATE], 4, account.endpoint_id);
-        }
-        sqlite3_bind_text(prepared[STMT_ACCOUNT_UPDATE], 5, account.name, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-        assert(SQLITE_DONE == sqlite3_step(prepared[STMT_ACCOUNT_UPDATE]));
-        sqlite3_reset(prepared[STMT_ACCOUNT_UPDATE]);
-#else
         char binds[] = "1234s";
 
         binds[0] = NULL == args->password     ? 'n' : 's';
@@ -492,7 +456,6 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
         binds[3] = !args->endpoint_present    ? 'n' : 'i';
         statement_bind(prepared[STMT_ACCOUNT_UPDATE], binds, account.password, account.consumer_key, account.expires_at, account.endpoint_id, account.name);
         statement_fetch(prepared[STMT_ACCOUNT_UPDATE], error, "");
-#endif
     }
 
     return COMMAND_SUCCESS;
@@ -525,13 +488,10 @@ static command_status_t account_default_set(COMMAND_ARGS)
 
     statement_bind(prepared[STMT_ACCOUNT_UPDATE_DEFAULT], "s", args->account);
     statement_fetch(prepared[STMT_ACCOUNT_UPDATE_DEFAULT], error, "");
-//     sqlite3_bind_text(prepared[STMT_ACCOUNT_UPDATE_DEFAULT], 1, args->account, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-//     ret = SQLITE_DONE == sqlite3_step(prepared[STMT_ACCOUNT_UPDATE_DEFAULT]);
     success = 0 != sqlite_affected_rows();
     if (!success) {
         UNEXISTANT_ACCOUNT;
     }
-//     sqlite3_reset(prepared[STMT_ACCOUNT_UPDATE_DEFAULT]);
 
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
@@ -547,15 +507,12 @@ static command_status_t account_delete(COMMAND_ARGS)
     if (!NO_ACTIVE_ACCOUNT && 0 == strcmp(args->account, acd.current_account.name)) {
         account_flush();
     }
-//     sqlite3_bind_text(prepared[STMT_ACCOUNT_DELETE], 1, args->account, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-//     ret = SQLITE_DONE == sqlite3_step(prepared[STMT_ACCOUNT_DELETE]);
     statement_bind(prepared[STMT_ACCOUNT_DELETE], "s", args->account);
     statement_fetch(prepared[STMT_ACCOUNT_DELETE], error, "");
     success = 0 != sqlite_affected_rows();
     if (!success) {
         UNEXISTANT_ACCOUNT;
     }
-//     sqlite3_reset(prepared[STMT_ACCOUNT_DELETE]);
 //     hashtable_direct_delete(acd.modules_data, <id of deleted accout>, DTOR_CALL);
 
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
@@ -613,11 +570,6 @@ static command_status_t application_add(COMMAND_ARGS)
     args = (application_argument_t *) arg;
     assert(NULL != args->key);
     assert(NULL != args->secret);
-//     sqlite3_bind_text(prepared[STMT_APPLICATION_INSERT], 1, args->key, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-//     sqlite3_bind_text(prepared[STMT_APPLICATION_INSERT], 2, args->secret, -1, SQLITE_STATIC/*SQLITE_TRANSIENT*/);
-//     sqlite3_bind_int(prepared[STMT_APPLICATION_INSERT], 3, args->endpoint);
-//     assert(SQLITE_DONE == sqlite3_step(prepared[STMT_APPLICATION_INSERT]));
-//     sqlite3_reset(prepared[STMT_APPLICATION_INSERT]);
     statement_bind(prepared[STMT_APPLICATION_INSERT], "ssi", args->key, args->secret, args->endpoint);
     statement_fetch(prepared[STMT_APPLICATION_INSERT], error, "");
     // TODO: if !update (0 == sqlite_affected_rows), duplicate?
@@ -634,15 +586,12 @@ static command_status_t application_delete(COMMAND_ARGS)
     USED(mainopts);
     args = (application_argument_t *) arg;
 
-//     sqlite3_bind_int(prepared[STMT_APPLICATION_DELETE], 1, args->endpoint);
-//     success = SQLITE_DONE == sqlite3_step(prepared[STMT_APPLICATION_DELETE]);
     statement_bind(prepared[STMT_APPLICATION_DELETE], "i", args->endpoint);
     statement_fetch(prepared[STMT_APPLICATION_DELETE], error, "");
     success = 0 != sqlite_affected_rows();
     if (!success) {
         error_set(error, NOTICE, _("no application associated to endpoint %s"), endpoint_names[args->endpoint]);
     }
-//     sqlite3_reset(prepared[STMT_APPLICATION_DELETE]);
 
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
