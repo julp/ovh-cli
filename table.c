@@ -30,7 +30,7 @@ struct table_t {
     resource_t *strings;
     size_t columns_count;
     const char *false_true_string[2];
-    size_t false_true_len[2], max_false_true_len, max_datetime_len;
+    size_t false_true_len[2], max_false_true_len, max_date_len, max_datetime_len;
 };
 
 typedef struct {
@@ -204,6 +204,19 @@ print_error(error);
     }
 }
 
+void date_store(table_t *t, va_list ap, column_t *c, value_t *val)
+{
+    time_t v;
+
+    v = va_arg(ap, time_t);
+    val->f = FALSE;
+    val->v = (uintptr_t) v;
+    val->l = t->max_date_len;
+    if (val->l > c->max_len) {
+        c->len = c->min_len = c->max_len = t->max_date_len;
+    }
+}
+
 void datetime_store(table_t *t, va_list ap, column_t *c, value_t *val)
 {
     time_t v;
@@ -233,6 +246,7 @@ static struct {
     [ TABLE_TYPE_BOOL ] = { bool_store },
     [ TABLE_TYPE_ENUM ] = { enum_store },
     [ TABLE_TYPE_STRING ] = { string_store },
+    [ TABLE_TYPE_DATE ] = { date_store },
     [ TABLE_TYPE_DATETIME ] = { datetime_store }
 };
 
@@ -252,6 +266,7 @@ table_t *table_new(size_t columns_count, ...)
     t->max_false_true_len = MAX(t->false_true_len[FALSE], t->false_true_len[TRUE]);
     // </>
     // preflight datetime length
+    t->max_date_len = STR_LEN("yyyy/mm/dd");
     t->max_datetime_len = STR_LEN("yyyy/mm/dd hh:ii:ss");
     // </>
     t->columns_count = columns_count;
@@ -657,11 +672,12 @@ void table_display(table_t *t, uint32_t flags)
                                 fputs(t->false_true_string[r->values[i].v], stdout);
                                 written = t->false_true_len[r->values[i].v];
                                 break;
+                            case TABLE_TYPE_DATE:
                             case TABLE_TYPE_DATETIME:
                             {
                                 char buffer[512];
 
-                                if ((time_t) 0 == (time_t) r->values[i].v || (written = strftime(buffer, ARRAY_SIZE(buffer), "%x %X", localtime((time_t *) &r->values[i].v))) < 1) {
+                                if ((time_t) 0 == (time_t) r->values[i].v || (written = strftime(buffer, ARRAY_SIZE(buffer), TABLE_TYPE_DATE == TABLE_TYPE(t->columns[i].type) ? "%x" : "%x %X", localtime((time_t *) &r->values[i].v))) < 1) {
                                     written = STR_LEN("-");
                                     memcpy(buffer, "-", STR_SIZE("-"));
                                 }
