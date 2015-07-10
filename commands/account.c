@@ -223,7 +223,7 @@ bool check_current_application_and_account(bool skip_CK_check, error_t **error)
         // if we successfully had a CK, save it
         if (NULL != (acd.current_account.consumer_key = request_consumer_key(&acd.current_account.expires_at, error))) {
             statement_bind(prepared[STMT_ACCOUNT_UPDATE_KEY], "sis", acd.current_account.consumer_key, acd.current_account.expires_at, acd.current_account.name);
-            statement_fetch(prepared[STMT_APPLICATION_LOAD], error, "");
+            statement_fetch(prepared[STMT_ACCOUNT_UPDATE_KEY], error, "");
         }
     }
 
