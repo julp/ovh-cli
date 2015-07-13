@@ -9,6 +9,7 @@
 #include "modules/api.h"
 #include "modules/sqlite.h"
 #include "struct/hashtable.h"
+#include "commands/account.h"
 #include "account_api.h"
 
 enum {
@@ -57,8 +58,8 @@ typedef struct {
 
 static account_command_data_t acd;
 
-account_t *current_account;
-application_t *current_application;
+const account_t *current_account;
+const application_t *current_application;
 
 enum {
     // account
@@ -330,7 +331,7 @@ static bool account_early_ctor(error_t **error)
         return FALSE;
     }
 
-    statement_batched_prepare(statements, prepared, STMT_COUNT);
+    statement_batched_prepare(statements, prepared, STMT_COUNT, error);
 
     current_account = &acd.current_account;
     current_application = &acd.current_application;

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2015-07-01 17:46+0200\n"
+"POT-Creation-Date: 2015-07-13 22:10+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,197 +17,196 @@ msgstr ""
 "Content-Type: text/plain; charset=CHARSET\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: /home/julp/ovh-cli/graph.c:570
+#: /home/julp/ovh-cli/date.c:26
+#, c-format
+msgid "unable to parse date: %s"
+msgstr ""
+
+#: /home/julp/ovh-cli/graph.c:650
 #, c-format
 msgid "too many arguments (%s)"
 msgstr ""
 
-#: /home/julp/ovh-cli/graph.c:602
+#: /home/julp/ovh-cli/graph.c:682
 #, c-format
 msgid "got %s, expect one of: %s"
 msgstr ""
 
-#: /home/julp/ovh-cli/graph.c:931
+#: /home/julp/ovh-cli/graph.c:1010
 msgid "unterminated command: argument(s) missing"
 msgstr ""
 
-#: /home/julp/ovh-cli/graph.c:938
+#: /home/julp/ovh-cli/graph.c:1017
 msgid "unknown command"
 msgstr ""
 
-#: /home/julp/ovh-cli/main.c:356
+#: /home/julp/ovh-cli/main.c:347
 msgid "needs help? Type help!"
 msgstr ""
 
-#: /home/julp/ovh-cli/table.c:45 /home/julp/ovh-cli/table.c:50
-#: /home/julp/ovh-cli/table.c:254
+#: /home/julp/ovh-cli/table.c:47 /home/julp/ovh-cli/table.c:257
 msgid "false"
 msgstr ""
 
-#: /home/julp/ovh-cli/table.c:46 /home/julp/ovh-cli/table.c:51
-#: /home/julp/ovh-cli/table.c:256
+#: /home/julp/ovh-cli/table.c:48 /home/julp/ovh-cli/table.c:259
 msgid "true"
 msgstr ""
 
-#: /home/julp/ovh-cli/table.c:758 /home/julp/ovh-cli/commands/domain.c:689
+#: /home/julp/ovh-cli/table.c:681 /home/julp/ovh-cli/commands/domain.c:689
 msgid "enabled"
 msgstr ""
 
-#: /home/julp/ovh-cli/table.c:759 /home/julp/ovh-cli/commands/domain.c:690
+#: /home/julp/ovh-cli/table.c:682 /home/julp/ovh-cli/commands/domain.c:690
 msgid "disabled"
 msgstr ""
 
-#: /home/julp/ovh-cli/table.c:760 /home/julp/ovh-cli/commands/domain.c:691
+#: /home/julp/ovh-cli/table.c:683 /home/julp/ovh-cli/commands/domain.c:691
 msgid "enableInProgress"
 msgstr ""
 
-#: /home/julp/ovh-cli/table.c:761 /home/julp/ovh-cli/commands/domain.c:692
+#: /home/julp/ovh-cli/table.c:684 /home/julp/ovh-cli/commands/domain.c:692
 msgid "disableInProgress"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:157
-#, c-format
-msgid "unable to create XML node '%s'"
-msgstr ""
-
-#: /home/julp/ovh-cli/commands/account.c:167
-#, c-format
-msgid "unable to set attribute '%s' to value '%s'"
-msgstr ""
-
-#: /home/julp/ovh-cli/commands/account.c:177
-#, c-format
-msgid "unable to add child '%s' to document root"
-msgstr ""
-
-#: /home/julp/ovh-cli/commands/account.c:203
+#: /home/julp/ovh-cli/util.c:76
 msgid "error or buffer overflow"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:229
+#: /home/julp/ovh-cli/util.c:80
 #, c-format
-msgid "could not save file into '%s'"
+msgid "can't open temporary file %s"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:246
-msgid "no current account"
-msgstr ""
-
-#: /home/julp/ovh-cli/commands/account.c:278
+#: /home/julp/ovh-cli/util.c:85
 #, c-format
-msgid "parsing of '%s' failed"
+msgid "can't write to temporary file %s"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:282
-msgid "unable to retrieve document root"
+#: /home/julp/ovh-cli/util.c:103 /home/julp/ovh-cli/util.c:132
+#, c-format
+msgid "system call %s failed: %s"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:468
+#: /home/julp/ovh-cli/util.c:139
+#, c-format
+msgid "can't read temporary file %s"
+msgstr ""
+
+#: /home/julp/ovh-cli/util.c:153
+msgid "abort, message is empty"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/account.c:51
 #, c-format
 msgid "no account named '%s'"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:480
+#: /home/julp/ovh-cli/commands/account.c:212
+msgid "no current account"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/account.c:216
+#, c-format
+msgid "no application registered for endpoint '%s'"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/account.c:372
 msgid "account"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:481
+#: /home/julp/ovh-cli/commands/account.c:373
 msgid "consumer key"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:482
+#: /home/julp/ovh-cli/commands/account.c:374
 msgid "key expiration"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:483
+#: /home/julp/ovh-cli/commands/account.c:375
 msgid "password"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:484
+#: /home/julp/ovh-cli/commands/account.c:376
+#: /home/julp/ovh-cli/commands/account.c:568
+msgid "endpoint"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/account.c:377
 msgid "current"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:485
+#: /home/julp/ovh-cli/commands/account.c:378
 #: /home/julp/ovh-cli/commands/key.c:158
 msgid "default"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:527
+#: /home/julp/ovh-cli/commands/account.c:411
 #, c-format
 msgid "command aborted: unable to parse duration '%s'"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:536
+#: /home/julp/ovh-cli/commands/account.c:418
 #, c-format
 msgid "command aborted: unable to parse expiration date '%s'"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:547
-#, c-format
-msgid "an account named '%s' already exists"
+#: /home/julp/ovh-cli/commands/account.c:427
+msgid "no endpoint specified"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:671
-msgid "endpoint"
-msgstr ""
-
-#: /home/julp/ovh-cli/commands/account.c:672
+#: /home/julp/ovh-cli/commands/account.c:569
 #: /home/julp/ovh-cli/commands/key.c:159
 msgid "key"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:673
+#: /home/julp/ovh-cli/commands/account.c:570
 msgid "secret"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/account.c:718
+#: /home/julp/ovh-cli/commands/account.c:613
 #, c-format
 msgid "no application associated to endpoint %s"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:343
-msgid "serverId"
-msgstr ""
-
-#: /home/julp/ovh-cli/commands/dedicated.c:347
+#: /home/julp/ovh-cli/commands/dedicated.c:553
 #: /home/julp/ovh-cli/commands/hosting.c:755
 #: /home/julp/ovh-cli/commands/key.c:157 /home/julp/ovh-cli/commands/me.c:44
 msgid "name"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:348
+#: /home/julp/ovh-cli/commands/dedicated.c:554
 msgid "ip"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:349
+#: /home/julp/ovh-cli/commands/dedicated.c:555
 msgid "os"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:350
+#: /home/julp/ovh-cli/commands/dedicated.c:556
 msgid "reverse"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:352
+#: /home/julp/ovh-cli/commands/dedicated.c:557
 msgid "boot"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:353
+#: /home/julp/ovh-cli/commands/dedicated.c:558
 msgid "datacenter"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:354
+#: /home/julp/ovh-cli/commands/dedicated.c:559
 msgid "professionalUse"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:355
+#: /home/julp/ovh-cli/commands/dedicated.c:560
 msgid "supportLevel"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:356
+#: /home/julp/ovh-cli/commands/dedicated.c:561
 msgid "commercialRange"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:357
+#: /home/julp/ovh-cli/commands/dedicated.c:562
 #: /home/julp/ovh-cli/commands/hosting.c:265
 #: /home/julp/ovh-cli/commands/hosting.c:624
 #: /home/julp/ovh-cli/commands/hosting.c:757
@@ -215,43 +214,82 @@ msgstr ""
 msgid "state"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:358
+#: /home/julp/ovh-cli/commands/dedicated.c:563
 msgid "monitoring"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:359
+#: /home/julp/ovh-cli/commands/dedicated.c:564
 msgid "rack"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:360
+#: /home/julp/ovh-cli/commands/dedicated.c:565
 msgid "rootDevice"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:361
+#: /home/julp/ovh-cli/commands/dedicated.c:566
 msgid "linkSpeed"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:464
+#: /home/julp/ovh-cli/commands/dedicated.c:567
+msgid "engagedUpTo"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/dedicated.c:568
+msgid "contactBilling"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/dedicated.c:569
+#: /home/julp/ovh-cli/commands/me.c:158
+msgid "expiration"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/dedicated.c:570
+msgid "contactTech"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/dedicated.c:571
+msgid "contactAdmin"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/dedicated.c:572
+#: /home/julp/ovh-cli/commands/me.c:157
+msgid "creation"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/dedicated.c:655
 #, c-format
 msgid "Confirm hard reboot of %s"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:490
+#: /home/julp/ovh-cli/commands/dedicated.c:680
 #, c-format
 msgid "Available boots for '%s':\n"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:557
+#: /home/julp/ovh-cli/commands/dedicated.c:683
+msgid "bootType"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/dedicated.c:684
+msgid "kernel"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/dedicated.c:685
+#: /home/julp/ovh-cli/commands/hosting.c:516
+msgid "description"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/dedicated.c:712
 #, c-format
 msgid "Current boot for %s is:  %s (%s): %s\n"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:596
+#: /home/julp/ovh-cli/commands/dedicated.c:748
 #, c-format
 msgid "This new boot will only be effective on the next (re)boot of '%s'"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/dedicated.c:598
+#: /home/julp/ovh-cli/commands/dedicated.c:750
 #, c-format
 msgid "Any boot named '%s' was found for server '%s'"
 msgstr ""
@@ -402,10 +440,6 @@ msgstr ""
 
 #: /home/julp/ovh-cli/commands/hosting.c:515
 msgid "frequency"
-msgstr ""
-
-#: /home/julp/ovh-cli/commands/hosting.c:516
-msgid "description"
 msgstr ""
 
 #: /home/julp/ovh-cli/commands/hosting.c:517
@@ -642,14 +676,6 @@ msgstr ""
 msgid "credentialId"
 msgstr ""
 
-#: /home/julp/ovh-cli/commands/me.c:157
-msgid "creation"
-msgstr ""
-
-#: /home/julp/ovh-cli/commands/me.c:158
-msgid "expiration"
-msgstr ""
-
 #: /home/julp/ovh-cli/commands/me.c:159
 msgid "last used"
 msgstr ""
@@ -678,7 +704,33 @@ msgstr ""
 msgid "application description"
 msgstr ""
 
-#: /home/julp/ovh-cli/modules/api.c:608
+#: /home/julp/ovh-cli/commands/support.c:101
+#: /home/julp/ovh-cli/commands/support.c:152
+msgid "--- write your message here, after having removed this line ---"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/support.c:214
+msgid "author"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/support.c:215
+msgid "created_at"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/support.c:216
+msgid "updated_at"
+msgstr ""
+
+#: /home/julp/ovh-cli/commands/support.c:217
+msgid "body"
+msgstr ""
+
+#: /home/julp/ovh-cli/modules/api.c:104 /home/julp/ovh-cli/modules/api.c:141
+#: /home/julp/ovh-cli/modules/sqlite.c:246
+msgid "buffer overflow"
+msgstr ""
+
+#: /home/julp/ovh-cli/modules/api.c:624
 #, c-format
 msgid ""
 "you have not registered your password so you have to confirm the current "
@@ -687,28 +739,49 @@ msgid ""
 "account %s update expires in \"<duration>\""
 msgstr ""
 
-#: /home/julp/ovh-cli/modules/conv.c:66
+#: /home/julp/ovh-cli/modules/conv.c:67
 msgid "Cannot open converter"
 msgstr ""
 
-#: /home/julp/ovh-cli/modules/conv.c:68
+#: /home/julp/ovh-cli/modules/conv.c:69
 #, c-format
 msgid "Wrong charset, conversion from '%s' to '%s' is not allowed"
 msgstr ""
 
-#: /home/julp/ovh-cli/modules/conv.c:70
+#: /home/julp/ovh-cli/modules/conv.c:71
 msgid "Incomplete multibyte character detected in input string"
 msgstr ""
 
-#: /home/julp/ovh-cli/modules/conv.c:72
+#: /home/julp/ovh-cli/modules/conv.c:73
 msgid "Illegal character detected in input string"
 msgstr ""
 
-#: /home/julp/ovh-cli/modules/conv.c:74
+#: /home/julp/ovh-cli/modules/conv.c:75
 msgid "Buffer length exceeded"
 msgstr ""
 
-#: /home/julp/ovh-cli/modules/conv.c:76
+#: /home/julp/ovh-cli/modules/conv.c:77
 #, c-format
 msgid "Unknown error (%d)"
+msgstr ""
+
+#: /home/julp/ovh-cli/modules/sqlite.c:209
+#: /home/julp/ovh-cli/modules/sqlite.c:399
+#, c-format
+msgid "%s for %s"
+msgstr ""
+
+#: /home/julp/ovh-cli/modules/sqlite.c:246
+#, c-format
+msgid "can't create table %s: %s"
+msgstr ""
+
+#: /home/julp/ovh-cli/modules/sqlite.c:447
+#, c-format
+msgid "can't open sqlite database %s: %s"
+msgstr ""
+
+#: /home/julp/ovh-cli/modules/sqlite.c:454
+#, c-format
+msgid "can't retrieve database version: %s"
 msgstr ""

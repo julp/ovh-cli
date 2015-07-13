@@ -93,10 +93,10 @@ static void statement_iterator_current(const void *collection, void **state, voi
         for (i = 0; i < sss->output_binds_count; i++) {
             switch (sss->output_binds[i].type) {
                 case SQLITE_TYPE_BOOL:
-                    *((bool *) sss->output_binds[i].ptr) = /*!!*/sqlite3_column_int(stmt, i);
+                    *((bool *) sss->output_binds[i].ptr) = /*!!*/sqlite3_column_int64(stmt, i);
                     break;
                 case SQLITE_TYPE_INT:
-                    *((int *) sss->output_binds[i].ptr) = sqlite3_column_int(stmt, i);
+                    *((int64_t *) sss->output_binds[i].ptr) = sqlite3_column_int64(stmt, i);
                     break;
                 case SQLITE_TYPE_STRING:
                 {
@@ -196,7 +196,7 @@ void statement_to_iterator(Iterator *it, sqlite3_stmt *stmt, const char *outbind
     );
 }
 
-bool statement_batched_prepare(const char **statements, sqlite3_stmt **preprepared, size_t count)
+bool statement_batched_prepare(const char **statements, sqlite3_stmt **preprepared, size_t count, error_t **error)
 {
     size_t i;
     bool ret;
@@ -206,6 +206,7 @@ bool statement_batched_prepare(const char **statements, sqlite3_stmt **preprepar
         ret &= SQLITE_OK == sqlite3_prepare_v2(db, statements[i], -1, &preprepared[i], NULL);
     }
     if (!ret) {
+        error_set(error, FATAL, _("%s for %s"), sqlite3_errmsg(db), statements[i]);
         while (--i != 0) {
             sqlite3_finalize(preprepared[i]);
         }
@@ -303,12 +304,19 @@ void statement_bind(sqlite3_stmt *stmt, const char *inbinds, ...)
                 break;
             }
             case 'b':
+            {
+                bool v;
+
+                v = va_arg(ap, bool);
+                sqlite3_bind_int(stmt, p - inbinds + 1, v);
+                break;
+            }
             case 'i':
             {
-                int v;
+                int64_t v;
 
-                v = va_arg(ap, int);
-                sqlite3_bind_int(stmt, p - inbinds + 1, v);
+                v = va_arg(ap, int64_t);
+                sqlite3_bind_int64(stmt, p - inbinds + 1, v);
                 break;
             }
             case 's':
@@ -343,12 +351,19 @@ bool statement_fetch(sqlite3_stmt *stmt, error_t **error, const char *outbinds, 
             for (p = outbinds; '\0' != *p; p++) {
                 switch (*p) {
                     case 'b':
+                    {
+                        bool *v;
+
+                        v = va_arg(ap, bool *);
+                        *v = /*!!*/sqlite3_column_int(stmt, p - outbinds);
+                        break;
+                    }
                     case 'i':
                     {
-                        int *v;
+                        int64_t *v;
 
-                        v = va_arg(ap, int *);
-                        *v = sqlite3_column_int(stmt, p - outbinds);
+                        v = va_arg(ap, int64_t *);
+                        *v = sqlite3_column_int64(stmt, p - outbinds);
                         break;
                     }
                     case 's':
@@ -381,7 +396,7 @@ bool statement_fetch(sqlite3_stmt *stmt, error_t **error, const char *outbinds, 
             // empty result set (no error and return FALSE to caller, it should known it doesn't remain any data to read)
             break;
         default:
-            error_set(error, WARN, _("%s"), sqlite3_errmsg(db));
+            error_set(error, WARN, _("%s for %s"), sqlite3_errmsg(db), sqlite3_sql(stmt));
             break;
     }
     va_end(ap);
@@ -433,7 +448,7 @@ static bool sqlite_early_ctor(error_t **error)
         return FALSE;
     }
     // preprepare own statement
-    statement_batched_prepare(statements, prepared, STMT_COUNT);
+    statement_batched_prepare(statements, prepared, STMT_COUNT, error);
     // fetch user_version
     if (SQLITE_ROW != sqlite3_step(prepared[STMT_GET_USER_VERSION])) {
         error_set(error, FATAL, _("can't retrieve database version: %s"), sqlite3_errmsg(db));
@@ -450,7 +465,6 @@ static bool sqlite_late_ctor(error_t **error)
 //         statement_bind(prepared[STMT_SET_USER_VERSION], "i", OVH_CLI_VERSION_NUMBER); // PRAGMA doesn't handle parameter
         statement_bind(prepared[STMT_SET_USER_VERSION], "");
         statement_fetch(prepared[STMT_SET_USER_VERSION], error, "");
-//         sqlite3_reset(prepared[STMT_SET_USER_VERSION]);
     }
 
     return NULL == *error;
