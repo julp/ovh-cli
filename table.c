@@ -43,11 +43,6 @@ typedef struct {
     value_t *values;
 } row_t;
 
-#if 0
-    _("false")
-    _("true")
-#endif
-
 const char * const false_true[] = {
     N_("false"),
     N_("true"),
@@ -82,7 +77,7 @@ const char * const false_true[] = {
  * - column titles are expected to be already in "local" charset (gettext, if they are translated, will do it for us)
  * - same for "true"/"false"
  * - columns data are expected to be in UTF-8, we handle their conversion
- * - TABLE_TYPE_DATETIME is not intended for format with non-fixed length output (only simple formats like dd/mm/yyyy, yyyy-mm-dd, etc)
+ * - TABLE_TYPE_DATE and TABLE_TYPE_DATETIME are not intended for format with non-fixed length output (only simple formats like dd/mm/yyyy, yyyy-mm-dd, etc)
  **/
 
 /**
@@ -158,9 +153,9 @@ void bool_store(table_t *t, va_list ap, column_t *c, value_t *val)
 
 void enum_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
 {
-    size_t v;
+    int v;
 
-    v = va_arg(ap, size_t);
+    v = va_arg(ap, int);
     val->f = FALSE;
     val->v = (uintptr_t) /*c->enum_values[*/v/*]*/;
     val->l = c->enum_values_len[v];
@@ -346,111 +341,10 @@ void table_store(table_t *t, ...)
     r->values = mem_new_n(*r->values, t->columns_count);
     va_start(ap, t);
     for (i = 0; i < t->columns_count; i++) {
-#if 0
-        switch (TABLE_TYPE(t->columns[i].type)) {
-            case TABLE_TYPE_STRING:
-            {
-                char *s_local;
-                error_t *error;
-                const char *s_utf8;
-
-                // TODO: real error handling! Let caller handle this by adding a error_t **error in argument?
-error = NULL;
-                if (NULL == (s_utf8 = va_arg(ap, const char *))) {
-                    s_local = (char *) "-";
-                    r->values[i].f = FALSE;
-                    r->values[i].l = STR_LEN("-");
-                } else {
-                    if (HAS_FLAG(t->columns[i].type, TABLE_TYPE_DELEGATE)) {
-                        resource_t *r;
-
-                        r = mem_new(*r);
-                        r->next = t->strings;
-                        r->ptr = s_utf8;
-                        t->strings = r;
-                    }
-                    convert_string_utf8_to_local(s_utf8, strlen(s_utf8), &s_local, NULL, &error);
-print_error(error);
-error = NULL;
-                    cplen(s_local, &r->values[i].l, &error);
-print_error(error);
-                    r->values[i].f = s_local != s_utf8;
-                }
-                r->values[i].v = (uintptr_t) s_local; // TODO: conversion UTF-8 => local
-//                 r->values[i].l = s_local_len;
-                if (r->values[i].l > t->columns[i].max_len) {
-                    t->columns[i].max_len = r->values[i].l;
-                }
-                break;
-            }
-            case TABLE_TYPE_INT:
-            {
-                int v;
-
-                v = va_arg(ap, int);
-                r->values[i].v = (uintptr_t) v;
-                r->values[i].l = snprintf(NULL, 0, "%d", v);
-                if (r->values[i].l > t->columns[i].max_len) {
-                    t->columns[i].len = t->columns[i].min_len = t->columns[i].max_len = r->values[i].l;
-                }
-                break;
-            }
-            case TABLE_TYPE_ENUM:
-            {
-                size_t v;
-
-                v = va_arg(ap, size_t);
-                r->values[i].v = (uintptr_t) /*t->columns[i].enum_values[*/v/*]*/;
-                r->values[i].l = t->columns[i].enum_values_len[v];
-                if (r->values[i].l > t->columns[i].max_len) {
-                    t->columns[i].len = t->columns[i].min_len = t->columns[i].max_len = t->columns[i].enum_max_value_len;
-                }
-                break;
-            }
-            case TABLE_TYPE_BOOL:
-            {
-                bool v;
-
-                v = va_arg(ap, bool);
-                r->values[i].v = (uintptr_t) v;
-                r->values[i].l = t->max_false_true_len;
-                if (r->values[i].l > t->columns[i].max_len) {
-                    t->columns[i].len = t->columns[i].min_len = t->columns[i].max_len = t->max_false_true_len;
-                }
-                break;
-            }
-            case TABLE_TYPE_DATETIME:
-            {
-                struct tm v;
-                char buffer[512];
-                struct tm ltm = { 0 };
-
-                v = va_arg(ap, struct tm);
-                if (0 == memcmp(&v, &ltm, sizeof(ltm))) {
-                    r->values[i].v = (uintptr_t) "-";
-                    r->values[i].l = STR_LEN("-");
-                } else {
-                    r->values[i].l = strftime(buffer, ARRAY_SIZE(buffer), "%x %X", &v);
-                    assert(r->values[i].l > 0);
-                    r->values[i].v = (uintptr_t) strdup(buffer);
-                    r->values[i].f = TRUE;
-                }
-                if (r->values[i].l > t->columns[i].max_len) {
-                    t->columns[i].len = t->columns[i].min_len = t->columns[i].max_len = r->values[i].l;
-                }
-                break;
-            }
-            default:
-                debug("unknown type: %d", t->columns[i].type);
-                assert(FALSE);
-                break;
-        }
-#else
         assert(TABLE_TYPE(t->columns[i].type) <= _TABLE_TYPE_LAST);
         assert(NULL != type_handlers[TABLE_TYPE(t->columns[i].type)].store);
 
         type_handlers[TABLE_TYPE(t->columns[i].type)].store(t, ap, &t->columns[i], &r->values[i]);
-#endif
     }
     va_end(ap);
     dptrarray_push(t->rows, r);
@@ -548,6 +442,7 @@ void table_sort(table_t *t, size_t colno/*, int order*/)
             break;
         case TABLE_TYPE_INT:
         case TABLE_TYPE_BOOL:
+        case TABLE_TYPE_DATE:
         case TABLE_TYPE_DATETIME:
             cmpfn = intcmpp;
             break;
@@ -641,6 +536,7 @@ void table_display(table_t *t, uint32_t flags)
                     case TABLE_TYPE_INT:
                     case TABLE_TYPE_BOOL:
                     case TABLE_TYPE_ENUM:
+                    case TABLE_TYPE_DATE:
                     case TABLE_TYPE_DATETIME:
                         /* NOP */
                         break;
@@ -675,9 +571,14 @@ void table_display(table_t *t, uint32_t flags)
                             case TABLE_TYPE_DATE:
                             case TABLE_TYPE_DATETIME:
                             {
+                                struct tm tm;
                                 char buffer[512];
 
-                                if ((time_t) 0 == (time_t) r->values[i].v || (written = strftime(buffer, ARRAY_SIZE(buffer), TABLE_TYPE_DATE == TABLE_TYPE(t->columns[i].type) ? "%x" : "%x %X", localtime((time_t *) &r->values[i].v))) < 1) {
+                                if (
+                                    ((time_t) 0 == (time_t) r->values[i].v)
+                                    || (NULL == localtime_r((time_t *) &r->values[i].v, &tm))
+                                    || ((written = strftime(buffer, ARRAY_SIZE(buffer), TABLE_TYPE_DATE == TABLE_TYPE(t->columns[i].type) ? "%x" : "%x %X", &tm)) < 1)
+                                ) {
                                     written = STR_LEN("-");
                                     memcpy(buffer, "-", STR_SIZE("-"));
                                 }
