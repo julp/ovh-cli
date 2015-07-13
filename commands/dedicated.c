@@ -400,7 +400,7 @@ static server_t *fetch_server(server_set_t *ss, const char * const server_name, 
     server_t *s;
 
     s = NULL;
-    if (!force || !ss->uptodate || !hashtable_get(ss->servers, server_name, &s)) {
+    if (force || !ss->uptodate || !hashtable_get(ss->servers, server_name, &s)) {
         request_t *req;
         json_document_t *doc;
         bool request_success;
