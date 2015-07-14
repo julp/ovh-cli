@@ -102,7 +102,7 @@ static const char *statements[STMT_COUNT] = {
     [ STMT_APPLICATION_LOAD ]       = "SELECT * FROM applications WHERE endpoint_id = ?",
 };
 
-static sqlite3_stmt *prepared[STMT_COUNT];
+static sqlite3_stmt *prepared[STMT_COUNT] = { 0 };
 
 enum {
     EXPIRES_IN,

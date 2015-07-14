@@ -10,16 +10,8 @@
 #include "modules/api.h"
 #include "modules/sqlite.h"
 #include "commands/account.h"
-#include "struct/hashtable.h"
 
 #define MODULE_NAME "dedicated"
-
-#define FETCH_ACCOUNT_SERVERS(/*server_set **/ ss) \
-    do { \
-        ss = NULL; \
-        account_current_get_data(MODULE_NAME, (void **) &ss); \
-        assert(NULL != ss); \
-    } while (0);
 
 /**
  * an account may have 0, 1 or more servers
@@ -30,13 +22,23 @@
  * - ...
  **/
 
+/**
+ * TODO:
+ * - cleanup: DELETE expired servers? DELETE them all when running fetch_servers?
+ * - populate servers: when to decide on our own if we should run fetch_servers?
+ */
+
 enum {
     // dedicated
     STMT_DEDICATED_LIST,
     STMT_DEDICATED_UPSERT,
     // specialized read (select)
+    STMT_DEDICATED_GET_IP,
+    STMT_DEDICATED_NEAR_EXPIRATION,
     STMT_DEDICATED_COMPLETION,
     STMT_DEDICATED_CURRENT_BOOT,
+    // specialized update
+    STMT_DEDICATED_SET_REVERSE,
     // boot
     STMT_BOOT_LIST,
     STMT_BOOT_UPSERT,
@@ -48,35 +50,32 @@ enum {
     STMT_COUNT
 };
 
+#define DEDICATED_OUTPUT_BINDS "sssssibisibssi" "isissi"
+
 static const char *statements[STMT_COUNT] = {
-    [ STMT_DEDICATED_LIST ]         = "SELECT name, ip, os, reverse, kernel, datacenter, professional_use, support_level, commercial_range, state, monitoring, rack, root_device, link_speed, engaged_up_to, contact_billing, expiration, contact_tech, contact_admin, creation FROM dedicated JOIN boots ON dedicated.boot_id = boots.id WHERE account_id = ?",
-    [ STMT_DEDICATED_UPSERT ]       = "INSERT OR REPLACE INTO dedicated(account_id, id, name, datacenter, professional_use, support_level, commercial_range, ip, os, state, reverse, monitoring, rack, root_device, link_speed, boot_id, engaged_up_to, contact_billing, expiration, contact_tech, contact_admin, creation) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    [ STMT_DEDICATED_COMPLETION ]   = "SELECT name FROM dedicated WHERE account_id = ? AND name LIKE ? || '%'",
-    [ STMT_DEDICATED_CURRENT_BOOT ] = "SELECT boot_type, kernel, description FROM boots JOIN dedicated ON boots.id = dedicated.boot_id WHERE account_id = ? AND name = ?",
-    [ STMT_BOOT_LIST ]              = "SELECT boot_type, kernel, description FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.id JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ?",
-    [ STMT_BOOT_UPSERT ]            =  "INSERT OR REPLACE INTO boots(id, boot_type, kernel, description) VALUES(?, ?, ?, ?)",
-    [ STMT_BOOT_COMPLETION ]        = "SELECT kernel FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.id JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ? AND kernel LIKE ? || '%'",
-    [ STMT_B_D_LINK ]               = "INSERT OR IGNORE INTO boots_dedicated(boot_id, dedicated_id) VALUES(?, ?)",
-    [ STMT_B_D_FIND_BY_NAME ]       = "SELECT boots.id FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.id JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ? AND kernel = ?",
+    [ STMT_DEDICATED_LIST ]            = "SELECT name, ip, os, reverse, kernel, datacenter, professional_use, support_level, commercial_range, state, monitoring, rack, root_device, link_speed, engaged_up_to, contact_billing, expiration, contact_tech, contact_admin, creation FROM dedicated JOIN boots ON dedicated.boot_id = boots.id WHERE account_id = ?",
+    [ STMT_DEDICATED_UPSERT ]          = "INSERT OR REPLACE INTO dedicated(account_id, id, name, datacenter, professional_use, support_level, commercial_range, ip, os, state, reverse, monitoring, rack, root_device, link_speed, boot_id, engaged_up_to, contact_billing, expiration, contact_tech, contact_admin, creation) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    [ STMT_DEDICATED_GET_IP ]          = "SELECT ip FROM dedicated WHERE account_id = ? AND name = ?",
+    [ STMT_DEDICATED_NEAR_EXPIRATION ] = "SELECT julianday(datetime(expiration, 'unixepoch', 'localtime')) - julianday('now') AS days, name FROM dedicated WHERE account_id = ? AND days < 120",
+    [ STMT_DEDICATED_SET_REVERSE ]     = "UPDATE dedicated SET reverse = ? WHERE account_id = ? AND name = ?",
+    [ STMT_DEDICATED_COMPLETION ]      = "SELECT name FROM dedicated WHERE account_id = ? AND name LIKE ? || '%'",
+    [ STMT_DEDICATED_CURRENT_BOOT ]    = "SELECT boot_type, kernel, description FROM boots JOIN dedicated ON boots.id = dedicated.boot_id WHERE account_id = ? AND name = ?",
+    [ STMT_BOOT_LIST ]                 = "SELECT boot_type, kernel, description FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.id JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ?",
+    [ STMT_BOOT_UPSERT ]               = "INSERT OR REPLACE INTO boots(id, boot_type, kernel, description) VALUES(?, ?, ?, ?)",
+    [ STMT_BOOT_COMPLETION ]           = "SELECT kernel FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.id JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ? AND kernel LIKE ? || '%'",
+    [ STMT_B_D_LINK ]                  = "INSERT OR IGNORE INTO boots_dedicated(boot_id, dedicated_id) VALUES(?, ?)",
+    [ STMT_B_D_FIND_BY_NAME ]          = "SELECT boots.id FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.id JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ? AND kernel = ?",
 };
 
-static sqlite3_stmt *prepared[STMT_COUNT];
-
-// describe all dedicated servers owned by a given account
-typedef struct {
-    bool uptodate;
-    HashTable *servers;
-} server_set_t;
+static sqlite3_stmt *prepared[STMT_COUNT] = { 0 };
 
 // describe a dedicated server
 typedef struct {
-    bool boots_uptodate;
-    HashTable *boots;
     int datacenter;
     bool professionalUse;
     int supportLevel;
     char *ip;
-    char *name; // TODO: doublon avec les clés de la hashtable servers ci-dessus
+    char *name;
     char *commercialRange;
     char *os;
     int state;
@@ -95,6 +94,15 @@ typedef struct {
     time_t creation;
 } server_t;
 
+// describe a boot
+typedef struct {
+    int type;
+    int64_t id;
+    const char *kernel;
+    const char *description;
+} boot_t;
+
+// arguments
 typedef struct {
     bool nocache;
     int boot_type;
@@ -105,6 +113,7 @@ typedef struct {
     int64_t mrtg_type;
 } dedicated_argument_t;
 
+// enums
 static const char * const datacenters[] = {
     "bhs1",
     "bhs2",
@@ -152,14 +161,6 @@ static const char * const states[] = {
     NULL
 };
 
-// describe a boot
-typedef struct {
-    int type;
-    int64_t id;
-    const char *kernel;
-    const char *description;
-} boot_t;
-
 static const char *mrtg_periods[] = {
     "daily",
     "hourly",
@@ -177,44 +178,8 @@ static const char *mrtg_types[] = {
     "traffic:upload",
 };
 
-static void server_destroy(void *data)
+static void server_init(server_t *s)
 {
-    server_t *s;
-
-    assert(NULL != data);
-
-    s = (server_t *) data;
-    hashtable_destroy(s->boots);
-    FREE(s, ip);
-    FREE(s, name);
-    FREE(s, commercialRange);
-    FREE(s, os);
-    FREE(s, reverse);
-    FREE(s, rack);
-    FREE(s, rootDevice);
-    FREE(s, contactBilling);
-    FREE(s, contactAdmin);
-    FREE(s, contactTech);
-    free(s);
-}
-
-static void boot_destroy(void *data)
-{
-    boot_t *b;
-
-    assert(NULL != data);
-
-    b = (boot_t *) data;
-    FREE(b, kernel);
-    FREE(b, description);
-    free(b);
-}
-
-static server_t *server_new(void)
-{
-    server_t *s;
-
-    s = mem_new(*s);
     INIT(s, ip);
     INIT(s, name);
     INIT(s, commercialRange);
@@ -225,42 +190,9 @@ static server_t *server_new(void)
     INIT(s, contactBilling);
     INIT(s, contactAdmin);
     INIT(s, contactTech);
-    s->boots_uptodate = FALSE;
     s->engagedUpTo = (time_t) 0;
     s->bootId = s->linkSpeed = 0;
     s->state = s->supportLevel = s->datacenter = 0;
-    s->boots = hashtable_ascii_cs_new((DupFunc) strdup, free, boot_destroy);
-
-    return s;
-}
-
-static void server_set_destroy(void *data)
-{
-    server_set_t *ss;
-
-    assert(NULL != data);
-    ss = (server_set_t *) data;
-    if (NULL != ss->servers) {
-        hashtable_destroy(ss->servers);
-    }
-    free(ss);
-}
-
-static void dedicated_on_set_account(void **data)
-{
-    if (NULL == *data) {
-        server_set_t *ss;
-
-        ss = mem_new(*ss);
-        // TODO: temporary, fetch servers only on "dedicated list nocache"
-#if 0
-        ss->uptodate = FALSE;
-#else
-        ss->uptodate = TRUE;
-#endif
-        ss->servers = hashtable_ascii_cs_new((DupFunc) strdup, free, server_destroy);
-        *data = ss;
-    }
 }
 
 static bool dedicated_ctor(error_t **error)
@@ -315,8 +247,6 @@ static bool dedicated_ctor(error_t **error)
 
     statement_batched_prepare(statements, prepared, STMT_COUNT, error);
 
-    account_register_module_callbacks(MODULE_NAME, server_set_destroy, dedicated_on_set_account);
-
     return TRUE;
 }
 
@@ -325,210 +255,192 @@ static void dedicated_dtor(void)
     statement_batched_finalize(prepared, STMT_COUNT);
 }
 
-static int parse_boot(server_t *s, json_document_t *doc, error_t **error)
+static bool parse_boot(server_t *s, json_document_t *doc, error_t **error)
 {
-    boot_t *b;
+    boot_t b;
     json_value_t root, v;
 
     root = json_document_get_root(doc);
-    b = mem_new(*b);
-    JSON_GET_PROP_INT(root, "bootId", b->id);
-    JSON_GET_PROP_STRING(root, "kernel", b->kernel);
-    JSON_GET_PROP_STRING(root, "description", b->description);
+    JSON_GET_PROP_INT(root, "bootId", b.id);
+    JSON_GET_PROP_STRING_EX(root, "kernel", b.kernel, FALSE);
+    JSON_GET_PROP_STRING_EX(root, "description", b.description, FALSE);
     json_object_get_property(root, "bootType", &v);
-    b->type = json_get_enum(v, boot_types, -1);
-    hashtable_put(s->boots, 0, b->kernel, b, NULL);
-    json_document_destroy(doc);
+    b.type = json_get_enum(v, boot_types, -1);
 
-    statement_bind(prepared[STMT_BOOT_UPSERT], "iiss", b->id, b->type, b->kernel, b->description);
+    statement_bind(prepared[STMT_BOOT_UPSERT], "iiss", b.id, b.type, b.kernel, b.description);
     statement_fetch(prepared[STMT_BOOT_UPSERT], error, "");
     assert(1 == sqlite_affected_rows());
-    statement_bind(prepared[STMT_B_D_LINK], "ii", b->id, s->serverId);
+    statement_bind(prepared[STMT_B_D_LINK], "ii", b.id, s->serverId);
     statement_fetch(prepared[STMT_B_D_LINK], error, "");
+
+    json_document_destroy(doc);
 
     return TRUE;
 }
 
-static command_status_t fetch_server_boots(const char *server_name, server_t **s, error_t **error)
+static bool fetch_server_boots(const char *server_name, server_t *s, error_t **error)
 {
-    server_set_t *ss;
-    bool request_success;
+    bool success;
+    request_t *req;
+    json_document_t *doc;
 
-    *s = NULL;
-    FETCH_ACCOUNT_SERVERS(ss);
-    request_success = TRUE;
-    if (!hashtable_get(ss->servers, server_name, s) || !(*s)->boots_uptodate) {
-        request_t *req;
-        json_document_t *doc;
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s/boot", server_name);
+    success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+    request_destroy(req);
+    // result
+    if (success) {
+        Iterator it;
+        json_value_t root;
 
-        if (NULL == *s) {
-            *s = server_new();
-            hashtable_put(ss->servers, 0, server_name, *s, NULL);
+        root = json_document_get_root(doc);
+        json_array_to_iterator(&it, root);
+        for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
+            json_value_t v;
+            json_document_t *doc;
+
+            v = (json_value_t) iterator_current(&it, NULL);
+            req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s/boot/%u", server_name, json_get_integer(v));
+            success = request_execute(req, RESPONSE_JSON, (void **) &doc, error); // success is assumed to be TRUE before the first iteration
+            request_destroy(req);
+            // result
+            success = parse_boot(s, doc, error);
         }
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s/boot", server_name);
-        request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
-        request_destroy(req);
-        // result
-        if (request_success) {
-            Iterator it;
-            json_value_t root;
-
-            root = json_document_get_root(doc);
-            json_array_to_iterator(&it, root);
-            for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-                json_value_t v;
-                json_document_t *doc;
-
-                v = (json_value_t) iterator_current(&it, NULL);
-                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s/boot/%u", server_name, json_get_integer(v));
-                request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error); // request_success is assumed to be TRUE before the first iteration
-                request_destroy(req);
-                // result
-                parse_boot(*s, doc, error);
-            }
-            iterator_close(&it);
-            json_document_destroy(doc);
-            (*s)->boots_uptodate = TRUE;
-        }
+        iterator_close(&it);
+        json_document_destroy(doc);
     }
 
-    return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+    return success;
 }
 
-static server_t *fetch_server(server_set_t *ss, const char * const server_name, bool force, error_t **error)
+static bool fetch_server(const char * const server_name, bool force, error_t **error)
 {
-    server_t *s;
+    bool success;
 
-    s = NULL;
-    if (force || !ss->uptodate || !hashtable_get(ss->servers, server_name, &s)) {
+    success = TRUE;
+    if (force) {
+        server_t s;
         request_t *req;
         json_document_t *doc;
-        bool request_success;
 
-        s = server_new();
-        hashtable_put(ss->servers, 0, server_name, s, NULL);
+        server_init(&s);
         req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s", server_name);
-        request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+        success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
-        if (request_success) {
+        if (success) {
             json_value_t root, propvalue;
             char binds[] = "iisibisssisbssiiisissi";
 
             root = json_document_get_root(doc);
             json_object_get_property(root, "datacenter", &propvalue);
-            s->datacenter = json_get_enum(propvalue, datacenters, -1);
-            JSON_GET_PROP_BOOL(root, "professionalUse", s->professionalUse);
+            s.datacenter = json_get_enum(propvalue, datacenters, -1);
+            JSON_GET_PROP_BOOL(root, "professionalUse", s.professionalUse);
             json_object_get_property(root, "supportLevel", &propvalue);
-            s->supportLevel = json_get_enum(propvalue, support_levels, -1);
-            JSON_GET_PROP_STRING(root, "ip", s->ip);
-            JSON_GET_PROP_STRING(root, "name", s->name);
-            JSON_GET_PROP_STRING(root, "commercialRange", s->commercialRange);
-            if (NULL == s->commercialRange) {
+            s.supportLevel = json_get_enum(propvalue, support_levels, -1);
+            JSON_GET_PROP_STRING_EX(root, "ip", s.ip, FALSE);
+            JSON_GET_PROP_STRING_EX(root, "name", s.name, FALSE);
+            JSON_GET_PROP_STRING_EX(root, "commercialRange", s.commercialRange, FALSE);
+            if (NULL == s.commercialRange) {
                 binds[6] = 'n';
             }
-            JSON_GET_PROP_STRING(root, "os", s->os);
+            JSON_GET_PROP_STRING_EX(root, "os", s.os, FALSE);
             json_object_get_property(root, "state", &propvalue);
-            s->state = json_get_enum(propvalue, states, -1);
-            JSON_GET_PROP_STRING(root, "reverse", s->reverse);
-            if (NULL == s->reverse) {
+            s.state = json_get_enum(propvalue, states, -1);
+            JSON_GET_PROP_STRING_EX(root, "reverse", s.reverse, FALSE);
+            if (NULL == s.reverse) {
                 binds[10] = 'n';
             }
-            JSON_GET_PROP_INT(root, "serverId", s->serverId);
-            JSON_GET_PROP_BOOL(root, "monitoring", s->monitoring);
-            JSON_GET_PROP_STRING(root, "rack", s->rack);
-            JSON_GET_PROP_STRING(root, "rootDevice", s->rootDevice);
-            if (NULL == s->rootDevice) {
+            JSON_GET_PROP_INT(root, "serverId", s.serverId);
+            JSON_GET_PROP_BOOL(root, "monitoring", s.monitoring);
+            JSON_GET_PROP_STRING_EX(root, "rack", s.rack, FALSE);
+            JSON_GET_PROP_STRING_EX(root, "rootDevice", s.rootDevice, FALSE);
+            if (NULL == s.rootDevice) {
                 binds[13] = 'n';
             }
             json_object_get_property(root, "linkSpeed", &propvalue);
-//             s->linkSpeed = json_null == propvalue ? 0 : json_get_integer(propvalue);
             if (json_null == propvalue) {
                 binds[14] = 'n';
             } else {
-                s->linkSpeed = json_get_integer(propvalue);
+                s.linkSpeed = json_get_integer(propvalue);
             }
             json_object_get_property(root, "bootId", &propvalue);
-//             s->bootId = json_null == propvalue ? 0 : json_get_integer(propvalue);
             if (json_null == propvalue) {
                 binds[15] = 'n';
             } else {
-                s->bootId = json_get_integer(propvalue);
+                s.bootId = json_get_integer(propvalue);
             }
-            json_document_destroy(doc);
             {
                 request_t *req;
                 json_document_t *doc;
 
                 req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s/serviceInfos", server_name);
-                request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+                success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
                 request_destroy(req);
-                if (request_success) {
+                if (success) {
                     json_value_t root, propvalue;
 
                     root = json_document_get_root(doc);
-                    JSON_GET_PROP_STRING(root, "contactAdmin", s->contactAdmin);
-                    JSON_GET_PROP_STRING(root, "contactBilling", s->contactBilling);
-                    JSON_GET_PROP_STRING(root, "contactTech", s->contactTech);
+                    JSON_GET_PROP_STRING_EX(root, "contactAdmin", s.contactAdmin, FALSE);
+                    JSON_GET_PROP_STRING_EX(root, "contactBilling", s.contactBilling, FALSE);
+                    JSON_GET_PROP_STRING_EX(root, "contactTech", s.contactTech, FALSE);
                     json_object_get_property(root, "engagedUpTo", &propvalue);
                     if (json_null != propvalue) {
-                        date_parse_to_timestamp(json_get_string(propvalue), "%F", &s->engagedUpTo);
+                        date_parse_to_timestamp(json_get_string(propvalue), "%F", &s.engagedUpTo);
                     }
                     json_object_get_property(root, "expiration", &propvalue);
-                    date_parse_to_timestamp(json_get_string(propvalue), "%F", &s->expiration);
+                    date_parse_to_timestamp(json_get_string(propvalue), "%F", &s.expiration);
                     json_object_get_property(root, "creation", &propvalue);
-                    date_parse_to_timestamp(json_get_string(propvalue), "%F", &s->creation);
+                    date_parse_to_timestamp(json_get_string(propvalue), "%F", &s.creation);
                     statement_bind( /* e = enum (int), d = date (int), |n = or NULL */
                         prepared[STMT_DEDICATED_UPSERT], binds/*"i" "isibisssisbssii" "isissi"*/,
                         // account_id (i)
                         current_account->id,
                         // id (i), name (s), datacenter (e), professional_use (b), support_level (e), commercial_range (s|n), ip (s), os (s), state (e), reverse (s|n), monitoring (b), rack (s), root_device (s|n), link_speed (i|n), boot_id (i|n)
-                        s->serverId, s->name, s->datacenter, s->professionalUse, s->supportLevel, s->commercialRange, s->ip, s->os, s->state, s->reverse, s->monitoring, s->rack, s->rootDevice, s->linkSpeed, s->bootId,
+                        s.serverId, s.name, s.datacenter, s.professionalUse, s.supportLevel, s.commercialRange, s.ip, s.os, s.state, s.reverse, s.monitoring, s.rack, s.rootDevice, s.linkSpeed, s.bootId,
                         // engaged_up_to (d|n), contact_billing (s), expiration (d), contact_tech (s), contact_admin (s), creation (d)
-                        s->engagedUpTo, s->contactBilling, s->expiration, s->contactTech, s->contactAdmin, s->creation
+                        s.engagedUpTo, s.contactBilling, s.expiration, s.contactTech, s.contactAdmin, s.creation
                     );
                     statement_fetch(prepared[STMT_DEDICATED_UPSERT], error, "");
                     json_document_destroy(doc);
                 }
             }
-            fetch_server_boots(server_name, &s, error);
+            json_document_destroy(doc);
+            success = fetch_server_boots(server_name, &s, error);
         }
     }
 
-    return s;
+    return success;
 }
 
-static command_status_t fetch_servers(server_set_t *ss, bool force, error_t **error)
+static bool fetch_servers(bool force, error_t **error)
 {
-    if (!ss->uptodate || force) {
+    bool success;
+
+    success = TRUE;
+    if (force) {
         request_t *req;
-        bool request_success;
         json_document_t *doc;
 
         req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server");
-        request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+        success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
-        if (request_success) {
+        if (success) {
             Iterator it;
             json_value_t root;
 
             root = json_document_get_root(doc);
-            hashtable_clear(ss->servers);
             json_array_to_iterator(&it, root);
             for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
                 json_value_t v;
 
                 v = (json_value_t) iterator_current(&it, NULL);
-                fetch_server(ss, json_get_string(v), force, error);
+                fetch_server(json_get_string(v), force, error);
             }
             iterator_close(&it);
             json_document_destroy(doc);
-            ss->uptodate = TRUE;
-        } else {
-            return COMMAND_FAILURE;
         }
     }
 
-    return COMMAND_SUCCESS;
+    return success;
 }
 
 static command_status_t dedicated_list(COMMAND_ARGS)
@@ -537,17 +449,15 @@ static command_status_t dedicated_list(COMMAND_ARGS)
     Iterator it;
     server_t server;
     const char *boot;
-    server_set_t *ss;
     command_status_t ret;
     dedicated_argument_t *args;
 
     USED(arg);
     USED(mainopts);
-    FETCH_ACCOUNT_SERVERS(ss);
     args = (dedicated_argument_t *) arg;
     // populate
     // TODO: si on a aucun compte ou si nocache?
-    if ((COMMAND_SUCCESS != (ret = fetch_servers(ss, args->nocache, error)))) {
+    if (!(ret = fetch_servers(args->nocache, error))) {
         return ret;
     }
     // display
@@ -576,7 +486,7 @@ static command_status_t dedicated_list(COMMAND_ARGS)
     );
     statement_bind(prepared[STMT_DEDICATED_LIST], "i", current_account->id);
     statement_to_iterator(&it, prepared[STMT_DEDICATED_LIST],
-        "sssssibisibssi" "isissi",
+        DEDICATED_OUTPUT_BINDS,
         &server.name, &server.ip, &server.os, &server.reverse, &boot, &server.datacenter, &server.professionalUse, &server.supportLevel, &server.commercialRange, &server.state, &server.monitoring, &server.rack, &server.rootDevice, &server.linkSpeed,
         &server.engagedUpTo, &server.contactBilling, &server.expiration, &server.contactTech, &server.contactAdmin, &server.creation
     );
@@ -596,51 +506,23 @@ static command_status_t dedicated_list(COMMAND_ARGS)
 
 static command_status_t dedicated_check(COMMAND_ARGS)
 {
-    bool success;
-    server_set_t *ss;
+    Iterator it;
+    int64_t days;
+    char *server_name;
 
     USED(arg);
+    USED(error);
     USED(mainopts);
-    FETCH_ACCOUNT_SERVERS(ss);
-    // populate
-    if ((success = (COMMAND_SUCCESS == fetch_servers(ss, FALSE, error)))) {
-        time_t now;
-        Iterator it;
-
-        now = time(NULL);
-        hashtable_to_iterator(&it, ss->servers);
-        for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
-            request_t *req;
-            json_document_t *doc;
-            const char *server_name;
-
-            iterator_current(&it, (void **) &server_name);
-            // request
-            req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s/serviceInfos", server_name);
-            success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
-            request_destroy(req);
-            // response
-            if (success) {
-                json_value_t root, expiration;
-                time_t server_expiration;
-
-                root = json_document_get_root(doc);
-                if (json_object_get_property(root, "expiration", &expiration)) {
-                    if (date_parse_to_timestamp(json_get_string(expiration), NULL, &server_expiration)) {
-                        int diff_days;
-
-                        diff_days = date_diff_in_days(server_expiration, now);
-                        if (diff_days > 0 && diff_days < 3000) {
-                            printf("%s expires in %d days\n", server_name, diff_days);
-                        }
-                    }
-                }
-                json_document_destroy(doc);
-            }
-        }
+    statement_bind(prepared[STMT_DEDICATED_NEAR_EXPIRATION], "i", current_account->id);
+    statement_to_iterator(&it, prepared[STMT_DEDICATED_NEAR_EXPIRATION], "is", &days, &server_name);
+    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        iterator_current(&it, NULL);
+        printf("%s expires in %" PRIi64 " days\n", server_name, days);
+        free(server_name);
     }
+    iterator_close(&it);
 
-    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+    return COMMAND_SUCCESS;
 }
 
 static command_status_t dedicated_reboot(COMMAND_ARGS)
@@ -779,10 +661,8 @@ static bool fetch_ip_block(const char * const server_ip, char **ip, error_t **er
 
 static command_status_t dedicated_reverse_set_delete(COMMAND_ARGS, bool set)
 {
-    char *ip;
-    server_t *s;
     bool success;
-    server_set_t *ss;
+    char *ip, *ipblock;
     dedicated_argument_t *args;
 
     USED(mainopts);
@@ -791,10 +671,10 @@ static command_status_t dedicated_reverse_set_delete(COMMAND_ARGS, bool set)
     if (set) {
         assert(NULL != args->reverse);
     }
-    FETCH_ACCOUNT_SERVERS(ss);
-    s = fetch_server(ss, args->server_name, FALSE, error);
-    if ((success = (s != NULL))) {
-        if ((success = fetch_ip_block(s->ip, &ip, error))) {
+    statement_bind(prepared[STMT_DEDICATED_GET_IP], "is", current_account->id, args->server_name);
+    success = statement_fetch(prepared[STMT_DEDICATED_GET_IP], error, "s", &ip);
+    if (success) {
+        if ((success = fetch_ip_block(ip, &ipblock, error))) {
             request_t *req;
             json_document_t *doc;
 
@@ -803,26 +683,26 @@ static command_status_t dedicated_reverse_set_delete(COMMAND_ARGS, bool set)
 
                 doc = json_document_new();
                 root = json_object();
-                json_object_set_property(root, "ipReverse", json_string(s->ip));
+                json_object_set_property(root, "ipReverse", json_string(ip));
                 json_object_set_property(root, "reverse", json_string(args->reverse));
                 json_document_set_root(doc, root);
-                req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, doc, API_BASE_URL "/ip/%s/reverse", ip);
+                req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, doc, API_BASE_URL "/ip/%s/reverse", ipblock);
             } else {
-                req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/ip/%s/reverse/%s", ip, s->ip);
+                req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/ip/%s/reverse/%s", ipblock, ip);
             }
             success = request_execute(req, RESPONSE_IGNORE, NULL, error);
             request_destroy(req);
             if (success) {
-                FREE(s, reverse);
                 if (set) {
                     json_document_destroy(doc);
-                    s->reverse = strdup(args->reverse);
-                } else {
-                    INIT(s, reverse);
                 }
+                statement_bind(prepared[STMT_DEDICATED_SET_REVERSE], "sis", args->reverse, current_account->id, args->server_name);
+                statement_fetch(prepared[STMT_DEDICATED_SET_REVERSE], error, "");
+                success = 1 == sqlite_affected_rows();
             }
-            free(ip);
+            free(ipblock);
         }
+        free(ip);
     }
 
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;

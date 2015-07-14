@@ -53,7 +53,7 @@ static const char *statements[STMT_COUNT] = {
     [ STMT_SET_USER_VERSION ] = "PRAGMA user_version = " STRINGIFY_EXPANDED(OVH_CLI_VERSION_NUMBER), // PRAGMA doesn't permit parameter
 };
 
-static sqlite3_stmt *prepared[STMT_COUNT];
+static sqlite3_stmt *prepared[STMT_COUNT] = { 0 };
 
 static bool statement_iterator_is_valid(const void *UNUSED(collection), void **state)
 {
@@ -207,9 +207,11 @@ bool statement_batched_prepare(const char **statements, sqlite3_stmt **preprepar
         ret &= SQLITE_OK == sqlite3_prepare_v2(db, statements[i], -1, &preprepared[i], NULL);
     }
     if (!ret) {
+        --i; // return on the statement which actually failed
         error_set(error, FATAL, _("%s for %s"), sqlite3_errmsg(db), statements[i]);
-        while (--i != 0) {
+        while (i-- != 0) { // finalize the initialized ones
             sqlite3_finalize(preprepared[i]);
+            preprepared[i] = NULL;
         }
     }
 
@@ -221,7 +223,9 @@ void statement_batched_finalize(sqlite3_stmt **preprepared, size_t count)
     size_t i;
 
     for (i = 0; i < count; i++) {
-        sqlite3_finalize(preprepared[i]);
+        if (NULL != preprepared[i]) {
+            sqlite3_finalize(preprepared[i]);
+        }
     }
 }
 
