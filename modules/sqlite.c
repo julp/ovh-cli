@@ -1,4 +1,5 @@
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <pwd.h>
 #include <unistd.h>
 #include <string.h>
@@ -408,6 +409,7 @@ static bool sqlite_early_ctor(error_t **error)
 {
     int ret;
     char *home;
+    mode_t old_umask;
 
     *db_path = '\0';
     if (NULL == (home = getenv("HOME"))) {
@@ -443,10 +445,12 @@ static bool sqlite_early_ctor(error_t **error)
         return FALSE;
     }
     // open database
+    old_umask = umask(077);
     if (SQLITE_OK != (ret = sqlite3_open(db_path, &db))) {
         error_set(error, FATAL, _("can't open sqlite database %s: %s"), db_path, sqlite3_errmsg(db));
         return FALSE;
     }
+    umask(old_umask);
     // preprepare own statement
     statement_batched_prepare(statements, prepared, STMT_COUNT, error);
     // fetch user_version
