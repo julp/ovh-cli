@@ -8,7 +8,6 @@
 #include "table.h"
 #include "modules/api.h"
 #include "modules/sqlite.h"
-#include "struct/hashtable.h"
 #include "commands/account.h"
 #include "account_api.h"
 
