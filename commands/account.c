@@ -115,20 +115,21 @@ static const char * const expires_in_at[] = {
     NULL
 };
 
-/**
- * TODO:
- * - invalidate consumer_key from api.c on 403?
- */
-
 static void account_flush(void)
 {
+//     acd.current_account.id = 0;
     free(acd.current_account.name);
+//     acd.current_account.name = NULL;
     free(acd.current_account.password);
+//     acd.current_account.password = NULL;
     free((void *) acd.current_account.consumer_key);
+//     acd.current_account.consumer_key = NULL;
     bzero(&acd.current_account, sizeof(acd.current_account));
 
     free(acd.current_application.key);
+//     acd.current_application.key = NULL;
     free(acd.current_application.secret);
+//     acd.current_application.secret = NULL;
     bzero(&acd.current_application, sizeof(acd.current_application));
 }
 
@@ -311,6 +312,8 @@ static void account_data_dtor(void *data)
 
 static bool account_early_ctor(error_t **error)
 {
+    account_flush();
+
     if (!create_or_migrate("accounts", "CREATE TABLE accounts(\n\
         id INTEGER NOT NULL PRIMARY KEY,\n\
         name TEXT NOT NULL UNIQUE,\n\
@@ -344,7 +347,6 @@ static bool account_late_ctor(error_t **error)
 {
     return account_set_current(NULL, error);
 }
-
 
 static void account_dtor(void)
 {
@@ -451,15 +453,12 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
         if (NO_ACTIVE_ACCOUNT) {
             acd.current_account = account;
             if (NULL != args->consumer_key) {
-                free((void *) acd.current_account.consumer_key);
                 acd.current_account.consumer_key = strdup(args->consumer_key);
             }
             if (NULL != args->password) {
-                free(acd.current_account.password);
                 acd.current_account.password = strdup(args->password);
             }
             if (NULL != args->account) {
-                free(acd.current_account.name);
                 acd.current_account.name = strdup(args->account);
             }
         }
@@ -615,8 +614,53 @@ static command_status_t application_delete(COMMAND_ARGS)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
+static command_status_t export(COMMAND_ARGS)
+{
+    Iterator it;
+    String *buffer;
+    account_t account;
+    application_t application;
+
+    USED(arg);
+    USED(error);
+    USED(mainopts);
+    buffer = string_new();
+    // accounts
+    statement_to_iterator(&it, prepared[STMT_ACCOUNT_LIST], ACCOUNT_BINDS, &account.id, &account.name, &account.password, &account.consumer_key, &account.endpoint_id, &account.isdefault, &account.expires_at);
+    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        iterator_current(&it, NULL);
+        string_append_formatted(buffer, "account %s add password \"%s\" endpoint %s", account.name, account.password, endpoint_names[account.endpoint_id]);
+        if (!NULL_OR_EMPTY(account.consumer_key)) {
+            char datebuf[512];
+
+            if (0 != timestamp_to_localtime(account.expires_at, "%c", datebuf, ARRAY_SIZE(datebuf))) {
+                string_append_formatted(buffer, " key \"%s\" expires at \"%s\"", account.consumer_key, datebuf);
+            }
+        }
+        string_append_char(buffer, '\n');
+        free(account.name);
+        free(account.password);
+        free((void *) account.consumer_key);
+    }
+    iterator_close(&it);
+    // applications
+    statement_to_iterator(&it, prepared[STMT_APPLICATION_LIST], APPLICATION_BINDS, &application.key, &application.secret, &application.endpoint_id);
+    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        iterator_current(&it, NULL);
+        string_append_formatted(buffer, "application %s add \"%s\" \"%s\"\n", endpoint_names[application.endpoint_id], application.key, application.secret);
+        free(application.key);
+        free(application.secret);
+    }
+    iterator_close(&it);
+    puts(buffer->ptr);
+    string_destroy(buffer);
+
+    return COMMAND_SUCCESS;
+}
+
 static void account_regcomm(graph_t *g)
 {
+    graph_create_full_path(g, argument_create_literal("export", export), NULL);
     // account ...
     {
         argument_t *arg_expires_in_at;

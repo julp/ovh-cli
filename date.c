@@ -18,17 +18,6 @@ bool date_parse_to_timestamp(const char *date, const char *format, time_t *tm)
     return NULL != endptr;
 }
 
-bool date_parse(const char *date, const char *format, struct tm *tm, error_t **error) /* DEPRECATED */
-{
-    char *endptr;
-
-    if (NULL == (endptr = strptime(date, format, tm))) {
-        error_set(error, NOTICE, _("unable to parse date: %s"), date);
-    }
-
-    return NULL != endptr;
-}
-
 int date_diff_in_days(time_t a, time_t b)
 {
     return difftime(a, b) / DAY;
@@ -238,7 +227,7 @@ struct tm timestamp_to_tm(time_t t)
     return tm;
 }
 
-size_t timestamp_to_localtime(time_t t, char *buffer, size_t buffer_size)
+size_t timestamp_to_localtime(time_t t, const char *format, char *buffer, size_t buffer_size)
 {
     struct tm ltm = { 0 };
 
@@ -246,7 +235,7 @@ size_t timestamp_to_localtime(time_t t, char *buffer, size_t buffer_size)
     if (NULL == localtime_r(&t, &ltm)) {
         return 0;
     } else {
-        return strftime(buffer, buffer_size, "%x %X", &ltm);
+        return strftime(buffer, buffer_size, NULL == format ? "%x %X" : format, &ltm);
     }
 }
 
@@ -261,7 +250,7 @@ INITIALIZER_P(date_test)
         time_t t;
 
         iterator_current(&it, (void *) &t);
-        timestamp_to_localtime(t, buffer, ARRAY_SIZE(buffer));
+        timestamp_to_localtime(t, NULL, buffer, ARRAY_SIZE(buffer));
         printf("%s\n", buffer);
     }
     iterator_close(&it);

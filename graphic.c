@@ -73,7 +73,7 @@ void graphic_display(graphic_t *g)
     step = (g->max - g->min) / NB_TICKS;
     for (gl = g->head; NULL != gl; gl = gl->next) {
         putchar(' ');
-        timestamp_to_localtime(gl->sse, buffer, ARRAY_SIZE(buffer));
+        timestamp_to_localtime(gl->sse, NULL, buffer, ARRAY_SIZE(buffer));
         fputs(buffer, stdout);
         putchar(' ');
         putchar('|');
