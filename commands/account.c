@@ -79,6 +79,9 @@ enum {
     STMT_APPLICATION_DELETE,
     // specific read (select)
     STMT_APPLICATION_LOAD,
+    // module
+    STMT_FETCH_SELECT,
+    STMT_FETCH_UPSERT,
     // count
     STMT_COUNT
 };
@@ -100,6 +103,8 @@ static const char *statements[STMT_COUNT] = {
     [ STMT_APPLICATION_INSERT ]     = "INSERT INTO applications(app_key, secret, endpoint_id) VALUES(?, ?, ?)",
     [ STMT_APPLICATION_DELETE ]     = "DELETE FROM applications WHERE endpoint_id = ?",
     [ STMT_APPLICATION_LOAD ]       = "SELECT * FROM applications WHERE endpoint_id = ?",
+    [ STMT_FETCH_SELECT ]           = "SELECT updated_at FROM fetchs WHERE account_id = ? AND module_name = ?",
+    [ STMT_FETCH_UPSERT ]           = "INSERT OR REPLACE INTO fetchs(account_id, module_name, updated_at) VALUES(?, ?, strftime('%s','now'))",
 };
 
 static sqlite3_stmt *prepared[STMT_COUNT] = { 0 };
@@ -310,6 +315,18 @@ static void account_data_dtor(void *data)
     }
 }
 
+bool account_get_last_fetch_for(const char *module_name, time_t *t, error_t **error)
+{
+    statement_bind(prepared[STMT_FETCH_SELECT], "is", acd.current_account.id, module_name);
+    return statement_fetch(prepared[STMT_FETCH_SELECT], error, "i", &t);
+}
+
+bool account_set_last_fetch_for(const char *module_name, error_t **error)
+{
+    statement_bind(prepared[STMT_FETCH_UPSERT], "is", acd.current_account.id, module_name);
+    return statement_fetch(prepared[STMT_FETCH_UPSERT], error, "");
+}
+
 static bool account_early_ctor(error_t **error)
 {
     account_flush();
@@ -329,6 +346,14 @@ static bool account_early_ctor(error_t **error)
         app_key TEXT NOT NULL,\n\
         secret TEXT NOT NULL,\n\
         endpoint_id INTEGER NOT NULL UNIQUE\n\
+    )", NULL, 0, error)) {
+        return FALSE;
+    }
+    if (!create_or_migrate("fetchs", "CREATE TABLE fetchs(\n\
+        account_id INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,\n\
+        module_name TEXT NOT NULL,\n\
+        updated_at INT NOT NULL,\n\
+        PRIMARY KEY (account_id, module_name)\n\
     )", NULL, 0, error)) {
         return FALSE;
     }

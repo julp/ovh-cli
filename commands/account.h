@@ -21,6 +21,9 @@ typedef struct {
 const account_t *current_account;
 const application_t *current_application;
 
+bool account_set_last_fetch_for(const char *, error_t **);
+bool account_get_last_fetch_for(const char *, time_t *, error_t **);
+
 const char *account_current(void);
 
 void account_invalidate_consumer_key(error_t **);
