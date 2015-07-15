@@ -69,6 +69,15 @@ static const char *statements[STMT_COUNT] = {
 
 static sqlite3_stmt *prepared[STMT_COUNT] = { 0 };
 
+#define FETCH_SERVERS_IF_NEEDED \
+    do { \
+        time_t updated_at; \
+ \
+        if (!fetch_servers(args->nocache || (!account_get_last_fetch_for(MODULE_NAME, &updated_at, error) && NULL == *error), error)) { \
+            return COMMAND_FAILURE; \
+        } \
+    } while (0);
+
 // describe a dedicated server
 typedef struct {
     int datacenter;
@@ -429,14 +438,17 @@ static bool fetch_servers(bool force, error_t **error)
 
             root = json_document_get_root(doc);
             json_array_to_iterator(&it, root);
-            for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+            for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
                 json_value_t v;
 
                 v = (json_value_t) iterator_current(&it, NULL);
-                fetch_server(json_get_string(v), force, error);
+                success &= fetch_server(json_get_string(v), force, error); // TODO: check return value
             }
             iterator_close(&it);
             json_document_destroy(doc);
+        }
+        if (success) {
+            account_set_last_fetch_for(MODULE_NAME, error);
         }
     }
 
@@ -456,10 +468,7 @@ static command_status_t dedicated_list(COMMAND_ARGS)
     USED(mainopts);
     args = (dedicated_argument_t *) arg;
     // populate
-    // TODO: si on a aucun compte ou si nocache?
-    if (!(ret = fetch_servers(args->nocache, error))) {
-        return ret;
-    }
+    FETCH_SERVERS_IF_NEEDED;
     // display
     t = table_new(
         20,
@@ -509,10 +518,11 @@ static command_status_t dedicated_check(COMMAND_ARGS)
     Iterator it;
     int64_t days;
     char *server_name;
+    dedicated_argument_t *args;
 
-    USED(arg);
-    USED(error);
     USED(mainopts);
+    args = (dedicated_argument_t *) arg;
+    FETCH_SERVERS_IF_NEEDED;
     statement_bind(prepared[STMT_DEDICATED_NEAR_EXPIRATION], "i", current_account->id);
     statement_to_iterator(&it, prepared[STMT_DEDICATED_NEAR_EXPIRATION], "is", &days, &server_name);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
@@ -557,11 +567,10 @@ static command_status_t dedicated_boot_list(COMMAND_ARGS)
     Iterator it;
     dedicated_argument_t *args;
 
-    USED(error);
     USED(mainopts);
-    // TODO: fetch servers here if needed?
     args = (dedicated_argument_t *) arg;
     assert(NULL != args->server_name);
+    FETCH_SERVERS_IF_NEEDED;
     printf(_("Available boots for '%s':\n"), args->server_name);
     t = table_new(
         3,
