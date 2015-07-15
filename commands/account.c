@@ -638,6 +638,9 @@ static command_status_t export(COMMAND_ARGS)
             }
         }
         string_append_char(buffer, '\n');
+        if (account.isdefault) {
+            string_append_formatted(buffer, "account %s default\n", account.name);
+        }
         free(account.name);
         free(account.password);
         free((void *) account.consumer_key);
