@@ -25,7 +25,6 @@
 /**
  * TODO:
  * - cleanup: DELETE expired servers? DELETE them all when running fetch_servers?
- * - populate servers: when to decide on our own if we should run fetch_servers?
  */
 
 enum {
@@ -50,24 +49,22 @@ enum {
     STMT_COUNT
 };
 
-#define DEDICATED_OUTPUT_BINDS "sssssibisibssi" "isissi"
+#define BOOT_OUTPUT_BINDS "iss"
 
-static const char *statements[STMT_COUNT] = {
-    [ STMT_DEDICATED_LIST ]            = "SELECT name, ip, os, reverse, kernel, datacenter, professional_use, support_level, commercial_range, state, monitoring, rack, root_device, link_speed, engaged_up_to, contact_billing, expiration, contact_tech, contact_admin, creation FROM dedicated JOIN boots ON dedicated.boot_id = boots.id WHERE account_id = ?",
-    [ STMT_DEDICATED_UPSERT ]          = "INSERT OR REPLACE INTO dedicated(account_id, id, name, datacenter, professional_use, support_level, commercial_range, ip, os, state, reverse, monitoring, rack, root_device, link_speed, boot_id, engaged_up_to, contact_billing, expiration, contact_tech, contact_admin, creation) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    [ STMT_DEDICATED_GET_IP ]          = "SELECT ip FROM dedicated WHERE account_id = ? AND name = ?",
-    [ STMT_DEDICATED_NEAR_EXPIRATION ] = "SELECT julianday(datetime(expiration, 'unixepoch', 'localtime')) - julianday('now') AS days, name FROM dedicated WHERE account_id = ? AND days < 120",
-    [ STMT_DEDICATED_SET_REVERSE ]     = "UPDATE dedicated SET reverse = ? WHERE account_id = ? AND name = ?",
-    [ STMT_DEDICATED_COMPLETION ]      = "SELECT name FROM dedicated WHERE account_id = ? AND name LIKE ? || '%'",
-    [ STMT_DEDICATED_CURRENT_BOOT ]    = "SELECT boot_type, kernel, description FROM boots JOIN dedicated ON boots.id = dedicated.boot_id WHERE account_id = ? AND name = ?",
-    [ STMT_BOOT_LIST ]                 = "SELECT boot_type, kernel, description FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.id JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ?",
-    [ STMT_BOOT_UPSERT ]               = "INSERT OR REPLACE INTO boots(id, boot_type, kernel, description) VALUES(?, ?, ?, ?)",
-    [ STMT_BOOT_COMPLETION ]           = "SELECT kernel FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.id JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ? AND kernel LIKE ? || '%'",
-    [ STMT_B_D_LINK ]                  = "INSERT OR IGNORE INTO boots_dedicated(boot_id, dedicated_id) VALUES(?, ?)",
-    [ STMT_B_D_FIND_BY_NAME ]          = "SELECT boots.id FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.id JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ? AND kernel = ?",
+static sqlite_statement_t statements[STMT_COUNT] = {
+    [ STMT_DEDICATED_LIST ]            = DECL_STMT("SELECT name, ip, os, reverse, kernel, datacenter, professional_use, support_level, commercial_range, state, monitoring, rack, root_device, link_speed, engaged_up_to, contact_billing, expiration, contact_tech, contact_admin, creation FROM dedicated JOIN boots ON dedicated.boot_id = boots.id WHERE account_id = ?", "i", "sssssibisibssi" "isissi"),
+    [ STMT_DEDICATED_UPSERT ]          = DECL_STMT("INSERT OR REPLACE INTO dedicated(account_id, id, name, datacenter, professional_use, support_level, commercial_range, ip, os, state, reverse, monitoring, rack, root_device, link_speed, boot_id, engaged_up_to, contact_billing, expiration, contact_tech, contact_admin, creation) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", "i" "isibisssisbssii" "isissi", ""),
+    [ STMT_DEDICATED_GET_IP ]          = DECL_STMT("SELECT ip FROM dedicated WHERE account_id = ? AND name = ?", "is", "s"),
+    [ STMT_DEDICATED_NEAR_EXPIRATION ] = DECL_STMT("SELECT julianday(datetime(expiration, 'unixepoch', 'localtime')) - julianday('now') AS days, name FROM dedicated WHERE account_id = ? AND days < 120", "i", "is"),
+    [ STMT_DEDICATED_SET_REVERSE ]     = DECL_STMT("UPDATE dedicated SET reverse = ? WHERE account_id = ? AND name = ?", "sis", ""),
+    [ STMT_DEDICATED_COMPLETION ]      = DECL_STMT("SELECT name FROM dedicated WHERE account_id = ? AND name LIKE ? || '%'", "is", "s"),
+    [ STMT_DEDICATED_CURRENT_BOOT ]    = DECL_STMT("SELECT boot_type, kernel, description FROM boots JOIN dedicated ON boots.id = dedicated.boot_id WHERE account_id = ? AND name = ?", "is", BOOT_OUTPUT_BINDS),
+    [ STMT_BOOT_LIST ]                 = DECL_STMT("SELECT boot_type, kernel, description FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.id JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ?", "is", BOOT_OUTPUT_BINDS),
+    [ STMT_BOOT_UPSERT ]               = DECL_STMT("INSERT OR REPLACE INTO boots(id, boot_type, kernel, description) VALUES(?, ?, ?, ?)", "iiss", ""),
+    [ STMT_BOOT_COMPLETION ]           = DECL_STMT("SELECT kernel FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.id JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ? AND kernel LIKE ? || '%'", "iss", "s"),
+    [ STMT_B_D_LINK ]                  = DECL_STMT("INSERT OR IGNORE INTO boots_dedicated(boot_id, dedicated_id) VALUES(?, ?)", "ii", ""),
+    [ STMT_B_D_FIND_BY_NAME ]          = DECL_STMT("SELECT boots.id FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.id JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ? AND kernel = ?", "iss", "i"),
 };
-
-static sqlite3_stmt *prepared[STMT_COUNT] = { 0 };
 
 #define FETCH_SERVERS_IF_NEEDED \
     do { \
@@ -254,14 +251,14 @@ static bool dedicated_ctor(error_t **error)
         return FALSE;
     }
 
-    statement_batched_prepare(statements, prepared, STMT_COUNT, error);
+    statement_batched_prepare(statements, STMT_COUNT, error);
 
     return TRUE;
 }
 
 static void dedicated_dtor(void)
 {
-    statement_batched_finalize(prepared, STMT_COUNT);
+    statement_batched_finalize(statements, STMT_COUNT);
 }
 
 static bool parse_boot(server_t *s, json_document_t *doc, error_t **error)
@@ -276,11 +273,11 @@ static bool parse_boot(server_t *s, json_document_t *doc, error_t **error)
     json_object_get_property(root, "bootType", &v);
     b.type = json_get_enum(v, boot_types, -1);
 
-    statement_bind(prepared[STMT_BOOT_UPSERT], "iiss", b.id, b.type, b.kernel, b.description);
-    statement_fetch(prepared[STMT_BOOT_UPSERT], error, "");
+    statement_bind(&statements[STMT_BOOT_UPSERT], NULL, b.id, b.type, b.kernel, b.description);
+    statement_fetch(&statements[STMT_BOOT_UPSERT], error);
     assert(1 == sqlite_affected_rows());
-    statement_bind(prepared[STMT_B_D_LINK], "ii", b.id, s->serverId);
-    statement_fetch(prepared[STMT_B_D_LINK], error, "");
+    statement_bind(&statements[STMT_B_D_LINK], NULL, b.id, s->serverId);
+    statement_fetch(&statements[STMT_B_D_LINK], error);
 
     json_document_destroy(doc);
 
@@ -337,7 +334,7 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
         request_destroy(req);
         if (success) {
             json_value_t root, propvalue;
-            char binds[] = "iisibisssisbssiiisissi";
+            bool nulls[22] = { 0 };
 
             root = json_document_get_root(doc);
             json_object_get_property(root, "datacenter", &propvalue);
@@ -349,31 +346,31 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
             JSON_GET_PROP_STRING_EX(root, "name", s.name, FALSE);
             JSON_GET_PROP_STRING_EX(root, "commercialRange", s.commercialRange, FALSE);
             if (NULL == s.commercialRange) {
-                binds[6] = 'n';
+                nulls[6] = 'n';
             }
             JSON_GET_PROP_STRING_EX(root, "os", s.os, FALSE);
             json_object_get_property(root, "state", &propvalue);
             s.state = json_get_enum(propvalue, states, -1);
             JSON_GET_PROP_STRING_EX(root, "reverse", s.reverse, FALSE);
             if (NULL == s.reverse) {
-                binds[10] = 'n';
+                nulls[10] = 'n';
             }
             JSON_GET_PROP_INT(root, "serverId", s.serverId);
             JSON_GET_PROP_BOOL(root, "monitoring", s.monitoring);
             JSON_GET_PROP_STRING_EX(root, "rack", s.rack, FALSE);
             JSON_GET_PROP_STRING_EX(root, "rootDevice", s.rootDevice, FALSE);
             if (NULL == s.rootDevice) {
-                binds[13] = 'n';
+                nulls[13] = 'n';
             }
             json_object_get_property(root, "linkSpeed", &propvalue);
             if (json_null == propvalue) {
-                binds[14] = 'n';
+                nulls[14] = 'n';
             } else {
                 s.linkSpeed = json_get_integer(propvalue);
             }
             json_object_get_property(root, "bootId", &propvalue);
             if (json_null == propvalue) {
-                binds[15] = 'n';
+                nulls[15] = 'n';
             } else {
                 s.bootId = json_get_integer(propvalue);
             }
@@ -400,7 +397,7 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
                     json_object_get_property(root, "creation", &propvalue);
                     date_parse_to_timestamp(json_get_string(propvalue), "%F", &s.creation);
                     statement_bind( /* e = enum (int), d = date (int), |n = or NULL */
-                        prepared[STMT_DEDICATED_UPSERT], binds/*"i" "isibisssisbssii" "isissi"*/,
+                        &statements[STMT_DEDICATED_UPSERT], nulls/*"i" "isibisssisbssii" "isissi"*/,
                         // account_id (i)
                         current_account->id,
                         // id (i), name (s), datacenter (e), professional_use (b), support_level (e), commercial_range (s|n), ip (s), os (s), state (e), reverse (s|n), monitoring (b), rack (s), root_device (s|n), link_speed (i|n), boot_id (i|n)
@@ -408,7 +405,7 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
                         // engaged_up_to (d|n), contact_billing (s), expiration (d), contact_tech (s), contact_admin (s), creation (d)
                         s.engagedUpTo, s.contactBilling, s.expiration, s.contactTech, s.contactAdmin, s.creation
                     );
-                    statement_fetch(prepared[STMT_DEDICATED_UPSERT], error, "");
+                    statement_fetch(&statements[STMT_DEDICATED_UPSERT], error);
                     json_document_destroy(doc);
                 }
             }
@@ -461,7 +458,6 @@ static command_status_t dedicated_list(COMMAND_ARGS)
     Iterator it;
     server_t server;
     const char *boot;
-    command_status_t ret;
     dedicated_argument_t *args;
 
     USED(arg);
@@ -493,9 +489,8 @@ static command_status_t dedicated_list(COMMAND_ARGS)
         _("contactAdmin"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
         _("creation"), TABLE_TYPE_DATE
     );
-    statement_bind(prepared[STMT_DEDICATED_LIST], "i", current_account->id);
-    statement_to_iterator(&it, prepared[STMT_DEDICATED_LIST],
-        DEDICATED_OUTPUT_BINDS,
+    statement_bind(&statements[STMT_DEDICATED_LIST], NULL, current_account->id);
+    statement_to_iterator(&it, &statements[STMT_DEDICATED_LIST],
         &server.name, &server.ip, &server.os, &server.reverse, &boot, &server.datacenter, &server.professionalUse, &server.supportLevel, &server.commercialRange, &server.state, &server.monitoring, &server.rack, &server.rootDevice, &server.linkSpeed,
         &server.engagedUpTo, &server.contactBilling, &server.expiration, &server.contactTech, &server.contactAdmin, &server.creation
     );
@@ -523,8 +518,8 @@ static command_status_t dedicated_check(COMMAND_ARGS)
     USED(mainopts);
     args = (dedicated_argument_t *) arg;
     FETCH_SERVERS_IF_NEEDED;
-    statement_bind(prepared[STMT_DEDICATED_NEAR_EXPIRATION], "i", current_account->id);
-    statement_to_iterator(&it, prepared[STMT_DEDICATED_NEAR_EXPIRATION], "is", &days, &server_name);
+    statement_bind(&statements[STMT_DEDICATED_NEAR_EXPIRATION], NULL, current_account->id);
+    statement_to_iterator(&it, &statements[STMT_DEDICATED_NEAR_EXPIRATION], &days, &server_name);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         printf("%s expires in %" PRIi64 " days\n", server_name, days);
@@ -578,8 +573,8 @@ static command_status_t dedicated_boot_list(COMMAND_ARGS)
         _("kernel"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
         _("description"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE
     );
-    statement_bind(prepared[STMT_BOOT_LIST], "is", current_account->id, args->server_name);
-    statement_to_iterator(&it, prepared[STMT_BOOT_LIST], "iss", &boot.type, &boot.kernel, &boot.description);
+    statement_bind(&statements[STMT_BOOT_LIST], NULL, current_account->id, args->server_name);
+    statement_to_iterator(&it, &statements[STMT_BOOT_LIST], &boot.type, &boot.kernel, &boot.description);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         table_store(t, boot.type, boot.kernel, boot.description);
@@ -600,8 +595,8 @@ static command_status_t dedicated_boot_get(COMMAND_ARGS)
     USED(mainopts);
     args = (dedicated_argument_t *) arg;
     assert(NULL != args->server_name);
-    statement_bind(prepared[STMT_DEDICATED_CURRENT_BOOT], "is", current_account->id, args->server_name);
-    success = statement_fetch(prepared[STMT_DEDICATED_CURRENT_BOOT], error, "iss", &boot.type, &boot.kernel, &boot.description);
+    statement_bind(&statements[STMT_DEDICATED_CURRENT_BOOT], NULL, current_account->id, args->server_name);
+    success = statement_fetch(&statements[STMT_DEDICATED_CURRENT_BOOT], error, &boot.type, &boot.kernel, &boot.description);
     if (success) {
         printf(_("Current boot for %s is:  %s (%s): %s\n"), args->server_name, boot.kernel, boot_types[boot.type], boot.description);
     }
@@ -619,8 +614,8 @@ static command_status_t dedicated_boot_set(COMMAND_ARGS)
     args = (dedicated_argument_t *) arg;
     assert(NULL != args->server_name);
     assert(NULL != args->boot_name);
-    statement_bind(prepared[STMT_B_D_FIND_BY_NAME], "iss", current_account->id, args->server_name, args->boot_name);
-    success = statement_fetch(prepared[STMT_B_D_FIND_BY_NAME], error, "i", &boot_id);
+    statement_bind(&statements[STMT_B_D_FIND_BY_NAME], NULL, current_account->id, args->server_name, args->boot_name);
+    success = statement_fetch(&statements[STMT_B_D_FIND_BY_NAME], error, &boot_id);
     if (success) {
         request_t *req;
         json_document_t *reqdoc;
@@ -680,8 +675,8 @@ static command_status_t dedicated_reverse_set_delete(COMMAND_ARGS, bool set)
     if (set) {
         assert(NULL != args->reverse);
     }
-    statement_bind(prepared[STMT_DEDICATED_GET_IP], "is", current_account->id, args->server_name);
-    success = statement_fetch(prepared[STMT_DEDICATED_GET_IP], error, "s", &ip);
+    statement_bind(&statements[STMT_DEDICATED_GET_IP], NULL, current_account->id, args->server_name);
+    success = statement_fetch(&statements[STMT_DEDICATED_GET_IP], error, &ip);
     if (success) {
         if ((success = fetch_ip_block(ip, &ipblock, error))) {
             request_t *req;
@@ -705,8 +700,8 @@ static command_status_t dedicated_reverse_set_delete(COMMAND_ARGS, bool set)
                 if (set) {
                     json_document_destroy(doc);
                 }
-                statement_bind(prepared[STMT_DEDICATED_SET_REVERSE], "sis", args->reverse, current_account->id, args->server_name);
-                statement_fetch(prepared[STMT_DEDICATED_SET_REVERSE], error, "");
+                statement_bind(&statements[STMT_DEDICATED_SET_REVERSE], NULL, args->reverse, current_account->id, args->server_name);
+                statement_fetch(&statements[STMT_DEDICATED_SET_REVERSE], error);
                 success = 1 == sqlite_affected_rows();
             }
             free(ipblock);
@@ -780,8 +775,8 @@ static bool complete_servers(void *UNUSED(parsed_arguments), const char *current
     char *v;
     Iterator it;
 
-    statement_bind(prepared[STMT_DEDICATED_COMPLETION], "is", current_account->id, current_argument);
-    statement_to_iterator(&it, prepared[STMT_DEDICATED_COMPLETION], "s", &v); // TODO: bind only current_argument_len first characters of current_argument?
+    statement_bind(&statements[STMT_DEDICATED_COMPLETION], NULL, current_account->id, current_argument);
+    statement_to_iterator(&it, &statements[STMT_DEDICATED_COMPLETION], &v); // TODO: bind only current_argument_len first characters of current_argument?
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         dptrarray_push(possibilities, v); // TODO: values need to be freed
@@ -799,8 +794,8 @@ static bool complete_boots(void *parsed_arguments, const char *current_argument,
 
     args = (dedicated_argument_t *) parsed_arguments;
     assert(NULL != args->server_name);
-    statement_bind(prepared[STMT_BOOT_COMPLETION], "iss", current_account->id, args->server_name, current_argument);
-    statement_to_iterator(&it, prepared[STMT_BOOT_COMPLETION], "s", &v); // TODO: bind only current_argument_len first characters of current_argument?
+    statement_bind(&statements[STMT_BOOT_COMPLETION], NULL, current_account->id, args->server_name, current_argument);
+    statement_to_iterator(&it, &statements[STMT_BOOT_COMPLETION], &v); // TODO: bind only current_argument_len first characters of current_argument?
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         dptrarray_push(possibilities, v); // TODO: values need to be freed

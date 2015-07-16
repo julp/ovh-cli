@@ -35,6 +35,11 @@ static int user_version;
 static char db_path[MAXPATHLEN];
 
 /**
+ * TODO:
+ * - merge sqlite_statement_state_t into sqlite_statement_t ?
+ */
+
+/**
  * NOTE:
  * - for sqlite3_column_* functions, the first column is 0
  * - in the other hand, for sqlite3_bind_* functions, the first parameter is 1
@@ -48,12 +53,10 @@ enum {
     STMT_COUNT
 };
 
-static const char *statements[STMT_COUNT] = {
-    [ STMT_GET_USER_VERSION ] = "PRAGMA user_version",
-    [ STMT_SET_USER_VERSION ] = "PRAGMA user_version = " STRINGIFY_EXPANDED(OVH_CLI_VERSION_NUMBER), // PRAGMA doesn't permit parameter
+static sqlite_statement_t statements[STMT_COUNT] = {
+    [ STMT_GET_USER_VERSION ] = DECL_STMT("PRAGMA user_version", "", ""),
+    [ STMT_SET_USER_VERSION ] = DECL_STMT("PRAGMA user_version = " STRINGIFY_EXPANDED(OVH_CLI_VERSION_NUMBER), "", ""), // PRAGMA doesn't permit parameter
 };
-
-static sqlite3_stmt *prepared[STMT_COUNT] = { 0 };
 
 static bool statement_iterator_is_valid(const void *UNUSED(collection), void **state)
 {
@@ -67,26 +70,26 @@ static bool statement_iterator_is_valid(const void *UNUSED(collection), void **s
 
 static void statement_iterator_first(const void *collection, void **state)
 {
-    sqlite3_stmt *stmt;
+    sqlite_statement_t *stmt;
     sqlite_statement_state_t *sss;
 
     assert(NULL != state);
     assert(NULL != collection);
 
-    stmt = (sqlite3_stmt *) collection;
+    stmt = (sqlite_statement_t *) collection;
     sss = *(sqlite_statement_state_t **) state;
-    sss->ret = sqlite3_step(stmt);
+    sss->ret = sqlite3_step(stmt->prepared);
 }
 
 static void statement_iterator_current(const void *collection, void **state, void **UNUSED(value), void **UNUSED(key))
 {
-    sqlite3_stmt *stmt;
+    sqlite_statement_t *stmt;
     sqlite_statement_state_t *sss;
 
     assert(NULL != state);
     assert(NULL != collection);
 
-    stmt = (sqlite3_stmt *) collection;
+    stmt = (sqlite_statement_t *) collection;
     sss = *(sqlite_statement_state_t **) state;
     if (0 != sss->output_binds_count) {
         size_t i;
@@ -94,16 +97,16 @@ static void statement_iterator_current(const void *collection, void **state, voi
         for (i = 0; i < sss->output_binds_count; i++) {
             switch (sss->output_binds[i].type) {
                 case SQLITE_TYPE_BOOL:
-                    *((bool *) sss->output_binds[i].ptr) = /*!!*/sqlite3_column_int64(stmt, i);
+                    *((bool *) sss->output_binds[i].ptr) = /*!!*/sqlite3_column_int64(stmt->prepared, i);
                     break;
                 case SQLITE_TYPE_INT:
-                    *((int64_t *) sss->output_binds[i].ptr) = sqlite3_column_int64(stmt, i);
+                    *((int64_t *) sss->output_binds[i].ptr) = sqlite3_column_int64(stmt->prepared, i);
                     break;
                 case SQLITE_TYPE_STRING:
                 {
                     const unsigned char *v;
 
-                    if (NULL == (v = sqlite3_column_text(stmt, i))) {
+                    if (NULL == (v = sqlite3_column_text(stmt->prepared, i))) {
                         *((char **) sss->output_binds[i].ptr) = NULL;
                     } else {
                         *((char **) sss->output_binds[i].ptr) = strdup((char *) v);
@@ -123,15 +126,15 @@ static void statement_iterator_current(const void *collection, void **state, voi
 
 static void statement_iterator_next(const void *collection, void **state)
 {
-    sqlite3_stmt *stmt;
+    sqlite_statement_t *stmt;
     sqlite_statement_state_t *sss;
 
     assert(NULL != state);
     assert(NULL != collection);
 
-    stmt = (sqlite3_stmt *) collection;
+    stmt = (sqlite_statement_t *) collection;
     sss = *(sqlite_statement_state_t **) state;
-    sss->ret = sqlite3_step(stmt);
+    sss->ret = sqlite3_step(stmt->prepared);
 }
 
 static void statement_iterator_close(void *state)
@@ -139,24 +142,22 @@ static void statement_iterator_close(void *state)
     sqlite_statement_state_t *sss;
 
     assert(NULL != state);
-//     assert(NULL != collection);
 
     sss = (sqlite_statement_state_t *) state;
     if (0 != sss->output_binds_count) {
         free(sss->output_binds);
     }
-//     sqlite3_reset((sqlite3_stmt *) collection);
     free(sss);
 }
 
-void statement_to_iterator(Iterator *it, sqlite3_stmt *stmt, const char *outbinds, ...)
+void statement_to_iterator(Iterator *it, sqlite_statement_t *stmt, ...)
 {
     va_list ap;
     sqlite_statement_state_t *sss;
 
-    va_start(ap, outbinds);
+    va_start(ap, stmt);
     sss = mem_new(*sss);
-    sss->output_binds_count = strlen(outbinds);
+    sss->output_binds_count = strlen(stmt->outbinds);
     if (0 == sss->output_binds_count) {
         sss->output_binds = NULL;
     } else {
@@ -164,7 +165,7 @@ void statement_to_iterator(Iterator *it, sqlite3_stmt *stmt, const char *outbind
 
         sss->output_binds = mem_new_n(*sss->output_binds, sss->output_binds_count);
         for (i = 0; i < sss->output_binds_count; i++) {
-            switch (outbinds[i]) {
+            switch (stmt->outbinds[i]) {
                 case 'b':
                     sss->output_binds[i].type = SQLITE_TYPE_BOOL;
                     break;
@@ -197,34 +198,34 @@ void statement_to_iterator(Iterator *it, sqlite3_stmt *stmt, const char *outbind
     );
 }
 
-bool statement_batched_prepare(const char **statements, sqlite3_stmt **preprepared, size_t count, error_t **error)
+bool statement_batched_prepare(sqlite_statement_t *statements, size_t count, error_t **error)
 {
     size_t i;
     bool ret;
 
     ret = TRUE;
     for (i = 0; ret && i < count; i++) {
-        ret &= SQLITE_OK == sqlite3_prepare_v2(db, statements[i], -1, &preprepared[i], NULL);
+        ret &= SQLITE_OK == sqlite3_prepare_v2(db, statements[i].statement, -1, &statements[i].prepared, NULL);
     }
     if (!ret) {
         --i; // return on the statement which actually failed
         error_set(error, FATAL, _("%s for %s"), sqlite3_errmsg(db), statements[i]);
         while (i-- != 0) { // finalize the initialized ones
-            sqlite3_finalize(preprepared[i]);
-            preprepared[i] = NULL;
+            sqlite3_finalize(statements[i].prepared);
+            statements[i].prepared = NULL;
         }
     }
 
     return ret;
 }
 
-void statement_batched_finalize(sqlite3_stmt **preprepared, size_t count)
+void statement_batched_finalize(sqlite_statement_t *statements, size_t count)
 {
     size_t i;
 
     for (i = 0; i < count; i++) {
-        if (NULL != preprepared[i]) {
-            sqlite3_finalize(preprepared[i]);
+        if (NULL != statements[i].prepared) {
+            sqlite3_finalize(statements[i].prepared);
         }
     }
 }
@@ -278,89 +279,92 @@ bool create_or_migrate(const char *table_name, const char *create_stmt, sqlite_m
     return SQLITE_OK == ret;
 }
 
-void statement_bind(sqlite3_stmt *stmt, const char *inbinds, ...)
+void statement_bind(sqlite_statement_t *stmt, const bool *nulls, ...)
 {
     va_list ap;
     const char *p;
 #if 0
     int no, count;
 
-    sqlite3_reset(stmt);
-    for (no = 1, count = sqlite3_bind_parameter_count(stmt); no <= count; no++) {
-        sqlite3_bind_null(stmt, no);
+    sqlite3_reset(stmt->prepared);
+    for (no = 1, count = sqlite3_bind_parameter_count(stmt->prepared); no <= count; no++) {
+        sqlite3_bind_null(stmt->prepared, no);
     }
 #else
-    sqlite3_reset(stmt);
-    sqlite3_clear_bindings(stmt);
+    sqlite3_reset(stmt->prepared);
+    sqlite3_clear_bindings(stmt->prepared);
 #endif
-    va_start(ap, inbinds);
-    for (p = inbinds; '\0' != *p; p++) {
-        switch (*p) {
-            case 'n':
-                va_arg(ap, void *);
-                sqlite3_bind_null(stmt, p - inbinds + 1);
-                break;
-            case 'd':
-            {
-                double v;
+    assert(strlen(stmt->inbinds) == ((size_t) sqlite3_bind_parameter_count(stmt->prepared)));
+    va_start(ap, nulls);
+    for (p = stmt->inbinds; '\0' != *p; p++) {
+        if (NULL == nulls || !nulls[p - stmt->inbinds]) {
+            switch (*p) {
+                case 'n':
+                    va_arg(ap, void *);
+                    sqlite3_bind_null(stmt->prepared, p - stmt->inbinds + 1);
+                    break;
+                case 'd':
+                {
+                    double v;
 
-                v = va_arg(ap, double);
-                sqlite3_bind_double(stmt, p - inbinds + 1, v);
-                break;
-            }
-            case 'b':
-            {
-                bool v;
+                    v = va_arg(ap, double);
+                    sqlite3_bind_double(stmt->prepared, p - stmt->inbinds + 1, v);
+                    break;
+                }
+                case 'b':
+                {
+                    bool v;
 
-                v = va_arg(ap, bool);
-                sqlite3_bind_int(stmt, p - inbinds + 1, v);
-                break;
-            }
-            case 'i':
-            {
-                int64_t v;
+                    v = va_arg(ap, bool);
+                    sqlite3_bind_int(stmt->prepared, p - stmt->inbinds + 1, v);
+                    break;
+                }
+                case 'i':
+                {
+                    int64_t v;
 
-                v = va_arg(ap, int64_t);
-                sqlite3_bind_int64(stmt, p - inbinds + 1, v);
-                break;
-            }
-            case 's':
-            {
-                char *v;
+                    v = va_arg(ap, int64_t);
+                    sqlite3_bind_int64(stmt->prepared, p - stmt->inbinds + 1, v);
+                    break;
+                }
+                case 's':
+                {
+                    char *v;
 
-                v = va_arg(ap, char *);
-                sqlite3_bind_text(stmt, p - inbinds + 1, v, -1, SQLITE_TRANSIENT);
-                break;
+                    v = va_arg(ap, char *);
+                    sqlite3_bind_text(stmt->prepared, p - stmt->inbinds + 1, v, -1, SQLITE_TRANSIENT);
+                    break;
+                }
+                default:
+                    assert(FALSE);
+                    break;
             }
-            default:
-                assert(FALSE);
-                break;
         }
     }
     va_end(ap);
 }
 
-bool statement_fetch(sqlite3_stmt *stmt, error_t **error, const char *outbinds, ...)
+bool statement_fetch(sqlite_statement_t *stmt, error_t **error, ...)
 {
     bool ret;
     va_list ap;
 
     ret = FALSE;
-    va_start(ap, outbinds);
-    switch (sqlite3_step(stmt)) {
+    va_start(ap, error);
+    switch (sqlite3_step(stmt->prepared)) {
         case SQLITE_ROW:
         {
             const char *p;
 
-            assert(((size_t) sqlite3_column_count(stmt)) >= strlen(outbinds)); // allow unused result columns at the end
-            for (p = outbinds; '\0' != *p; p++) {
+            assert(((size_t) sqlite3_column_count(stmt->prepared)) >= strlen(stmt->outbinds)); // allow unused result columns at the end
+            for (p = stmt->outbinds; '\0' != *p; p++) {
                 switch (*p) {
                     case 'b':
                     {
                         bool *v;
 
                         v = va_arg(ap, bool *);
-                        *v = /*!!*/sqlite3_column_int(stmt, p - outbinds);
+                        *v = /*!!*/sqlite3_column_int(stmt->prepared, p - stmt->outbinds);
                         break;
                     }
                     case 'i':
@@ -368,7 +372,7 @@ bool statement_fetch(sqlite3_stmt *stmt, error_t **error, const char *outbinds, 
                         int64_t *v;
 
                         v = va_arg(ap, int64_t *);
-                        *v = sqlite3_column_int64(stmt, p - outbinds);
+                        *v = sqlite3_column_int64(stmt->prepared, p - stmt->outbinds);
                         break;
                     }
                     case 's':
@@ -377,7 +381,7 @@ bool statement_fetch(sqlite3_stmt *stmt, error_t **error, const char *outbinds, 
                         const unsigned char *sv;
 
                         uv = va_arg(ap, char **);
-                        sv = sqlite3_column_text(stmt, p - outbinds);
+                        sv = sqlite3_column_text(stmt->prepared, p - stmt->outbinds);
                         if (NULL == sv) {
                             *uv = NULL;
                         } else {
@@ -401,7 +405,7 @@ bool statement_fetch(sqlite3_stmt *stmt, error_t **error, const char *outbinds, 
             // empty result set (no error and return FALSE to caller, it should known it doesn't remain any data to read)
             break;
         default:
-            error_set(error, WARN, _("%s for %s"), sqlite3_errmsg(db), sqlite3_sql(stmt));
+            error_set(error, WARN, _("%s for %s"), sqlite3_errmsg(db), sqlite3_sql(stmt->prepared));
             break;
     }
     va_end(ap);
@@ -456,13 +460,13 @@ static bool sqlite_early_ctor(error_t **error)
     }
     umask(old_umask);
     // preprepare own statement
-    statement_batched_prepare(statements, prepared, STMT_COUNT, error);
+    statement_batched_prepare(statements, STMT_COUNT, error);
     // fetch user_version
-    if (SQLITE_ROW != sqlite3_step(prepared[STMT_GET_USER_VERSION])) {
+    if (SQLITE_ROW != sqlite3_step(statements[STMT_GET_USER_VERSION].prepared)) {
         error_set(error, FATAL, _("can't retrieve database version: %s"), sqlite3_errmsg(db));
         return FALSE;
     }
-    user_version = sqlite3_column_int(prepared[STMT_GET_USER_VERSION], 0);
+    user_version = sqlite3_column_int(statements[STMT_GET_USER_VERSION].prepared, 0);
 
     return TRUE;
 }
@@ -470,9 +474,9 @@ static bool sqlite_early_ctor(error_t **error)
 static bool sqlite_late_ctor(error_t **error)
 {
     if (OVH_CLI_VERSION_NUMBER > user_version) {
-//         statement_bind(prepared[STMT_SET_USER_VERSION], "i", OVH_CLI_VERSION_NUMBER); // PRAGMA doesn't handle parameter
-        statement_bind(prepared[STMT_SET_USER_VERSION], "");
-        statement_fetch(prepared[STMT_SET_USER_VERSION], error, "");
+//         statement_bind(statements[STMT_SET_USER_VERSION], "i", OVH_CLI_VERSION_NUMBER); // PRAGMA doesn't handle parameter
+        statement_bind(&statements[STMT_SET_USER_VERSION], NULL);
+        statement_fetch(&statements[STMT_SET_USER_VERSION], error);
     }
 
     return NULL == *error;
@@ -480,7 +484,7 @@ static bool sqlite_late_ctor(error_t **error)
 
 static void sqlite_dtor(void)
 {
-    statement_batched_finalize(prepared, STMT_COUNT);
+    statement_batched_finalize(statements, STMT_COUNT);
     sqlite3_close(db);
 }
 

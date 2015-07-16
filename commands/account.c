@@ -86,28 +86,26 @@ enum {
     STMT_COUNT
 };
 
-#define ACCOUNT_BINDS "isssiii"
-#define APPLICATION_BINDS "ssi"
+#define ACCOUNT_OUTPUT_BINDS "isssiii"
+#define APPLICATION_OUTPUT_BINDS "ssi"
 
-static const char *statements[STMT_COUNT] = {
-    [ STMT_ACCOUNT_LIST ]           = "SELECT * FROM accounts",
-    [ STMT_ACCOUNT_UPDATE ]         = "UPDATE accounts SET password = IFNULL(?, password), consumer_key = IFNULL(?, consumer_key), expires_at = IFNULL(?, expires_at), endpoint_id = IFNULL(?, endpoint_id) WHERE name = ?",
-    [ STMT_ACCOUNT_INSERT ]         = "INSERT INTO accounts(name, password, consumer_key, endpoint_id, is_default, expires_at) VALUES(?, ?, ?, ?, ?, ?)",
-    [ STMT_ACCOUNT_DELETE ]         = "DELETE FROM accounts WHERE name = ?",
-    [ STMT_ACCOUNT_LOAD ]           = "SELECT * FROM accounts WHERE name = ?",
-    [ STMT_ACCOUNT_COMPLETION ]     = "SELECT name FROM accounts WHERE name LIKE ? || '%'",
-    [ STMT_ACCOUNT_LOAD_DEFAULT ]   = "SELECT * FROM accounts ORDER BY is_default DESC LIMIT 1",
-    [ STMT_ACCOUNT_UPDATE_DEFAULT ] = "UPDATE accounts SET is_default = (name = ?)",
-    [ STMT_ACCOUNT_UPDATE_KEY ]     = "UPDATE accounts SET consumer_key = ?, expires_at = ? WHERE name = ?",
-    [ STMT_APPLICATION_LIST ]       = "SELECT * FROM applications",
-    [ STMT_APPLICATION_INSERT ]     = "INSERT INTO applications(app_key, secret, endpoint_id) VALUES(?, ?, ?)",
-    [ STMT_APPLICATION_DELETE ]     = "DELETE FROM applications WHERE endpoint_id = ?",
-    [ STMT_APPLICATION_LOAD ]       = "SELECT * FROM applications WHERE endpoint_id = ?",
-    [ STMT_FETCH_SELECT ]           = "SELECT updated_at FROM fetchs WHERE account_id = ? AND module_name = ?",
-    [ STMT_FETCH_UPSERT ]           = "INSERT OR REPLACE INTO fetchs(account_id, module_name, updated_at) VALUES(?, ?, strftime('%s','now'))",
+static sqlite_statement_t statements[STMT_COUNT] = {
+    [ STMT_ACCOUNT_LIST ]           = DECL_STMT("SELECT * FROM accounts", "", ACCOUNT_OUTPUT_BINDS),
+    [ STMT_ACCOUNT_UPDATE ]         = DECL_STMT("UPDATE accounts SET password = IFNULL(?, password), consumer_key = IFNULL(?, consumer_key), expires_at = IFNULL(?, expires_at), endpoint_id = IFNULL(?, endpoint_id) WHERE name = ?", "ssiis", ""),
+    [ STMT_ACCOUNT_INSERT ]         = DECL_STMT("INSERT INTO accounts(name, password, consumer_key, endpoint_id, is_default, expires_at) VALUES(?, ?, ?, ?, ?, ?)", "sssiii", ""),
+    [ STMT_ACCOUNT_DELETE ]         = DECL_STMT("DELETE FROM accounts WHERE name = ?", "s", ""),
+    [ STMT_ACCOUNT_LOAD ]           = DECL_STMT("SELECT * FROM accounts WHERE name = ?", "s", ACCOUNT_OUTPUT_BINDS),
+    [ STMT_ACCOUNT_COMPLETION ]     = DECL_STMT("SELECT name FROM accounts WHERE name LIKE ? || '%'", "s", "s"),
+    [ STMT_ACCOUNT_LOAD_DEFAULT ]   = DECL_STMT("SELECT * FROM accounts ORDER BY is_default DESC LIMIT 1", "", ACCOUNT_OUTPUT_BINDS),
+    [ STMT_ACCOUNT_UPDATE_DEFAULT ] = DECL_STMT("UPDATE accounts SET is_default = (name = ?)", "s", ""),
+    [ STMT_ACCOUNT_UPDATE_KEY ]     = DECL_STMT("UPDATE accounts SET consumer_key = ?, expires_at = ? WHERE name = ?", "sis", ""),
+    [ STMT_APPLICATION_LIST ]       = DECL_STMT("SELECT * FROM applications", "", APPLICATION_OUTPUT_BINDS),
+    [ STMT_APPLICATION_INSERT ]     = DECL_STMT("INSERT INTO applications(app_key, secret, endpoint_id) VALUES(?, ?, ?)", "ssi", ""),
+    [ STMT_APPLICATION_DELETE ]     = DECL_STMT("DELETE FROM applications WHERE endpoint_id = ?", "i", ""),
+    [ STMT_APPLICATION_LOAD ]       = DECL_STMT("SELECT * FROM applications WHERE endpoint_id = ?", "i", APPLICATION_OUTPUT_BINDS),
+    [ STMT_FETCH_SELECT ]           = DECL_STMT("SELECT updated_at FROM fetchs WHERE account_id = ? AND module_name = ?", "is", "i"),
+    [ STMT_FETCH_UPSERT ]           = DECL_STMT("INSERT OR REPLACE INTO fetchs(account_id, module_name, updated_at) VALUES(?, ?, strftime('%s','now'))", "is", ""),
 };
-
-static sqlite3_stmt *prepared[STMT_COUNT] = { 0 };
 
 enum {
     EXPIRES_IN,
@@ -149,14 +147,14 @@ static bool account_set_current(const char *name, error_t **error)
         account_flush();
         if (NULL == name) {
             stmt = STMT_ACCOUNT_LOAD_DEFAULT;
-            statement_bind(prepared[stmt], "");
+            statement_bind(&statements[stmt], NULL);
         } else {
             stmt = STMT_ACCOUNT_LOAD;
-            statement_bind(prepared[stmt], "s", name);
+            statement_bind(&statements[stmt], NULL, name);
         }
-        if (statement_fetch(prepared[stmt], error, ACCOUNT_BINDS, &acd.current_account.id, &acd.current_account.name, &acd.current_account.password, &acd.current_account.consumer_key, &acd.current_account.endpoint_id, &acd.current_account.isdefault, &acd.current_account.expires_at)) {
-            statement_bind(prepared[STMT_APPLICATION_LOAD], "i", acd.current_account.endpoint_id);
-            if (!statement_fetch(prepared[STMT_APPLICATION_LOAD], error, APPLICATION_BINDS, &acd.current_application.key, &acd.current_application.secret, &acd.current_application.endpoint_id)) {
+        if (statement_fetch(&statements[stmt], error, &acd.current_account.id, &acd.current_account.name, &acd.current_account.password, &acd.current_account.consumer_key, &acd.current_account.endpoint_id, &acd.current_account.isdefault, &acd.current_account.expires_at)) {
+            statement_bind(&statements[STMT_APPLICATION_LOAD], NULL, acd.current_account.endpoint_id);
+            if (!statement_fetch(&statements[STMT_APPLICATION_LOAD], error, &acd.current_application.key, &acd.current_application.secret, &acd.current_application.endpoint_id)) {
                 return FALSE;
             }
         } else {
@@ -228,8 +226,8 @@ bool check_current_application_and_account(bool skip_CK_check, error_t **error)
     if (NULL_OR_EMPTY(acd.current_account.consumer_key) || (0 != acd.current_account.expires_at && acd.current_account.expires_at < time(NULL))) {
         // if we successfully had a CK, save it
         if (NULL != (acd.current_account.consumer_key = request_consumer_key(&acd.current_account.expires_at, error))) {
-            statement_bind(prepared[STMT_ACCOUNT_UPDATE_KEY], "sis", acd.current_account.consumer_key, acd.current_account.expires_at, acd.current_account.name);
-            statement_fetch(prepared[STMT_ACCOUNT_UPDATE_KEY], error, "");
+            statement_bind(&statements[STMT_ACCOUNT_UPDATE_KEY], NULL, acd.current_account.consumer_key, acd.current_account.expires_at, acd.current_account.name);
+            statement_fetch(&statements[STMT_ACCOUNT_UPDATE_KEY], error);
         }
     }
 
@@ -317,14 +315,14 @@ static void account_data_dtor(void *data)
 
 bool account_get_last_fetch_for(const char *module_name, time_t *t, error_t **error)
 {
-    statement_bind(prepared[STMT_FETCH_SELECT], "is", acd.current_account.id, module_name);
-    return statement_fetch(prepared[STMT_FETCH_SELECT], error, "i", &t);
+    statement_bind(&statements[STMT_FETCH_SELECT], NULL, acd.current_account.id, module_name);
+    return statement_fetch(&statements[STMT_FETCH_SELECT], error, &t);
 }
 
 bool account_set_last_fetch_for(const char *module_name, error_t **error)
 {
-    statement_bind(prepared[STMT_FETCH_UPSERT], "is", acd.current_account.id, module_name);
-    return statement_fetch(prepared[STMT_FETCH_UPSERT], error, "");
+    statement_bind(&statements[STMT_FETCH_UPSERT], NULL, acd.current_account.id, module_name);
+    return statement_fetch(&statements[STMT_FETCH_UPSERT], error);
 }
 
 static bool account_early_ctor(error_t **error)
@@ -358,7 +356,7 @@ static bool account_early_ctor(error_t **error)
         return FALSE;
     }
 
-    statement_batched_prepare(statements, prepared, STMT_COUNT, error);
+    statement_batched_prepare(statements, STMT_COUNT, error);
 
     current_account = &acd.current_account;
     current_application = &acd.current_application;
@@ -382,7 +380,7 @@ static void account_dtor(void)
         hashtable_destroy(acd.modules_callbacks);
     }
     account_flush();
-    statement_batched_finalize(prepared, STMT_COUNT);
+    statement_batched_finalize(statements, STMT_COUNT);
 }
 
 static command_status_t account_list(COMMAND_ARGS)
@@ -403,7 +401,7 @@ static command_status_t account_list(COMMAND_ARGS)
         _("current"), TABLE_TYPE_BOOLEAN,
         _("default"), TABLE_TYPE_BOOLEAN
     );
-    statement_to_iterator(&it, prepared[STMT_ACCOUNT_LIST], ACCOUNT_BINDS, &account.id, &account.name, &account.password, &account.consumer_key, &account.endpoint_id, &account.isdefault, &account.expires_at);
+    statement_to_iterator(&it, &statements[STMT_ACCOUNT_LIST], &account.id, &account.name, &account.password, &account.consumer_key, &account.endpoint_id, &account.isdefault, &account.expires_at);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         table_store(t, account.name, account.consumer_key, account.expires_at, NULL != account.password, account.endpoint_id, acd.current_account.id == account.id, account.isdefault);
@@ -470,8 +468,8 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
     if (!update) {
         HashTable *ht;
 
-        statement_bind(prepared[STMT_ACCOUNT_INSERT], "sssiii", account.name, account.password, account.consumer_key, account.endpoint_id, 0, account.expires_at);
-        statement_fetch(prepared[STMT_ACCOUNT_INSERT], error, "");
+        statement_bind(&statements[STMT_ACCOUNT_INSERT], NULL, account.name, account.password, account.consumer_key, account.endpoint_id, 0, account.expires_at);
+        statement_fetch(&statements[STMT_ACCOUNT_INSERT], error);
         account.id = sqlite_last_insert_id();
 
         // if this is the first account, set it as current
@@ -491,14 +489,14 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
         ht = hashtable_ascii_cs_new(NULL, NULL, NULL);
         hashtable_direct_put(acd.modules_data, 0, account.id, ht, NULL);
     } else {
-        char binds[] = "1234s";
+        bool nulls[5] = { 0 };
 
-        binds[0] = NULL == args->password     ? 'n' : 's';
-        binds[1] = NULL == args->consumer_key ? 'n' : 's';
-        binds[2] = NULL == args->consumer_key ? 'n' : 'i';
-        binds[3] = !args->endpoint_present    ? 'n' : 'i';
-        statement_bind(prepared[STMT_ACCOUNT_UPDATE], binds, account.password, account.consumer_key, account.expires_at, account.endpoint_id, account.name);
-        statement_fetch(prepared[STMT_ACCOUNT_UPDATE], error, "");
+        nulls[0] = NULL == args->password;
+        nulls[1] = NULL == args->consumer_key;
+        nulls[2] = NULL == args->consumer_key;
+        nulls[3] = !args->endpoint_present;
+        statement_bind(&statements[STMT_ACCOUNT_UPDATE], nulls, account.password, account.consumer_key, account.expires_at, account.endpoint_id, account.name);
+        statement_fetch(&statements[STMT_ACCOUNT_UPDATE], error);
     }
 
     return COMMAND_SUCCESS;
@@ -529,8 +527,8 @@ static command_status_t account_default_set(COMMAND_ARGS)
     args = (account_argument_t *) arg;
     assert(NULL != args->account);
 
-    statement_bind(prepared[STMT_ACCOUNT_UPDATE_DEFAULT], "s", args->account);
-    statement_fetch(prepared[STMT_ACCOUNT_UPDATE_DEFAULT], error, "");
+    statement_bind(&statements[STMT_ACCOUNT_UPDATE_DEFAULT], NULL, args->account);
+    statement_fetch(&statements[STMT_ACCOUNT_UPDATE_DEFAULT], error);
     success = 0 != sqlite_affected_rows();
     if (!success) {
         UNEXISTANT_ACCOUNT;
@@ -550,8 +548,8 @@ static command_status_t account_delete(COMMAND_ARGS)
     if (!NO_ACTIVE_ACCOUNT && 0 == strcmp(args->account, acd.current_account.name)) {
         account_flush();
     }
-    statement_bind(prepared[STMT_ACCOUNT_DELETE], "s", args->account);
-    statement_fetch(prepared[STMT_ACCOUNT_DELETE], error, "");
+    statement_bind(&statements[STMT_ACCOUNT_DELETE], NULL, args->account);
+    statement_fetch(&statements[STMT_ACCOUNT_DELETE], error);
     success = 0 != sqlite_affected_rows();
     if (!success) {
         UNEXISTANT_ACCOUNT;
@@ -592,7 +590,7 @@ static command_status_t application_list(COMMAND_ARGS)
         _("key"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
         _("secret"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE
     );
-    statement_to_iterator(&it, prepared[STMT_APPLICATION_LIST], APPLICATION_BINDS, &application.key, &application.secret, &application.endpoint_id);
+    statement_to_iterator(&it, &statements[STMT_APPLICATION_LIST], &application.key, &application.secret, &application.endpoint_id);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         table_store(t, application.endpoint_id, application.key, application.secret);
@@ -613,8 +611,8 @@ static command_status_t application_add(COMMAND_ARGS)
     args = (application_argument_t *) arg;
     assert(NULL != args->key);
     assert(NULL != args->secret);
-    statement_bind(prepared[STMT_APPLICATION_INSERT], "ssi", args->key, args->secret, args->endpoint);
-    statement_fetch(prepared[STMT_APPLICATION_INSERT], error, "");
+    statement_bind(&statements[STMT_APPLICATION_INSERT], NULL, args->key, args->secret, args->endpoint);
+    statement_fetch(&statements[STMT_APPLICATION_INSERT], error);
     // TODO: if !update (0 == sqlite_affected_rows), duplicate?
 
     return COMMAND_SUCCESS;
@@ -629,8 +627,8 @@ static command_status_t application_delete(COMMAND_ARGS)
     USED(mainopts);
     args = (application_argument_t *) arg;
 
-    statement_bind(prepared[STMT_APPLICATION_DELETE], "i", args->endpoint);
-    statement_fetch(prepared[STMT_APPLICATION_DELETE], error, "");
+    statement_bind(&statements[STMT_APPLICATION_DELETE], NULL, args->endpoint);
+    statement_fetch(&statements[STMT_APPLICATION_DELETE], error);
     success = 0 != sqlite_affected_rows();
     if (!success) {
         error_set(error, NOTICE, _("no application associated to endpoint %s"), endpoint_names[args->endpoint]);
@@ -651,7 +649,7 @@ static command_status_t export(COMMAND_ARGS)
     USED(mainopts);
     buffer = string_new();
     // accounts
-    statement_to_iterator(&it, prepared[STMT_ACCOUNT_LIST], ACCOUNT_BINDS, &account.id, &account.name, &account.password, &account.consumer_key, &account.endpoint_id, &account.isdefault, &account.expires_at);
+    statement_to_iterator(&it, &statements[STMT_ACCOUNT_LIST], &account.id, &account.name, &account.password, &account.consumer_key, &account.endpoint_id, &account.isdefault, &account.expires_at);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         string_append_formatted(buffer, "account %s add password \"%s\" endpoint %s", account.name, account.password, endpoint_names[account.endpoint_id]);
@@ -672,7 +670,7 @@ static command_status_t export(COMMAND_ARGS)
     }
     iterator_close(&it);
     // applications
-    statement_to_iterator(&it, prepared[STMT_APPLICATION_LIST], APPLICATION_BINDS, &application.key, &application.secret, &application.endpoint_id);
+    statement_to_iterator(&it, &statements[STMT_APPLICATION_LIST], &application.key, &application.secret, &application.endpoint_id);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         string_append_formatted(buffer, "application %s add \"%s\" \"%s\"\n", endpoint_names[application.endpoint_id], application.key, application.secret);
@@ -712,7 +710,7 @@ static void account_regcomm(graph_t *g)
         arg_expiration = argument_create_string(offsetof(account_argument_t, expiration), "<expiration>", NULL, NULL);
         arg_consumer_key = argument_create_string(offsetof(account_argument_t, consumer_key), "<consumer key>", NULL, NULL);
         arg_endpoint = argument_create_choices(offsetof(account_argument_t, endpoint), "<endpoint>", endpoint_names);
-        arg_account = argument_create_string(offsetof(account_argument_t, account), "<account>", complete_from_statement, prepared[STMT_ACCOUNT_COMPLETION]);
+        arg_account = argument_create_string(offsetof(account_argument_t, account), "<account>", complete_from_statement, &statements[STMT_ACCOUNT_COMPLETION]);
 
         graph_create_full_path(g, lit_account, lit_list, NULL);
         graph_create_path(g, lit_account, lit_add, arg_account, NULL);
