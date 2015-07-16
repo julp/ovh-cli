@@ -72,6 +72,7 @@ ovh application <endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runab
 
 ## Commands
 
+* export => export accounts and applications to be able to (re)import or backup in plain text them
 * log \<on/off> => enable/disable HTTP logging (file http.log in current directory)
 * application
     * list => list all known OVH applications
