@@ -58,7 +58,7 @@ static command_status_t me(COMMAND_ARGS)
 
     USED(arg);
     USED(mainopts);
-    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/me");
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me");
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
     if (success) {
@@ -139,7 +139,7 @@ static command_status_t me_credential_list(COMMAND_ARGS)
 
     USED(arg);
     USED(mainopts);
-    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/me/api/credential");
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me/api/credential");
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
     if (success) {
@@ -174,7 +174,7 @@ static command_status_t me_credential_list(COMMAND_ARGS)
 
             v = (json_value_t) iterator_current(&it, NULL);
             credentialId = json_get_integer(v);
-            req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/me/api/credential/%" PRIu32, credentialId);
+            req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me/api/credential/%" PRIu32, credentialId);
             success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
             request_destroy(req);
             if (success) {
@@ -258,7 +258,7 @@ static command_status_t me_credential_list(COMMAND_ARGS)
                 }
                 json_document_destroy(doc);
                 if (!hashtable_direct_get(applications, applicationId, &app)) {
-                    req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_IGNORE_404, HTTP_GET, NULL, API_BASE_URL "/me/api/credential/%" PRIu32 "/application", credentialId);
+                    req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_IGNORE_404, HTTP_GET, NULL, error, API_BASE_URL "/me/api/credential/%" PRIu32 "/application", credentialId);
                     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error); // if the application doesn't exist anymore, we get a 404
                     request_destroy(req);
                     if (success) {
@@ -310,7 +310,7 @@ static command_status_t me_credential_flush(COMMAND_ARGS)
     USED(arg);
     USED(mainopts);
     // TODO: find a way to not invalidate ourselves
-    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/me/api/credential");
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me/api/credential");
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
     if (success) {
@@ -323,7 +323,7 @@ static command_status_t me_credential_flush(COMMAND_ARGS)
 
             v = (json_value_t) iterator_current(&it, NULL);
             credentialId = json_get_integer(v);
-            req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/me/api/credential/%" PRIu32, credentialId);
+            req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, error, API_BASE_URL "/me/api/credential/%" PRIu32, credentialId);
             success = request_execute(req, RESPONSE_IGNORE, NULL, error);
             request_destroy(req);
         }

@@ -172,7 +172,7 @@ static service_t *fetch_single_hosting(service_set_t *ss, const char * const ser
 
         s = service_new(service_name);
         hashtable_put(ss->services, 0, s->serviceName, s, NULL);
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/hosting/web/%s", service_name);
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/hosting/web/%s", service_name);
         request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (request_success) {
@@ -212,7 +212,7 @@ static command_status_t fetch_all_hosting(service_set_t *ss, bool force, error_t
         bool request_success;
         json_document_t *doc;
 
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/hosting/web");
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/hosting/web");
         request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (request_success) {
@@ -315,7 +315,7 @@ static command_status_t hosting_domain_list(COMMAND_ARGS)
         json_value_t root;
         json_document_t *doc;
 
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/hosting/web/%s/attachedDomain", args->service_name);
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/hosting/web/%s/attachedDomain", args->service_name);
         success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (success) {
@@ -326,7 +326,7 @@ static command_status_t hosting_domain_list(COMMAND_ARGS)
                 json_value_t v, root;
 
                 v = (json_value_t) iterator_current(&it, NULL);
-                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/hosting/web/%s/attachedDomain/%s", args->service_name, json_get_string(v));
+                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/hosting/web/%s/attachedDomain/%s", args->service_name, json_get_string(v));
                 success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
                 request_destroy(req);
                 if (success) {
@@ -406,7 +406,7 @@ static command_status_t hosting_domain_create(COMMAND_ARGS)
         json_object_set_property(root, "domain", json_string(args->domain_name));
         json_document_set_root(reqdoc, root);
     }
-    req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, API_BASE_URL "/hosting/web/%s/attachedDomain", args->service_name);
+    req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, error, API_BASE_URL "/hosting/web/%s/attachedDomain", args->service_name);
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
     json_document_destroy(reqdoc);
@@ -449,7 +449,7 @@ static command_status_t hosting_domain_delete(COMMAND_ARGS)
         request_t *req;
         json_document_t *doc;
 
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/hosting/web/%s/attachedDomain/%s", args->service_name, args->domain_name);
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, error, API_BASE_URL "/hosting/web/%s/attachedDomain/%s", args->service_name, args->domain_name);
         success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (success) {
@@ -496,7 +496,7 @@ static command_status_t hosting_cron_list(COMMAND_ARGS)
         json_value_t root;
         json_document_t *doc;
 
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/hosting/web/%s/cron", args->service_name);
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/hosting/web/%s/cron", args->service_name);
         success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (success) {
@@ -524,7 +524,7 @@ static command_status_t hosting_cron_list(COMMAND_ARGS)
 
                 v = (json_value_t) iterator_current(&it, NULL);
                 id = json_get_integer(v);
-                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/hosting/web/%s/cron/%u", args->service_name, id);
+                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/hosting/web/%s/cron/%u", args->service_name, id);
                 success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
                 request_destroy(req);
                 if (success) {
@@ -608,7 +608,7 @@ static command_status_t hosting_user_list(COMMAND_ARGS)
         json_value_t root;
         json_document_t *doc;
 
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/hosting/web/%s/user", args->service_name);
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/hosting/web/%s/user", args->service_name);
         success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (success) {
@@ -632,7 +632,7 @@ static command_status_t hosting_user_list(COMMAND_ARGS)
 
                 v = (json_value_t) iterator_current(&it, NULL);
                 login = strdup(json_get_string(v));
-                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/hosting/web/%s/user/%s", args->service_name, login);
+                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/hosting/web/%s/user/%s", args->service_name, login);
                 success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
                 request_destroy(req);
                 if (success) {
@@ -687,7 +687,7 @@ static command_status_t hosting_user_delete(COMMAND_ARGS)
         request_t *req;
         json_document_t *doc;
 
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/hosting/web/%s/user/%s", args->service_name, args->user_name);
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, error, API_BASE_URL "/hosting/web/%s/user/%s", args->service_name, args->user_name);
         success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (success) {
@@ -739,7 +739,7 @@ static command_status_t hosting_database_list(COMMAND_ARGS)
         json_value_t root;
         json_document_t *doc;
 
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/hosting/web/%s/database", args->service_name);
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/hosting/web/%s/database", args->service_name);
         success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (success) {
@@ -766,7 +766,7 @@ static command_status_t hosting_database_list(COMMAND_ARGS)
 
                 v = (json_value_t) iterator_current(&it, NULL);
                 dbname = strdup(json_get_string(v));
-                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/hosting/web/%s/database/%s", args->service_name, dbname);
+                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/hosting/web/%s/database/%s", args->service_name, dbname);
                 success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
                 request_destroy(req);
                 if (success) {
@@ -822,7 +822,7 @@ static command_status_t hosting_database_dump(COMMAND_ARGS)
         json_object_set_property(root, "date", json_string(database_dates[args->database_date]));
         json_document_set_root(reqdoc, root);
     }
-    req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, API_BASE_URL "/hosting/web/%s/database/%s/dump", args->service_name, args->database_name);
+    req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, error, API_BASE_URL "/hosting/web/%s/database/%s/dump", args->service_name, args->database_name);
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
     json_document_destroy(reqdoc);
@@ -858,7 +858,7 @@ static command_status_t hosting_database_delete(COMMAND_ARGS)
     assert(NULL != args->service_name);
     assert(NULL != args->database_name);
     if (confirm(mainopts, _("Confirm drop database '%s' for hosting '%s'"), args->database_name, args->service_name)) {
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/hosting/web/%s/database/%s", args->service_name, args->database_name);
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, error, API_BASE_URL "/hosting/web/%s/database/%s", args->service_name, args->database_name);
         success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (success) {

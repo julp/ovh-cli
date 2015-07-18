@@ -327,7 +327,7 @@ static bool fetch_server_boots(const char *server_name, server_t *s, error_t **e
     request_t *req;
     json_document_t *doc;
 
-    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s/boot", server_name);
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/dedicated/server/%s/boot", server_name);
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
     // result
@@ -342,7 +342,7 @@ static bool fetch_server_boots(const char *server_name, server_t *s, error_t **e
             json_document_t *doc;
 
             v = (json_value_t) iterator_current(&it, NULL);
-            req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s/boot/%u", server_name, json_get_integer(v));
+            req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/dedicated/server/%s/boot/%u", server_name, json_get_integer(v));
             success = request_execute(req, RESPONSE_JSON, (void **) &doc, error); // success is assumed to be TRUE before the first iteration
             request_destroy(req);
             // result
@@ -366,7 +366,7 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
         json_document_t *doc;
 
         server_init(&s);
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s", server_name);
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/dedicated/server/%s", server_name);
         success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (success) {
@@ -415,7 +415,7 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
                 request_t *req;
                 json_document_t *doc;
 
-                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s/serviceInfos", server_name);
+                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/dedicated/server/%s/serviceInfos", server_name);
                 success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
                 request_destroy(req);
                 if (success) {
@@ -463,7 +463,7 @@ static bool fetch_servers(bool force, error_t **error)
         request_t *req;
         json_document_t *doc;
 
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server");
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/dedicated/server");
         success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (success) {
@@ -476,7 +476,7 @@ static bool fetch_servers(bool force, error_t **error)
                 json_value_t v;
 
                 v = (json_value_t) iterator_current(&it, NULL);
-                success &= fetch_server(json_get_string(v), force, error); // TODO: check return value
+                success &= fetch_server(json_get_string(v), force, error);
             }
             iterator_close(&it);
             json_document_destroy(doc);
@@ -580,7 +580,7 @@ static command_status_t dedicated_reboot(COMMAND_ARGS)
     assert(NULL != args->server_name);
     // TODO: check server exists?
     if (confirm(mainopts, _("Confirm hard reboot of %s"), args->server_name)) {
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_POST, NULL, API_BASE_URL "/dedicated/server/%s/reboot", args->server_name);
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_POST, NULL, error, API_BASE_URL "/dedicated/server/%s/reboot", args->server_name);
         request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (request_success) {
@@ -667,7 +667,7 @@ static command_status_t dedicated_boot_set(COMMAND_ARGS)
             json_document_set_root(reqdoc, root);
         }
         // request
-        req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_PUT, reqdoc, API_BASE_URL "/dedicated/server/%s", args->server_name);
+        req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_PUT, reqdoc, error, API_BASE_URL "/dedicated/server/%s", args->server_name);
         success = request_execute(req, RESPONSE_IGNORE, NULL, error);
         request_destroy(req);
         json_document_destroy(reqdoc);
@@ -685,7 +685,7 @@ static bool fetch_ip_block(const char * const server_ip, char **ip, error_t **er
     request_t *req;
     json_document_t *doc;
 
-    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/ip?ip=%s", server_ip);
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/ip?ip=%s", server_ip);
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
     if (success) {
@@ -727,9 +727,9 @@ static command_status_t dedicated_reverse_set_delete(COMMAND_ARGS, bool set)
                 json_object_set_property(root, "ipReverse", json_string(ip));
                 json_object_set_property(root, "reverse", json_string(args->reverse));
                 json_document_set_root(doc, root);
-                req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, doc, API_BASE_URL "/ip/%s/reverse", ipblock);
+                req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, doc, error, API_BASE_URL "/ip/%s/reverse", ipblock);
             } else {
-                req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/ip/%s/reverse/%s", ipblock, ip);
+                req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, error, API_BASE_URL "/ip/%s/reverse/%s", ipblock, ip);
             }
             success = request_execute(req, RESPONSE_IGNORE, NULL, error);
             request_destroy(req);
@@ -770,7 +770,7 @@ static command_status_t dedicated_mrtg(COMMAND_ARGS)
     args = (dedicated_argument_t *) arg;
     assert(NULL != args->server_name);
 #if 1
-    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/dedicated/server/%s/mrtg?period=%s&type=%s", args->server_name, mrtg_periods[args->mrtg_period], mrtg_types[args->mrtg_type]);
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/dedicated/server/%s/mrtg?period=%s&type=%s", args->server_name, mrtg_periods[args->mrtg_period], mrtg_types[args->mrtg_type]);
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
 #else

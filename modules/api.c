@@ -283,16 +283,14 @@ static size_t urlf(char *dst, size_t dst_size, const char *fmt, va_list ap)
     return dst_len;
 }
 
-request_t *request_vnew(uint32_t flags, http_method_t method, const void *pdata, /*error_t **error, */const char *url, va_list args)
+request_t *request_vnew(uint32_t flags, http_method_t method, const void *pdata, error_t **error, const char *url, va_list args)
 {
-    error_t *error;
     request_t *req;
     va_list cpyargs;
     size_t url_len, url_size;
 
-    error = NULL;
     assert(NULL != url);
-    if (!check_current_application_and_account(!HAS_FLAG(flags, REQUEST_FLAG_SIGN), &error)) {
+    if (!check_current_application_and_account(!HAS_FLAG(flags, REQUEST_FLAG_SIGN), error)) {
         return NULL;
     }
     req = mem_new(*req);
@@ -358,13 +356,13 @@ request_t *request_vnew(uint32_t flags, http_method_t method, const void *pdata,
     return req;
 }
 
-request_t *request_new(uint32_t flags, http_method_t method, const void *pdata, /*error_t **error, */const char *url, ...)
+request_t *request_new(uint32_t flags, http_method_t method, const void *pdata, error_t **error, const char *url, ...)
 {
     va_list args;
     request_t *req;
 
     va_start(args, url);
-    req = request_vnew(flags, method, pdata, /*error, */url, args);
+    req = request_vnew(flags, method, pdata, error, url, args);
     va_end(args);
 
     return req;
@@ -422,7 +420,7 @@ bool request_execute(request_t *req, int output_type, void **output, error_t **e
         curl_easy_setopt(req->ch, CURLOPT_WRITEFUNCTION, NULL);
         curl_easy_setopt(req->ch, CURLOPT_WRITEDATA, NULL);
     }
-#endif
+#endif /* !DEBUG */
     curl_easy_setopt(req->ch, CURLOPT_HTTPHEADER, req->headers);
     if (NULL != req->formpost) {
         curl_easy_setopt(req->ch, CURLOPT_HTTPPOST, req->formpost);
@@ -592,7 +590,7 @@ const char *request_consumer_key(time_t *expires_at, error_t **error)
                 }
             }
         }
-        req = request_new(REQUEST_FLAG_NONE | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, API_BASE_URL "/auth/credential");
+        req = request_new(REQUEST_FLAG_NONE | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, error, API_BASE_URL "/auth/credential");
         REQUEST_XML_RESPONSE_WANTED(req);
 //         request_add_header1(req, "Content-type: application/json");
         request_add_header2(req, "X-Ovh-Application: ", current_application->key, error);
@@ -623,7 +621,7 @@ const char *request_consumer_key(time_t *expires_at, error_t **error)
             NOTICE,
             _("you have not registered your password so you have to confirm the current consumer key %s yourself by validating it at: %s\n" \
             "Once done, if you choose to set a limited validity, don't forget to run: ovh account %s update expires in \"<duration>\""),
-            current_account->consumer_key,
+            consumerKey,
             validationUrl,
             current_account->name
         );
@@ -639,7 +637,7 @@ const char *request_consumer_key(time_t *expires_at, error_t **error)
             xmlXPathObjectPtr res;
             xmlXPathContextPtr ctxt;
 
-            req = request_new(REQUEST_FLAG_NONE, HTTP_GET, NULL, "%S", validationUrl);
+            req = request_new(REQUEST_FLAG_NONE, HTTP_GET, NULL, error, "%S", validationUrl);
             request_execute(req, RESPONSE_HTML, (void **) &doc, error); // TODO: check returned value
 #if 0
             puts("====================");
@@ -684,7 +682,7 @@ const char *request_consumer_key(time_t *expires_at, error_t **error)
             request_destroy(req);
         }
         // POST validationUrl
-        req = request_new(REQUEST_FLAG_NONE, HTTP_POST, NULL, "%S", validationUrl);
+        req = request_new(REQUEST_FLAG_NONE, HTTP_POST, NULL, error, "%S", validationUrl);
         request_add_post_field(req, "credentialToken", token);
         request_add_post_field(req, account_field_name, current_account->name);
         request_add_post_field(req, password_field_name, current_account->password);

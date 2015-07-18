@@ -96,7 +96,7 @@ static command_status_t fetch_keys(key_set_t *ks, bool force, error_t **error)
         bool request_success;
         json_document_t *doc;
 
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/me/sshKey");
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me/sshKey");
         request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (request_success) {
@@ -116,7 +116,7 @@ static command_status_t fetch_keys(key_set_t *ks, bool force, error_t **error)
                 k = key_new();
                 v = (json_value_t) iterator_current(&it, NULL);
                 hashtable_put(ks->keys, 0, json_get_string(v), k, NULL); // ks->keys has strdup as key_duper, don't need to strdup it ourself
-                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/me/sshKey/%s", json_get_string(v));
+                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me/sshKey/%s", json_get_string(v));
                 request_execute(req, RESPONSE_JSON, (void **) &doc, error);
                 request_destroy(req);
                 root = json_document_get_root(doc);
@@ -196,7 +196,7 @@ static command_status_t key_add(COMMAND_ARGS)
         json_object_set_property(root, "keyName", json_string(args->name));
         json_document_set_root(reqdoc, root);
     }
-    req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, API_BASE_URL "/me/sshKey");
+    req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, error, API_BASE_URL "/me/sshKey");
     success = request_execute(req, RESPONSE_IGNORE, NULL, error);
     request_destroy(req);
     json_document_destroy(reqdoc);
@@ -224,7 +224,7 @@ static command_status_t key_delete(COMMAND_ARGS)
     args = (key_argument_t *) arg;
     assert(NULL != args->name);
     if (confirm(mainopts, _("Confirm deletion of global SSH key named '%s'"), args->name)) {
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/me/sshKey/%s", args->name);
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, error, API_BASE_URL "/me/sshKey/%s", args->name);
         success = request_execute(req, RESPONSE_IGNORE, NULL, error);
         request_destroy(req);
         if (success) {
@@ -257,7 +257,7 @@ static command_status_t key_default(COMMAND_ARGS)
         json_object_set_property(root, "default", args->on_off ? json_true : json_false);
         json_document_set_root(reqdoc, root);
     }
-    req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_PUT, reqdoc, API_BASE_URL "/me/sshKey/%s", args->name);
+    req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_PUT, reqdoc, error, API_BASE_URL "/me/sshKey/%s", args->name);
     success = request_execute(req, RESPONSE_IGNORE, NULL, error);
     request_destroy(req);
     json_document_destroy(reqdoc);

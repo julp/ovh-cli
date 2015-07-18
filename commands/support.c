@@ -41,7 +41,7 @@ static command_status_t support_tickets_list(COMMAND_ARGS)
 //     t = table_new(
 //         X
 //     );
-    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/support/tickets");
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/support/tickets");
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
     if (success) {
@@ -55,7 +55,7 @@ static command_status_t support_tickets_list(COMMAND_ARGS)
 
             v = (json_value_t) iterator_current(&it, NULL);
             ticketId = json_get_integer(v);
-            req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/support/tickets/%" PRIu32, ticketId);
+            req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/support/tickets/%" PRIu32, ticketId);
             success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
             request_destroy(req);
             if (success) {
@@ -80,7 +80,7 @@ static command_status_t support_tickets_close(COMMAND_ARGS)
 
     USED(mainopts);
     args = (support_argument_t *) arg;
-    req = request_new(REQUEST_FLAG_SIGN, HTTP_POST, NULL, API_BASE_URL "/support/tickets/%" PRIu32 "/close", args->id);
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_POST, NULL, error, API_BASE_URL "/support/tickets/%" PRIu32 "/close", args->id);
     success = request_execute(req, RESPONSE_IGNORE, NULL, error);
     request_destroy(req);
 
@@ -115,7 +115,7 @@ static command_status_t support_tickets_create(COMMAND_ARGS)
             json_object_set_property(root, "type", json_string("genericRequest")); // TODO: "criticalIntervention" if VIP, see "/me/vipStatus"
             json_document_set_root(reqdoc, root);
         }
-        req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, API_BASE_URL "/support/tickets/create");
+        req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, error, API_BASE_URL "/support/tickets/create");
         success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         json_document_destroy(reqdoc);
@@ -162,7 +162,7 @@ static command_status_t support_tickets_reopen_or_reply(COMMAND_ARGS, const char
             json_object_set_property(root, "body", json_string(body));
             json_document_set_root(reqdoc, root);
         }
-        req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, urlfmt, args->id);
+        req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, error, urlfmt, args->id);
         success = request_execute(req, RESPONSE_IGNORE, NULL, error);
         request_destroy(req);
         json_document_destroy(reqdoc);
@@ -201,7 +201,7 @@ static command_status_t support_tickets_read(COMMAND_ARGS)
 
     USED(mainopts);
     args = (support_argument_t *) arg;
-    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/support/tickets/%" PRIu32 "/messages", args->id);
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/support/tickets/%" PRIu32 "/messages", args->id);
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
     if (success) {

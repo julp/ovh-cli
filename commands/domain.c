@@ -184,7 +184,7 @@ static command_status_t fetch_domains(domain_set_t *ds, bool force, error_t **er
         bool request_success;
         json_document_t *doc;
 
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, /*error, */API_BASE_URL "/domain");
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/domain");
         request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (request_success) {
@@ -252,7 +252,7 @@ static command_status_t domain_check(COMMAND_ARGS)
 
             iterator_current(&it, (void **) &domain_name);
             // request
-            req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/domain/%s/serviceInfos", domain_name);
+            req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/domain/%s/serviceInfos", domain_name);
             success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
             request_destroy(req);
             // response
@@ -293,7 +293,7 @@ static command_status_t domain_export(COMMAND_ARGS)
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
 
-    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/domain/zone/%s/export", args->domain);
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/domain/zone/%s/export", args->domain);
     REQUEST_XML_RESPONSE_WANTED(req); // we ask XML instead of JSON else we have to parse invalid json document or to unescape characters
     if ((request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error))) {
         if (NULL != (root = xmlDocGetRootElement(doc))) {
@@ -321,7 +321,7 @@ static command_status_t domain_refresh(COMMAND_ARGS)
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
 
-    req = request_new(REQUEST_FLAG_SIGN, HTTP_POST, NULL, API_BASE_URL "/domain/zone/%s/refresh", args->domain);
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_POST, NULL, error, API_BASE_URL "/domain/zone/%s/refresh", args->domain);
     request_success = request_execute(req, RESPONSE_IGNORE, NULL, error); // Response is void
     request_destroy(req);
 
@@ -345,7 +345,7 @@ static bool get_domain_records(const char *domain, domain_t **d, bool force, err
             *d = domain_new();
             hashtable_put(ds->domains, 0, domain, *d, NULL);
         }
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/domain/zone/%s/record", domain);
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/domain/zone/%s/record", domain);
         request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         // result
@@ -360,7 +360,7 @@ static bool get_domain_records(const char *domain, domain_t **d, bool force, err
                 json_document_t *doc;
 
                 v = (json_value_t) iterator_current(&it, NULL);
-                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/domain/zone/%s/record/%u", domain, json_get_integer(v));
+                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/domain/zone/%s/record/%u", domain, json_get_integer(v));
                 request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
                 request_destroy(req);
                 // result
@@ -454,7 +454,7 @@ static command_status_t record_add(COMMAND_ARGS)
         {
             request_t *req;
 
-            req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, API_BASE_URL "/domain/zone/%s/record", args->domain);
+            req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, error, API_BASE_URL "/domain/zone/%s/record", args->domain);
             request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
             request_destroy(req);
             json_document_destroy(reqdoc);
@@ -544,7 +544,7 @@ static command_status_t record_delete(COMMAND_ARGS)
             request_t *req;
 
             // request
-            req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/domain/zone/%s/record/%" PRIu32, args->domain, match->id);
+            req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, error, API_BASE_URL "/domain/zone/%s/record/%" PRIu32, args->domain, match->id);
             request_success = request_execute(req, RESPONSE_IGNORE, NULL, error);
             request_destroy(req);
             // result
@@ -607,7 +607,7 @@ static command_status_t record_update(COMMAND_ARGS)
         {
             request_t *req;
 
-            req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_PUT, reqdoc, API_BASE_URL "/domain/zone/%s/record/%" PRIu32, args->domain, r->id);
+            req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_PUT, reqdoc, error, API_BASE_URL "/domain/zone/%s/record/%" PRIu32, args->domain, r->id);
             success = request_execute(req, RESPONSE_IGNORE, NULL, error);
             request_destroy(req);
             json_document_destroy(reqdoc);
@@ -677,7 +677,7 @@ static command_status_t dnssec_status(COMMAND_ARGS)
     USED(mainopts);
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
-    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
     request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
     if (request_success) {
@@ -709,9 +709,9 @@ static command_status_t dnssec_enable_disable(COMMAND_ARGS)
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
     if (args->on_off) {
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_POST, NULL, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_POST, NULL, error, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
     } else {
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, error, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
     }
     request_success = request_execute(req, RESPONSE_IGNORE, NULL, error);
     request_destroy(req);

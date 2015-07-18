@@ -35,8 +35,8 @@ bool request_add_header2(request_t *, const char *, const char *, error_t **);
 
 void request_destroy(request_t *);
 long request_response_status(request_t *);
-request_t *request_new(uint32_t, http_method_t, const void *, const char *, ...);
-request_t *request_vnew(uint32_t, http_method_t, const void *, const char *, va_list);
+request_t *request_new(uint32_t, http_method_t, const void *, error_t **, const char *, ...);
+request_t *request_vnew(uint32_t, http_method_t, const void *, error_t **, const char *, va_list);
 
 bool request_execute(request_t *, int, void **, error_t **);
 

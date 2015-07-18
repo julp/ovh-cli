@@ -225,6 +225,11 @@ static bool account_set_current(const char *name, error_t **error)
 
 void account_invalidate_consumer_key(error_t **UNUSED(error))
 {
+    /**
+     * TODO:
+     * - do not invalidate fresh generated but not yet validated consumer key
+     * - emit (early) an error if we try to use a suck consumer key?
+     */
     free((void *) acd.current_account.consumer_key);
     acd.current_account.consumer_key = NULL;
 //     acd.current_account.expires_at = 0;
