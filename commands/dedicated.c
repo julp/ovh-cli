@@ -100,6 +100,33 @@ typedef struct {
     time_t creation;
 } server_t;
 
+model_t server_model = {
+    (const model_field_t []) {
+        { "id",               MODEL_TYPE_INT,    offsetof(server_t, serverId),        0 },
+        { "name",             MODEL_TYPE_STRING, offsetof(server_t, name),            0 },
+        { "datacenter",       MODEL_TYPE_ENUM,   offsetof(server_t, datacenter),      0 },
+        { "professional_use", MODEL_TYPE_BOOL,   offsetof(server_t, professionalUse), 0 },
+        { "support_level",    MODEL_TYPE_ENUM,   offsetof(server_t, supportLevel),    0 },
+        { "commercial_range", MODEL_TYPE_STRING, offsetof(server_t, commercialRange), 0 },
+        { "ip",               MODEL_TYPE_STRING, offsetof(server_t, ip),              0 },
+        { "os",               MODEL_TYPE_STRING, offsetof(server_t, os),              0 },
+        { "state",            MODEL_TYPE_ENUM,   offsetof(server_t, state),           0 },
+        { "reverse",          MODEL_TYPE_STRING, offsetof(server_t, reverse),         0 },
+        { "monitoring",       MODEL_TYPE_BOOL,   offsetof(server_t, monitoring),      0 },
+        { "rack",             MODEL_TYPE_STRING, offsetof(server_t, rack),            0 },
+        { "root_device",      MODEL_TYPE_STRING, offsetof(server_t, rootDevice),      0 },
+        { "link_speed",       MODEL_TYPE_INT,    offsetof(server_t, linkSpeed),       0 },
+        { "boot_id",          MODEL_TYPE_INT,    offsetof(server_t, bootId),          0 },
+        { "engaged_up_to",    MODEL_TYPE_DATE,   offsetof(server_t, engagedUpTo),     0 },
+        { "contact_billing",  MODEL_TYPE_STRING, offsetof(server_t, contactBilling),  0 },
+        { "expiration",       MODEL_TYPE_DATE,   offsetof(server_t, expiration),      0 },
+        { "contact_tech",     MODEL_TYPE_STRING, offsetof(server_t, contactTech),     0 },
+        { "contact_admin",    MODEL_TYPE_STRING, offsetof(server_t, contactAdmin),    0 },
+        { "creation",         MODEL_TYPE_DATE,   offsetof(server_t, creation),        0 },
+        MODEL_FIELD_SENTINEL
+    }
+};
+
 // describe a boot
 typedef struct {
     int type;
@@ -107,6 +134,16 @@ typedef struct {
     const char *kernel;
     const char *description;
 } boot_t;
+
+model_t boot_model = {
+    (const model_field_t []) {
+        { "id",          MODEL_TYPE_INT,    offsetof(boot_t, id),          0 },
+        { "type",        MODEL_TYPE_ENUM,   offsetof(boot_t, type),        0 },
+        { "kernel",      MODEL_TYPE_STRING, offsetof(boot_t, kernel),      0 },
+        { "description", MODEL_TYPE_STRING, offsetof(boot_t, description), 0 },
+        MODEL_FIELD_SENTINEL
+    }
+};
 
 // arguments
 typedef struct {
