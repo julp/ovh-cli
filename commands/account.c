@@ -171,19 +171,11 @@ static bool account_set_current(const char *name, error_t **error)
             stmt = STMT_ACCOUNT_LOAD;
             statement_bind(&statements[stmt], NULL, name);
         }
-#if 0
-        if (statement_fetch(&statements[stmt], error, &acd.current_account.id, &acd.current_account.name, &acd.current_account.password, &acd.current_account.consumer_key, &acd.current_account.endpoint_id, &acd.current_account.isdefault, &acd.current_account.expires_at)) {
-#else
 //         statement_bind_from_model(&statements[stmt], account_model, NULL, (char *) &acd.current_account);
         if (statement_fetch_to_model(&statements[stmt], account_model, (char *) &acd.current_account, error)) {
 //             statement_bind_from_model(&statements[STMT_APPLICATION_LOAD], application_model, NULL, (char *) &acd.current_application);
-#endif
             statement_bind(&statements[STMT_APPLICATION_LOAD], NULL, acd.current_account.endpoint_id);
-#if 0
-            if (!statement_fetch(&statements[STMT_APPLICATION_LOAD], error, &acd.current_application.key, &acd.current_application.secret, &acd.current_application.endpoint_id)) {
-#else
             if (!statement_fetch_to_model(&statements[STMT_APPLICATION_LOAD], application_model, (char *) &acd.current_application, error)) {
-#endif
                 return FALSE;
             }
         } else {
@@ -260,11 +252,7 @@ bool check_current_application_and_account(bool skip_CK_check, error_t **error)
     if (NULL_OR_EMPTY(acd.current_account.consumer_key) || (0 != acd.current_account.expires_at && acd.current_account.expires_at < time(NULL))) {
         // if we successfully had a CK, save it
         if (NULL != (acd.current_account.consumer_key = request_consumer_key(&acd.current_account.expires_at, error))) {
-#if 0
-            statement_bind(&statements[STMT_ACCOUNT_UPDATE_KEY], NULL, acd.current_account.consumer_key, acd.current_account.expires_at, acd.current_account.name);
-#else
             statement_bind_from_model(&statements[STMT_ACCOUNT_UPDATE_KEY], account_model, NULL, (char *) &acd.current_account);
-#endif
             statement_fetch(&statements[STMT_ACCOUNT_UPDATE_KEY], error);
         }
     }
@@ -440,11 +428,7 @@ static command_status_t account_list(COMMAND_ARGS)
         _("current"), TABLE_TYPE_BOOLEAN,
         _("default"), TABLE_TYPE_BOOLEAN
     );
-#if 0
-    statement_to_iterator(&it, &statements[STMT_ACCOUNT_LIST], &account.id, &account.name, &account.password, &account.consumer_key, &account.endpoint_id, &account.isdefault, &account.expires_at);
-#else
     statement_model_to_iterator(&it, &statements[STMT_ACCOUNT_LIST], account_model, (char *) &account);
-#endif
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         table_store(t, account.name, account.consumer_key, account.expires_at, !NULL_OR_EMPTY(account.password), account.endpoint_id, acd.current_account.id == account.id, account.isdefault);
@@ -511,11 +495,7 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
     if (!update) {
         HashTable *ht;
 
-#if 0
-        statement_bind(&statements[STMT_ACCOUNT_INSERT], NULL, account.name, account.password, account.consumer_key, account.endpoint_id, 0, account.expires_at);
-#else
         statement_bind_from_model(&statements[STMT_ACCOUNT_INSERT], account_model, NULL, (char *) &account);
-#endif
         statement_fetch(&statements[STMT_ACCOUNT_INSERT], error);
         account.id = sqlite_last_insert_id();
 
@@ -543,11 +523,7 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
         nulls[1] = NULL == args->consumer_key;
         nulls[2] = NULL == args->consumer_key;
         nulls[3] = !args->endpoint_present;
-#if 0
-        statement_bind(&statements[STMT_ACCOUNT_UPDATE], nulls, account.password, account.consumer_key, account.expires_at, account.endpoint_id, account.name);
-#else
         statement_bind_from_model(&statements[STMT_ACCOUNT_UPDATE], account_model, nulls, (char *) &account);
-#endif
         statement_fetch(&statements[STMT_ACCOUNT_UPDATE], error);
     }
 
@@ -642,11 +618,7 @@ static command_status_t application_list(COMMAND_ARGS)
         _("key"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
         _("secret"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE
     );
-#if 0
-    statement_to_iterator(&it, &statements[STMT_APPLICATION_LIST], &application.key, &application.secret, &application.endpoint_id);
-#else
     statement_model_to_iterator(&it, &statements[STMT_APPLICATION_LIST], application_model, (char *) &application);
-#endif
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         table_store(t, application.endpoint_id, application.key, application.secret);
@@ -667,11 +639,7 @@ static command_status_t application_add(COMMAND_ARGS)
     application = (application_t *) arg;
     assert(NULL != application->key);
     assert(NULL != application->secret);
-#if 0
-    statement_bind(&statements[STMT_APPLICATION_INSERT], NULL, application->key, application->secret, application->endpoint_id);
-#else
     statement_bind_from_model(&statements[STMT_APPLICATION_INSERT], application_model, NULL, (char *)  application);
-#endif
     statement_fetch(&statements[STMT_APPLICATION_INSERT], error);
     // TODO: if !update (0 == sqlite_affected_rows), duplicate?
 
@@ -709,11 +677,7 @@ static command_status_t export(COMMAND_ARGS)
     USED(mainopts);
     buffer = string_new();
     // accounts
-#if 0
-    statement_to_iterator(&it, &statements[STMT_ACCOUNT_LIST], &account.id, &account.name, &account.password, &account.consumer_key, &account.endpoint_id, &account.isdefault, &account.expires_at);
-#else
     statement_model_to_iterator(&it, &statements[STMT_ACCOUNT_LIST], account_model, (char *) &account);
-#endif
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         string_append_formatted(buffer, "account %s add password \"%s\" endpoint %s", account.name, account.password, endpoint_names[account.endpoint_id]);
@@ -734,11 +698,7 @@ static command_status_t export(COMMAND_ARGS)
     }
     iterator_close(&it);
     // applications
-#if 0
-    statement_to_iterator(&it, &statements[STMT_APPLICATION_LIST], &application.key, &application.secret, &application.endpoint_id);
-#else
     statement_model_to_iterator(&it, &statements[STMT_APPLICATION_LIST], application_model, (char *) &application);
-#endif
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         string_append_formatted(buffer, "application %s add \"%s\" \"%s\"\n", endpoint_names[application.endpoint_id], application.key, application.secret);
