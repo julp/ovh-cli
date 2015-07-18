@@ -476,6 +476,7 @@ static command_status_t record_add(COMMAND_ARGS)
             hashtable_quick_put(ds->domains, 0, h, args->domain, d, NULL);
         }
         parse_record(d->records, doc);
+        ask_for_refresh(RELAY_COMMAND_ARGS);
     }
 
     return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
@@ -528,7 +529,7 @@ static command_status_t record_delete(COMMAND_ARGS)
                 case 1:
                 {
                     if (!confirm(mainopts, _("Confirm deletion of '%s.%s'"), match->name, args->domain)) {
-                        return COMMAND_SUCCESS; // yeah, success because *we* canceled it
+                        return COMMAND_SUCCESS; // yeah, success because user canceled it
                     }
                     break;
                 }
@@ -550,6 +551,7 @@ static command_status_t record_delete(COMMAND_ARGS)
             // result
             if (request_success) {
                 hashtable_quick_delete(d->records, match->id, NULL, TRUE);
+                ask_for_refresh(RELAY_COMMAND_ARGS);
             }
         }
     }
@@ -622,6 +624,7 @@ static command_status_t record_update(COMMAND_ARGS)
                 r->name = strdup(args->name);
             }
             r->ttl = args->ttl;
+            ask_for_refresh(RELAY_COMMAND_ARGS);
         }
     }
 //     debug("request update of %s.%s to %s.%s with TTL = %" PRIu32 " and value = '%s'", args->record, args->domain, args->name, args->domain, args->ttl, args->value);
