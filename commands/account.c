@@ -5,8 +5,8 @@
 #include "command.h"
 #include "date.h"
 #include "endpoints.h"
-#include "table.h"
 #include "modules/api.h"
+#include "modules/table.h"
 #include "modules/sqlite.h"
 #include "commands/account.h"
 #include "account_api.h"
@@ -104,7 +104,7 @@ static sqlite_statement_t statements[STMT_COUNT] = {
     [ STMT_FETCH_UPSERT ]           = DECL_STMT("INSERT OR REPLACE INTO fetchs(account_id, module_name, updated_at) VALUES(?, ?, strftime('%s','now'))", "is", ""),
 };
 
-model_t account_model = {
+static model_t account_model = {
     (const model_field_t []) {
         { "id",           MODEL_TYPE_INT,    offsetof(account_t, id),           0 },
         { "is_default",   MODEL_TYPE_BOOL,   offsetof(account_t, isdefault),    0 },
@@ -117,7 +117,7 @@ model_t account_model = {
     }
 };
 
-model_t application_model = {
+static model_t application_model = {
     (const model_field_t []) {
         { "app_key",     MODEL_TYPE_STRING, offsetof(application_t, key),         0 },
         { "secret",      MODEL_TYPE_STRING, offsetof(application_t, secret),      0 },

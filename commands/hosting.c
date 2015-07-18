@@ -5,8 +5,8 @@
 #include "command.h"
 #include "date.h"
 #include "util.h"
-#include "table.h"
 #include "modules/api.h"
+#include "modules/table.h"
 #include "commands/account.h"
 #include "struct/hashtable.h"
 
@@ -286,7 +286,7 @@ static command_status_t hosting_list(COMMAND_ARGS)
         table_store(t, s->serviceName, s->offer, s->hostingIp, s->hostingIpv6, s->primaryLogin, s->filer, s->state, s->hasCdn, s->operatingSystem, s->home, s->resourceType, s->cluster, s->clusterIp, s->clusterIpv6, s->boostOffer ,s->hasHostedSsl);
     }
     iterator_close(&it);
-    table_sort(t, 0);
+    table_sort(t, 0, TABLE_SORT_ASC);
     table_display(t, TABLE_FLAG_NONE);
     table_destroy(t);
 

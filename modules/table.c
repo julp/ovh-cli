@@ -1,9 +1,10 @@
 #include <string.h>
 #include <wchar.h>
 #include <locale.h>
+#include <ctype.h>
 
-#include "common.h"
-#include "table.h"
+#include "command.h"
+#include "modules/table.h"
 #include "util.h"
 #include "date.h"
 #include "modules/conv.h"
@@ -29,8 +30,6 @@ struct table_t {
     column_t *columns;
     resource_t *strings;
     size_t columns_count;
-    const char *false_true_string[2];
-    size_t false_true_len[2], max_false_true_len, max_date_len, max_datetime_len;
 };
 
 typedef struct {
@@ -116,6 +115,24 @@ static bool cplen(const char *string, size_t *string_len, error_t **error)
     return 0 == cp_len;
 }
 
+static const char *false_true_string[2];
+static size_t false_true_len[2], max_false_true_len, max_date_len, max_datetime_len;
+
+static bool table_ctor(error_t **error)
+{
+    // speed up true/false conversions
+    false_true_string[FALSE] = _("false");
+    cplen(false_true_string[FALSE], &false_true_len[FALSE], error);
+    false_true_string[TRUE] = _("true");
+    cplen(false_true_string[TRUE], &false_true_len[TRUE], error);
+    max_false_true_len = MAX(false_true_len[FALSE], false_true_len[TRUE]);
+    // preflight datetime length
+    max_date_len = STR_LEN("yyyy/mm/dd");
+    max_datetime_len = STR_LEN("yyyy/mm/dd hh:ii:ss");
+
+    return TRUE;
+}
+
 static void row_destroy(void *data)
 {
     row_t *r;
@@ -145,9 +162,9 @@ void bool_store(table_t *t, va_list ap, column_t *c, value_t *val)
     v = va_arg(ap, bool);
     val->f = FALSE;
     val->v = (uintptr_t) v;
-    val->l = t->max_false_true_len;
+    val->l = false_true_len[v];
     if (val->l > c->max_len) {
-        c->len = c->min_len = c->max_len = t->max_false_true_len;
+        c->len = c->min_len = c->max_len = max_false_true_len;
     }
 }
 
@@ -206,9 +223,9 @@ void date_store(table_t *t, va_list ap, column_t *c, value_t *val)
     v = va_arg(ap, time_t);
     val->f = FALSE;
     val->v = (uintptr_t) v;
-    val->l = t->max_date_len;
+    val->l = max_date_len;
     if (val->l > c->max_len) {
-        c->len = c->min_len = c->max_len = t->max_date_len;
+        c->len = c->min_len = c->max_len = max_date_len;
     }
 }
 
@@ -219,10 +236,31 @@ void datetime_store(table_t *t, va_list ap, column_t *c, value_t *val)
     v = va_arg(ap, time_t);
     val->f = FALSE;
     val->v = (uintptr_t) v;
-    val->l = t->max_datetime_len;
+    val->l = max_datetime_len;
     if (val->l > c->max_len) {
-        c->len = c->min_len = c->max_len = t->max_datetime_len;
+        c->len = c->min_len = c->max_len = max_datetime_len;
     }
+}
+
+static int strcmpp_asc(const void *p1, const void *p2, void *arg)
+{
+//     return strcmp(*(char * const *) p2, *(char * const *) p1);
+    return strcoll((const char *) (*((row_t **) p1))->values[*(size_t *) arg].v, (const char *) (*((row_t **) p2))->values[*(size_t *) arg].v);
+}
+
+static int strcmpp_desc(const void *p1, const void *p2, void *arg)
+{
+    return strcoll((const char *) (*((row_t **) p2))->values[*(size_t *) arg].v, (const char *) (*((row_t **) p1))->values[*(size_t *) arg].v);
+}
+
+static int intcmpp_asc(const void *p1, const void *p2, void *arg)
+{
+    return (*((row_t **) p1))->values[*(size_t *) arg].v - (*((row_t **) p2))->values[*(size_t *) arg].v;
+}
+
+static int intcmpp_desc(const void *p1, const void *p2, void *arg)
+{
+    return (*((row_t **) p2))->values[*(size_t *) arg].v - (*((row_t **) p1))->values[*(size_t *) arg].v;
 }
 
 static struct {
@@ -233,16 +271,15 @@ static struct {
 #if 0
     size_t (*display)(void); // callback for table_display
     void (*free)(void); // callback for table_display (free after displaying)
-    int (*sort_asc)(const void *, const void *, void *); // callback for qsort_r in asc order
-    int (*sort_desc)(const void *, const void *, void *); // callback for qsort_r in desc order
 #endif
+    CmpFuncArg sort[_TABLE_SORT_COUNT];
 } type_handlers[] = {
-    [ TABLE_TYPE_INT ] = { int_store },
-    [ TABLE_TYPE_BOOL ] = { bool_store },
-    [ TABLE_TYPE_ENUM ] = { enum_store },
-    [ TABLE_TYPE_STRING ] = { string_store },
-    [ TABLE_TYPE_DATE ] = { date_store },
-    [ TABLE_TYPE_DATETIME ] = { datetime_store }
+    [ TABLE_TYPE_INT ]      = { int_store, { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
+    [ TABLE_TYPE_BOOL ]     = { bool_store, { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
+    [ TABLE_TYPE_ENUM ]     = { enum_store, { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
+    [ TABLE_TYPE_STRING ]   = { string_store, { [ TABLE_SORT_ASC ] = strcmpp_asc, [ TABLE_SORT_DESC ] = strcmpp_desc } },
+    [ TABLE_TYPE_DATE ]     = { date_store, { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
+    [ TABLE_TYPE_DATETIME ] = { datetime_store, { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } }
 };
 
 table_t *table_new(size_t columns_count, ...)
@@ -253,17 +290,6 @@ table_t *table_new(size_t columns_count, ...)
 
     t = mem_new(*t);
     t->strings = NULL;
-    // speed up true/false conversions
-    t->false_true_string[FALSE] = _("false");
-    cplen(t->false_true_string[FALSE], &t->false_true_len[FALSE], NULL);
-    t->false_true_string[TRUE] = _("true");
-    cplen(t->false_true_string[TRUE], &t->false_true_len[TRUE], NULL);
-    t->max_false_true_len = MAX(t->false_true_len[FALSE], t->false_true_len[TRUE]);
-    // </>
-    // preflight datetime length
-    t->max_date_len = STR_LEN("yyyy/mm/dd");
-    t->max_datetime_len = STR_LEN("yyyy/mm/dd hh:ii:ss");
-    // </>
     t->columns_count = columns_count;
     t->columns = mem_new_n(*t->columns, columns_count);
     t->rows = dptrarray_new(NULL, row_destroy, NULL);
@@ -297,6 +323,16 @@ table_t *table_new(size_t columns_count, ...)
         }
     }
     va_end(ap);
+
+    return t;
+}
+
+table_t *table_model_new(model_t model)
+{
+    table_t *t;
+
+    t = mem_new(*t);
+    t->strings = NULL;
 
     return t;
 }
@@ -348,6 +384,55 @@ void table_store(table_t *t, ...)
     }
     va_end(ap);
     dptrarray_push(t->rows, r);
+}
+
+#if 0
+static bool camel_to_snake_case(const char *camel, char *snake, size_t snake_size, size_t *snake_len)
+{
+    size_t snake_len;
+
+    assert(NULL != snake_len);
+    while ('\0' != *camel) {
+        if (snake_len + STR_SIZE("_X") > snake_size) { // at least 3 characters for '_' + tolower(*camel) + '\0'
+            return FALSE;
+        }
+        if (isupper(*camel)) {
+            snake[*snake_len++] = '_';
+            snake[*snake_len++] = tolower(*camel);
+        } else {
+            snake[*snake_len++] = *camel;
+        }
+        ++camel;
+    }
+    snake[*snake_len] = '\0';
+
+    return TRUE;
+}
+#endif
+
+void table_model_store(table_t *t, char *ptr)
+{
+#if 0
+//     bool ok;
+    size_t i;
+    row_t *r;
+//     char *buffer[512];
+    const model_field_t *f;
+
+    i = 0;
+    r = mem_new(*r);
+    r->values = mem_new_n(*r->values, t->columns_count);
+    for (f = t->model.fields, i = 0; NULL != f->column_name; f++) {
+        if (TRUE/*!f->hidden*/) {
+            assert(TABLE_TYPE(t->columns[i].type) <= _TABLE_TYPE_LAST);
+            assert(NULL != type_handlers[TABLE_TYPE(t->columns[i].type)].store);
+
+            type_handlers[TABLE_TYPE(t->columns[i].type)].store(t, ap, &t->columns[i], &r->values[i]);
+            ++i;
+        }
+    }
+    dptrarray_push(t->rows, r);
+#endif
 }
 
 static void table_print_separator_line(table_t *t)
@@ -411,45 +496,24 @@ static size_t string_break(size_t max_len, const char *string, size_t string_len
     return i;
 }
 
-static int strcmpp(const void *p1, const void *p2, void *arg)
+/**
+ * Sort (in ASC order) table rows based on the value of a specific column
+ *
+ * @param t the table to sort
+ * @param colno the index of the column to sort on
+ *
+ * @note don't use this on data from SQL statement: use an ORDER clause.
+ * By default, there is no sorting at all: order of data insertion is
+ * preserved.
+ */
+void table_sort(table_t *t, size_t colno, table_sort_t order)
 {
-//     return strcmp(*(char * const *) p2, *(char * const *) p1);
-    return strcoll((const char *) (*((row_t **) p1))->values[*(size_t *) arg].v, (const char *) (*((row_t **) p2))->values[*(size_t *) arg].v);
-}
-
-static int intcmpp(const void *p1, const void *p2, void *arg)
-{
-    return (*((row_t **) p1))->values[*(size_t *) arg].v - (*((row_t **) p2))->values[*(size_t *) arg].v;
-}
-
-void table_sort(table_t *t, size_t colno/*, int order*/)
-{
-    CmpFuncArg cmpfn;
-
     assert(NULL != t);
     assert(colno < t->columns_count);
+    assert(TABLE_TYPE(t->columns[colno].type) <= _TABLE_TYPE_LAST);
+    assert(NULL != type_handlers[TABLE_TYPE(t->columns[colno].type)].sort[order]);
 
-#if 0
-    CmpFuncArg cmpfn[/* nb table types */][/* 2 : asc/desc */] = {
-        [ TABLE_TYPE_INT ] = {},
-        [ TABLE_TYPE_BOOL ] = {},
-        [ TABLE_TYPE_STRING ] = {},
-    };
-#endif
-    switch (TABLE_TYPE(t->columns[colno].type)) {
-        case TABLE_TYPE_STRING:
-            cmpfn = strcmpp;
-            break;
-        case TABLE_TYPE_INT:
-        case TABLE_TYPE_BOOL:
-        case TABLE_TYPE_DATE:
-        case TABLE_TYPE_DATETIME:
-            cmpfn = intcmpp;
-            break;
-        default:
-            assert(FALSE);
-    }
-    dptrarray_sort(t->rows, cmpfn, &colno);
+    dptrarray_sort(t->rows, type_handlers[TABLE_TYPE(t->columns[colno].type)].sort[order], &colno);
 }
 
 void table_display(table_t *t, uint32_t flags)
@@ -565,8 +629,8 @@ void table_display(table_t *t, uint32_t flags)
                                 written = t->columns[i].enum_values_len[r->values[i].v];
                                 break;
                             case TABLE_TYPE_BOOL:
-                                fputs(t->false_true_string[r->values[i].v], stdout);
-                                written = t->false_true_len[r->values[i].v];
+                                fputs(false_true_string[r->values[i].v], stdout);
+                                written = false_true_len[r->values[i].v];
                                 break;
                             case TABLE_TYPE_DATE:
                             case TABLE_TYPE_DATETIME:
@@ -702,8 +766,17 @@ INITIALIZER_P(table_test)
     table_store(t, 4, strdup("stu"), long_string, long_string, 3);
     table_store(t, 5, strdup("é"), "é", "é", 2);
     table_store(t, 6, strdup("é"), "é", "abc\ndéf", 1);
-    table_sort(t, 1);
-//     table_sort(t, 0);
+    table_sort(t, 1, TABLE_SORT_ASC);
+//     table_sort(t, 0, TABLE_SORT_ASC);
     table_display(t, TABLE_FLAG_NONE);
     table_destroy(t);
 }
+
+DECLARE_MODULE(table) = {
+    "table",
+    NULL,
+    NULL,
+    table_ctor,
+    NULL,
+    NULL
+};

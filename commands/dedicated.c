@@ -5,9 +5,9 @@
 #include "command.h"
 #include "date.h"
 #include "util.h"
-#include "table.h"
 #include "graphic.h"
 #include "modules/api.h"
+#include "modules/table.h"
 #include "modules/sqlite.h"
 #include "commands/account.h"
 
@@ -58,8 +58,8 @@ static sqlite_statement_t statements[STMT_COUNT] = {
     [ STMT_DEDICATED_NEAR_EXPIRATION ] = DECL_STMT("SELECT julianday(datetime(expiration, 'unixepoch', 'localtime')) - julianday('now') AS days, name FROM dedicated WHERE account_id = ? AND days < 120", "i", "is"),
     [ STMT_DEDICATED_SET_REVERSE ]     = DECL_STMT("UPDATE dedicated SET reverse = ? WHERE account_id = ? AND name = ?", "sis", ""),
     [ STMT_DEDICATED_COMPLETION ]      = DECL_STMT("SELECT name FROM dedicated WHERE account_id = ? AND name LIKE ? || '%'", "is", "s"),
-    [ STMT_DEDICATED_CURRENT_BOOT ]    = DECL_STMT("SELECT boot_type, kernel, description FROM boots JOIN dedicated ON boots.id = dedicated.boot_id WHERE account_id = ? AND name = ?", "is", BOOT_OUTPUT_BINDS),
-    [ STMT_BOOT_LIST ]                 = DECL_STMT("SELECT boot_type, kernel, description FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.id JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ?", "is", BOOT_OUTPUT_BINDS),
+    [ STMT_DEDICATED_CURRENT_BOOT ]    = DECL_STMT("SELECT boots.* FROM boots JOIN dedicated ON boots.id = dedicated.boot_id WHERE account_id = ? AND name = ?", "is", BOOT_OUTPUT_BINDS),
+    [ STMT_BOOT_LIST ]                 = DECL_STMT("SELECT boots.* FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.id JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ?", "is", BOOT_OUTPUT_BINDS),
     [ STMT_BOOT_UPSERT ]               = DECL_STMT("INSERT OR REPLACE INTO boots(id, boot_type, kernel, description) VALUES(?, ?, ?, ?)", "iiss", ""),
     [ STMT_BOOT_COMPLETION ]           = DECL_STMT("SELECT kernel FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.id JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ? AND kernel LIKE ? || '%'", "iss", "s"),
     [ STMT_B_D_LINK ]                  = DECL_STMT("INSERT OR IGNORE INTO boots_dedicated(boot_id, dedicated_id) VALUES(?, ?)", "ii", ""),
@@ -100,7 +100,7 @@ typedef struct {
     time_t creation;
 } server_t;
 
-model_t server_model = {
+static model_t server_model = {
     (const model_field_t []) {
         { "id",               MODEL_TYPE_INT,    offsetof(server_t, serverId),        0 },
         { "name",             MODEL_TYPE_STRING, offsetof(server_t, name),            0 },
@@ -135,10 +135,10 @@ typedef struct {
     const char *description;
 } boot_t;
 
-model_t boot_model = {
+static model_t boot_model = {
     (const model_field_t []) {
         { "id",          MODEL_TYPE_INT,    offsetof(boot_t, id),          0 },
-        { "type",        MODEL_TYPE_ENUM,   offsetof(boot_t, type),        0 },
+        { "boot_type",   MODEL_TYPE_ENUM,   offsetof(boot_t, type),        0 },
         { "kernel",      MODEL_TYPE_STRING, offsetof(boot_t, kernel),      0 },
         { "description", MODEL_TYPE_STRING, offsetof(boot_t, description), 0 },
         MODEL_FIELD_SENTINEL
@@ -300,20 +300,20 @@ static void dedicated_dtor(void)
 
 static bool parse_boot(server_t *s, json_document_t *doc, error_t **error)
 {
-    boot_t b;
+    boot_t boot;
     json_value_t root, v;
 
     root = json_document_get_root(doc);
-    JSON_GET_PROP_INT(root, "bootId", b.id);
-    JSON_GET_PROP_STRING_EX(root, "kernel", b.kernel, FALSE);
-    JSON_GET_PROP_STRING_EX(root, "description", b.description, FALSE);
+    JSON_GET_PROP_INT(root, "bootId", boot.id);
+    JSON_GET_PROP_STRING_EX(root, "kernel", boot.kernel, FALSE);
+    JSON_GET_PROP_STRING_EX(root, "description", boot.description, FALSE);
     json_object_get_property(root, "bootType", &v);
-    b.type = json_get_enum(v, boot_types, -1);
+    boot.type = json_get_enum(v, boot_types, -1);
 
-    statement_bind(&statements[STMT_BOOT_UPSERT], NULL, b.id, b.type, b.kernel, b.description);
+    statement_bind_from_model(&statements[STMT_BOOT_UPSERT], boot_model, NULL, (char *) &boot);
     statement_fetch(&statements[STMT_BOOT_UPSERT], error);
     assert(1 == sqlite_affected_rows());
-    statement_bind(&statements[STMT_B_D_LINK], NULL, b.id, s->serverId);
+    statement_bind(&statements[STMT_B_D_LINK], NULL, boot.id, s->serverId);
     statement_fetch(&statements[STMT_B_D_LINK], error);
 
     json_document_destroy(doc);
@@ -611,7 +611,7 @@ static command_status_t dedicated_boot_list(COMMAND_ARGS)
         _("description"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE
     );
     statement_bind(&statements[STMT_BOOT_LIST], NULL, current_account->id, args->server_name);
-    statement_to_iterator(&it, &statements[STMT_BOOT_LIST], &boot.type, &boot.kernel, &boot.description);
+    statement_model_to_iterator(&it, &statements[STMT_BOOT_LIST], boot_model, (char *) &boot);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         table_store(t, boot.type, boot.kernel, boot.description);
@@ -633,7 +633,7 @@ static command_status_t dedicated_boot_get(COMMAND_ARGS)
     args = (dedicated_argument_t *) arg;
     assert(NULL != args->server_name);
     statement_bind(&statements[STMT_DEDICATED_CURRENT_BOOT], NULL, current_account->id, args->server_name);
-    success = statement_fetch(&statements[STMT_DEDICATED_CURRENT_BOOT], error, &boot.type, &boot.kernel, &boot.description);
+    success = statement_fetch_to_model(&statements[STMT_DEDICATED_CURRENT_BOOT], boot_model, (char *) &boot, error);
     if (success) {
         printf(_("Current boot for %s is:  %s (%s): %s\n"), args->server_name, boot.kernel, boot_types[boot.type], boot.description);
     }

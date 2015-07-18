@@ -22,6 +22,7 @@ extern module_t openssl_module;
 extern module_t curl_module;
 extern module_t libxml_module;
 extern module_t conv_module;
+extern module_t table_module;
 extern module_t api_module;
 extern module_t base_module;
 extern module_t account_module;
@@ -106,6 +107,7 @@ static const module_t */*builtin_*/modules[] = {
     &curl_module,
     &libxml_module,
     &conv_module,
+    &table_module,
     &account_module,
     &api_module,
     &base_module,

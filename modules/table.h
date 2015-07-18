@@ -13,6 +13,12 @@
 # define TABLE_TYPE_DELEGATE 0x0100
 
 typedef enum {
+    TABLE_SORT_ASC,
+    TABLE_SORT_DESC,
+    _TABLE_SORT_COUNT,
+} table_sort_t;
+
+typedef enum {
     TABLE_TYPE_INT,
     TABLE_TYPE_INTEGER = TABLE_TYPE_INT,
     TABLE_TYPE_ENUM,
@@ -29,7 +35,12 @@ typedef struct table_t table_t;
 void table_destroy(table_t *);
 void table_display(table_t *, uint32_t);
 table_t *table_new(size_t, ...);
-void table_sort(table_t *, size_t);
+void table_sort(table_t *, size_t, table_sort_t);
 void table_store(table_t *, ...);
+
+# include "model.h"
+
+table_t *table_model_new(model_t);
+void table_model_store(table_t *, char *);
 
 #endif /* !TABLE_H */

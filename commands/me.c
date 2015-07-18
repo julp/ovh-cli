@@ -4,8 +4,8 @@
 #include "common.h"
 #include "command.h"
 #include "date.h"
-#include "table.h"
 #include "modules/api.h"
+#include "modules/table.h"
 #include "struct/xtring.h"
 #include "struct/hashtable.h"
 
@@ -80,7 +80,7 @@ static command_status_t me(COMMAND_ARGS)
             table_store(t, gettext(key), v == json_null ? NULL : json_get_string(v));
         }
         iterator_close(&it);
-        table_sort(t, 0);
+        table_sort(t, 0, TABLE_SORT_ASC);
         table_display(t, TABLE_FLAG_NONE);
         table_destroy(t);
         json_document_destroy(doc);

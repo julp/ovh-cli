@@ -14,10 +14,6 @@ typedef enum {
     SQLITE_TYPE_IGNORE
 } sqlite_bind_type_t;
 
-#define SQLITE_TYPE_DATE     SQLITE_TYPE_INT
-#define SQLITE_TYPE_DATETIME SQLITE_TYPE_INT
-#define SQLITE_TYPE_ENUM     SQLITE_TYPE_INT
-
 typedef struct {
     int version;
     const char *statement;

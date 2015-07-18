@@ -98,7 +98,7 @@ option(PRINT_OVH_ID "Enable/disable display of internal OVH identifiers" OFF)
 
 set(
     BUILTIN_MODULES
-    modules/sqlite.c modules/openssl.c modules/curl.c modules/libxml.c modules/api.c modules/conv.c modules/base.c
+    modules/sqlite.c modules/openssl.c modules/curl.c modules/libxml.c modules/api.c modules/conv.c modules/table.c modules/base.c
     commands/account.c
 )
 
@@ -115,7 +115,7 @@ configure_file(
     @ONLY
 )
 
-add_executable(ovh main.c graph.c json.c error.c util.c date.c table.c graphic.c
+add_executable(ovh main.c graph.c json.c error.c util.c date.c graphic.c
     struct/iterator.c struct/hashtable.c struct/dptrarray.c struct/xtring.c
     ${BUILTIN_MODULES} ${EXTRA_MODULES_ENABLED} ${MISC_SOURCES}
 )

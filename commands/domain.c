@@ -5,8 +5,8 @@
 #include "command.h"
 #include "date.h"
 #include "util.h"
-#include "table.h"
 #include "modules/api.h"
+#include "modules/table.h"
 #include "commands/account.h"
 #include "struct/hashtable.h"
 
