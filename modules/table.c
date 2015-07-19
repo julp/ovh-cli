@@ -155,7 +155,7 @@ void int_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
     }
 }
 
-void bool_store(table_t *t, va_list ap, column_t *c, value_t *val)
+void bool_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
 {
     bool v;
 
@@ -216,7 +216,7 @@ print_error(error);
     }
 }
 
-void date_store(table_t *t, va_list ap, column_t *c, value_t *val)
+void date_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
 {
     time_t v;
 
@@ -229,7 +229,7 @@ void date_store(table_t *t, va_list ap, column_t *c, value_t *val)
     }
 }
 
-void datetime_store(table_t *t, va_list ap, column_t *c, value_t *val)
+void datetime_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
 {
     time_t v;
 
