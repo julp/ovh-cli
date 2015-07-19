@@ -1,6 +1,6 @@
 #ifndef MODEL_H
 
-#define MODEL_H
+# define MODEL_H
 
 typedef enum {
     MODEL_TYPE_INT,
