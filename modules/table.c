@@ -48,28 +48,52 @@ const char * const false_true[] = {
     NULL
 };
 
-#if 0
+enum {
+    TABLE_BORDER_NONE,
+    TABLE_BORDER_ASCII,
+    TABLE_BORDER_UTF8_SIMPLE,
+    TABLE_BORDER_UTF8_DOUBLED,
+};
+
 // https://en.wikipedia.org/wiki/Box-drawing_character
-
-{
-    "═", "║", // HORIZONTAL ; VERTICAL
-    { "╔", "╦", "╗", }, // TOP | HORIZONTAL | VERTICAL | LEFT ; TOP | HORIZONTAL | VERTICAL ; TOP | HORIZONTAL | VERTICAL | RIGHT
-
-    { "╠", "╬", "╣", }, // HORIZONTAL | VERTICAL | LEFT ; HORIZONTAL | VERTICAL ; HORIZONTAL | VERTICAL | RIGHT
-
-    { "╚", "╩", "╝", },
-
-    "─", "│",
-    { "┌", "┬", "┐", },
-    { "├", "┼", "┤", },
-    { "└", "┴", "┘", },
-
-    "-", "|",
-    { "+", "+", "+" },
-    { "+", "+", "+" },
-    { "+", "+", "+" },
-},
-#endif
+static const struct {
+    const char *h;
+    const char *v;
+    const char *o[3][3];
+} borders[] = {
+    [ TABLE_BORDER_NONE ] = {
+        "", "",
+        {
+            { "", "", "" },
+            { "", "", "" },
+            { "", "", "" },
+        }
+    },
+    [ TABLE_BORDER_ASCII ] = {
+        "-", "|",
+        {
+            { "+", "+", "+" },
+            { "+", "+", "+" },
+            { "+", "+", "+" },
+        }
+    },
+    [ TABLE_BORDER_UTF8_SIMPLE ] = {
+        "─", "│",
+        {
+            { "┌", "┬", "┐", },
+            { "├", "┼", "┤", },
+            { "└", "┴", "┘", },
+        }
+    },
+    [ TABLE_BORDER_UTF8_DOUBLED ] = {
+        "═", "║", // HORIZONTAL ; VERTICAL
+        {
+            { "╔", "╦", "╗", }, // TOP | HORIZONTAL | VERTICAL | LEFT ; TOP | HORIZONTAL | VERTICAL ; TOP | HORIZONTAL | VERTICAL | RIGHT
+            { "╠", "╬", "╣", }, // HORIZONTAL | VERTICAL | LEFT ; HORIZONTAL | VERTICAL ; HORIZONTAL | VERTICAL | RIGHT
+            { "╚", "╩", "╝", },
+        }
+    },
+};
 
 /**
  * NOTE:
@@ -115,11 +139,13 @@ static bool cplen(const char *string, size_t *string_len, error_t **error)
     return 0 == cp_len;
 }
 
+static int border_type;
 static const char *false_true_string[2];
 static size_t false_true_len[2], max_false_true_len, max_date_len, max_datetime_len;
 
 static bool table_ctor(error_t **error)
 {
+    border_type = is_output_utf8() ? TABLE_BORDER_UTF8_SIMPLE : TABLE_BORDER_ASCII;
     // speed up true/false conversions
     false_true_string[FALSE] = _("false");
     cplen(false_true_string[FALSE], &false_true_len[FALSE], error);
@@ -435,16 +461,22 @@ void table_model_store(table_t *t, char *ptr)
 #endif
 }
 
-static void table_print_separator_line(table_t *t)
+typedef enum {
+    TABLE_FIRST_LINE,
+    TABLE_MIDDLE_LINE,
+    TABLE_LAST_LINE,
+} table_separator_line_t;
+
+static void table_print_separator_line(table_t *t, table_separator_line_t line_type)
 {
     size_t i, j;
 
-    putchar('+');
+    fputs(borders[border_type].o[line_type][0], stdout);
     for (i = 0; i < t->columns_count; i++) {
         for (j = 0; j < t->columns[i].len + 2; j++) {
-            putchar('-');
+            fputs(borders[border_type].h, stdout);
         }
-        putchar('+');
+        fputs(borders[border_type].o[line_type][(i == t->columns_count - 1) ? 2 : 1], stdout);
     }
     putchar('\n');
 }
@@ -497,10 +529,11 @@ static size_t string_break(size_t max_len, const char *string, size_t string_len
 }
 
 /**
- * Sort (in ASC order) table rows based on the value of a specific column
+ * Sort table rows based on the values of a specific column
  *
  * @param t the table to sort
  * @param colno the index of the column to sort on
+ * @param order asc or desc order (one of the constants TABLE_SORT_(A|DE)SC)
  *
  * @note don't use this on data from SQL statement: use an ORDER clause.
  * By default, there is no sorting at all: order of data insertion is
@@ -558,9 +591,9 @@ void table_display(table_t *t, uint32_t flags)
     }
     if (!HAS_FLAG(flags, TABLE_FLAG_NO_HEADERS)) {
         // +--- ... ---+
-        table_print_separator_line(t);
+        table_print_separator_line(t, TABLE_FIRST_LINE);
         // | ... | : column headers
-        putchar('|');
+        fputs(borders[border_type].v, stdout);
         for (i = 0; i < t->columns_count; i++) {
             putchar(' ');
             fputs(t->columns[i].title, stdout);
@@ -568,12 +601,13 @@ void table_display(table_t *t, uint32_t flags)
             for (k = t->columns[i].title_len; k < t->columns[i].len; k++) {
                 putchar(' ');
             }
-            fputs(" |", stdout);
+            putchar(' ');
+            fputs(borders[border_type].v, stdout);
         }
         putchar('\n');
     }
     // +--- ... ---+
-    table_print_separator_line(t);
+    table_print_separator_line(t, HAS_FLAG(flags, TABLE_FLAG_NO_HEADERS) ? TABLE_FIRST_LINE : TABLE_MIDDLE_LINE);
     if (dptrarray_length(t->rows) > 0) {
         // | ... | : data
         dptrarray_to_iterator(&it, t->rows);
@@ -610,7 +644,7 @@ void table_display(table_t *t, uint32_t flags)
                 }
             }
             for (j =  0; j < lines_needed; j++) {
-                putchar('|');
+                fputs(borders[border_type].v, stdout);
                 for (i = 0; i < t->columns_count; i++) {
                     putchar(' ');
                     if (0 == j || j < breaks_count[i]) {
@@ -659,7 +693,8 @@ void table_display(table_t *t, uint32_t flags)
                     } else {
                         printf("%*c", (int) t->columns[i].len, ' ');
                     }
-                    fputs(" |", stdout);
+                    putchar(' ');
+                    fputs(borders[border_type].v, stdout);
                 }
                 putchar('\n');
             }
@@ -683,7 +718,7 @@ void table_display(table_t *t, uint32_t flags)
         free(breaks);
         free(breaks_count);
         // +--- ... ---+
-        table_print_separator_line(t);
+        table_print_separator_line(t, TABLE_LAST_LINE);
     }
 }
 

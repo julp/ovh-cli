@@ -9,6 +9,11 @@
 
 static const char *input_encoding, *output_encoding = "UTF-8";
 
+bool is_output_utf8(void)
+{
+    return 0 == strcmp(output_encoding, "UTF-8");
+}
+
 static bool convert_ctor(error_t **UNUSED(error))
 {
 #ifdef BSD
