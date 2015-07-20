@@ -5,6 +5,7 @@
 # include "common.h"
 
 int console_width(void);
+int console_height(void);
 bool confirm(const main_options_t *, const char *, ...);
 int launch_editor(char **, const char *, error_t **);
 

@@ -14,7 +14,8 @@
 # define MAXPATHLEN PATH_MAX
 #endif /* !MAXPATHLEN && PATH_MAX */
 
-#define DEFAULT_WIDTH 80
+#define DEFAULT_WIDTH  80
+#define DEFAULT_HEIGHT 24
 #define DEFAULT_EDITOR "vi"
 
 bool confirm(const main_options_t *mainopts, const char *prompt, ...)
@@ -43,10 +44,11 @@ int console_width(void)
     int columns;
 
     if (isatty(STDOUT_FILENO)) {
+        const char *v;
         struct winsize w;
 
-        if (NULL != getenv("COLUMNS") && 0 != atoi(getenv("COLUMNS"))) {
-            columns = atoi(getenv("COLUMNS"));
+        if (NULL != (v = getenv("COLUMNS")) && 0 != (columns = atoi(v))) {
+            // OK
         } else if (-1 != ioctl(STDOUT_FILENO, TIOCGWINSZ, &w)) {
             columns = w.ws_col;
         } else {
@@ -57,6 +59,28 @@ int console_width(void)
     }
 
     return columns;
+}
+
+int console_height(void)
+{
+    int lines;
+
+    if (isatty(STDOUT_FILENO)) {
+        const char *v;
+        struct winsize w;
+
+        if (NULL != (v = getenv("LINES")) && 0 != (lines = atoi(v))) {
+            // OK
+        } else if (-1 != ioctl(STDOUT_FILENO, TIOCGWINSZ, &w)) {
+            lines = w.ws_row;
+        } else {
+            lines = DEFAULT_HEIGHT;
+        }
+    } else {
+        lines = -1; // unlimited
+    }
+
+    return lines;
 }
 
 int launch_editor(char **dest, const char *hint, error_t **error)
