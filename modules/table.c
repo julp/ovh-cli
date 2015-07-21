@@ -2,6 +2,7 @@
 #include <wchar.h>
 #include <locale.h>
 #include <ctype.h>
+#include <unistd.h>
 
 #include "command.h"
 #include "modules/table.h"
@@ -9,6 +10,8 @@
 #include "date.h"
 #include "modules/conv.h"
 #include "struct/dptrarray.h"
+
+#define DEFAULT_PAGER "less"
 
 typedef struct resource_t {
     const void *ptr;
@@ -106,7 +109,6 @@ static const struct {
 /**
  * TODO:
  * - refactoring
- * - pipe to PAGER if too much lines
  * - map TABLE_TYPE_BOOL on TABLE_TYPE_ENUM ? (copy t->false_true* to t->columns[i].enum*)
  **/
 
@@ -467,18 +469,18 @@ typedef enum {
     TABLE_LAST_LINE,
 } table_separator_line_t;
 
-static void table_print_separator_line(table_t *t, table_separator_line_t line_type)
+static void table_print_separator_line(table_t *t, FILE *fout, table_separator_line_t line_type)
 {
     size_t i, j;
 
-    fputs(borders[border_type].o[line_type][0], stdout);
+    fputs(borders[border_type].o[line_type][0], fout);
     for (i = 0; i < t->columns_count; i++) {
         for (j = 0; j < t->columns[i].len + 2; j++) {
-            fputs(borders[border_type].h, stdout);
+            fputs(borders[border_type].h, fout);
         }
-        fputs(borders[border_type].o[line_type][(i == t->columns_count - 1) ? 2 : 1], stdout);
+        fputs(borders[border_type].o[line_type][(i == t->columns_count - 1) ? 2 : 1], fout);
     }
-    putchar('\n');
+    fputc('\n', fout);
 }
 
 typedef struct {
@@ -552,6 +554,7 @@ void table_sort(table_t *t, size_t colno, table_sort_t order)
 void table_display(table_t *t, uint32_t flags)
 {
     int width;
+    FILE *fout;
     size_t i, k;
     Iterator it;
     break_t **breaks;
@@ -559,6 +562,7 @@ void table_display(table_t *t, uint32_t flags)
 
     assert(NULL != t);
 
+    fout = stdout;
     width = console_width();
     if (width > 0) {
         int min_len_sum, candidates_for_growth;
@@ -589,25 +593,40 @@ void table_display(table_t *t, uint32_t flags)
             }
         }
     }
+    if (isatty(STDOUT_FILENO)) {
+        int height;
+
+        height = console_height();
+        if (height > 0 && dptrarray_length(t->rows) + 4 > height) { // TODO: prepare line breaking in a first step to known exactely how many lines will be displayed
+            const char *pager;
+
+            if (NULL == (pager = getenv("PAGER"))) {
+                pager = DEFAULT_PAGER;
+            }
+            if (NULL == (fout = popen(pager, "w"))) {
+                fout = stdout;
+            }
+        }
+    }
     if (!HAS_FLAG(flags, TABLE_FLAG_NO_HEADERS)) {
         // +--- ... ---+
-        table_print_separator_line(t, TABLE_FIRST_LINE);
+        table_print_separator_line(t, fout, TABLE_FIRST_LINE);
         // | ... | : column headers
-        fputs(borders[border_type].v, stdout);
+        fputs(borders[border_type].v, fout);
         for (i = 0; i < t->columns_count; i++) {
-            putchar(' ');
-            fputs(t->columns[i].title, stdout);
-//             printf(" %*c |", t->columns[i].len - t->columns[i].title_len, ' ');
+            fputc(' ', fout);
+            fputs(t->columns[i].title, fout);
+//             fprintf(fout, " %*c |", t->columns[i].len - t->columns[i].title_len, ' ');
             for (k = t->columns[i].title_len; k < t->columns[i].len; k++) {
-                putchar(' ');
+                fputc(' ', fout);
             }
-            putchar(' ');
-            fputs(borders[border_type].v, stdout);
+            fputc(' ', fout);
+            fputs(borders[border_type].v, fout);
         }
-        putchar('\n');
+        fputc('\n', fout);
     }
     // +--- ... ---+
-    table_print_separator_line(t, HAS_FLAG(flags, TABLE_FLAG_NO_HEADERS) ? TABLE_FIRST_LINE : TABLE_MIDDLE_LINE);
+    table_print_separator_line(t, fout, HAS_FLAG(flags, TABLE_FLAG_NO_HEADERS) ? TABLE_FIRST_LINE : TABLE_MIDDLE_LINE);
     if (dptrarray_length(t->rows) > 0) {
         // | ... | : data
         dptrarray_to_iterator(&it, t->rows);
@@ -644,26 +663,26 @@ void table_display(table_t *t, uint32_t flags)
                 }
             }
             for (j =  0; j < lines_needed; j++) {
-                fputs(borders[border_type].v, stdout);
+                fputs(borders[border_type].v, fout);
                 for (i = 0; i < t->columns_count; i++) {
-                    putchar(' ');
+                    fputc(' ', fout);
                     if (0 == j || j < breaks_count[i]) {
                         size_t written;
 
                         switch (TABLE_TYPE(t->columns[i].type)) {
                             case TABLE_TYPE_STRING:
-                                fputs(breaks[i][j].part, stdout);
+                                fputs(breaks[i][j].part, fout);
                                 written = breaks[i][j].charlen;
                                 break;
                             case TABLE_TYPE_INT:
-                                written = printf("%*d", (int) t->columns[i].len, (int) r->values[i].v);
+                                written = fprintf(fout, "%*d", (int) t->columns[i].len, (int) r->values[i].v);
                                 break;
                             case TABLE_TYPE_ENUM:
-                                fputs(t->columns[i].enum_values[r->values[i].v], stdout);
+                                fputs(t->columns[i].enum_values[r->values[i].v], fout);
                                 written = t->columns[i].enum_values_len[r->values[i].v];
                                 break;
                             case TABLE_TYPE_BOOL:
-                                fputs(false_true_string[r->values[i].v], stdout);
+                                fputs(false_true_string[r->values[i].v], fout);
                                 written = false_true_len[r->values[i].v];
                                 break;
                             case TABLE_TYPE_DATE:
@@ -680,7 +699,7 @@ void table_display(table_t *t, uint32_t flags)
                                     written = STR_LEN("-");
                                     memcpy(buffer, "-", STR_SIZE("-"));
                                 }
-                                fputs(buffer, stdout);
+                                fputs(buffer, fout);
                                 break;
                             }
                             default:
@@ -688,15 +707,15 @@ void table_display(table_t *t, uint32_t flags)
                                 break;
                         }
                         for (k = written; k < t->columns[i].len; k++) {
-                            putchar(' ');
+                            fputc(' ', fout);
                         }
                     } else {
-                        printf("%*c", (int) t->columns[i].len, ' ');
+                        fprintf(fout, "%*c", (int) t->columns[i].len, ' ');
                     }
-                    putchar(' ');
-                    fputs(borders[border_type].v, stdout);
+                    fputc(' ', fout);
+                    fputs(borders[border_type].v, fout);
                 }
-                putchar('\n');
+                fputc('\n', fout);
             }
             for (i = 0; i < t->columns_count; i++) {
                 if (TABLE_TYPE_STRING == TABLE_TYPE(t->columns[i].type)) {
@@ -718,7 +737,10 @@ void table_display(table_t *t, uint32_t flags)
         free(breaks);
         free(breaks_count);
         // +--- ... ---+
-        table_print_separator_line(t, TABLE_LAST_LINE);
+        table_print_separator_line(t, fout, TABLE_LAST_LINE);
+        if (stdout != fout) {
+            pclose(fout);
+        }
     }
 }
 
