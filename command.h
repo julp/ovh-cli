@@ -2,16 +2,26 @@
 
 # define COMMAND_H
 
-typedef enum {
-    COMMAND_SUCCESS,
-    COMMAND_FAILURE,
-    COMMAND_USAGE
-} command_status_t;
+# include "common.h"
+
+enum {
+    COMMAND_SUCCESS = 0,
+    COMMAND_FAILURE = 1,
+    COMMAND_USAGE   = 2
+};
+
+# define CMD_FLAG_NO_DATA      0x0100
+# define CMD_FLAG_SKIP_HISTORY 0x0200
+# define CMD_FLAGS             0xFF00
+
+# define COMMAND_CODE(x) \
+    ((x) & ~CMD_FLAGS)
+
+typedef uint32_t command_status_t;
 
 # define RELAY_COMMAND_ARGS arg, mainopts, error
 # define COMMAND_ARGS void *arg, const main_options_t *mainopts, error_t **error
 
-# include "common.h"
 # include "graph.h"
 # include "json.h"
 

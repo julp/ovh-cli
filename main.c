@@ -8,6 +8,7 @@
 #include <histedit.h>
 #include "modules/api.h"
 #include "modules/conv.h"
+#include "modules/home.h"
 #include "commands/account.h"
 #include "struct/dptrarray.h"
 
@@ -17,6 +18,7 @@ typedef struct {
     DPtrArray *possibilities;
 } editline_data_t;
 
+extern module_t home_module;
 extern module_t sqlite_module;
 extern module_t openssl_module;
 extern module_t curl_module;
@@ -85,35 +87,20 @@ const endpoint_t endpoints[] = {
 
 #undef S
 
-#if 0
-const endpoint_t *endpoint_by_name(const char *name/*, error_t **error*/)
-{
-    const endpoint_t *e;
-
-    for (e = endpoints; NULL != e->name; e++) {
-        if (0 == strcmp(e->name, name)) {
-            return e;
-        }
-    }
-
-//     error_set();
-    return NULL;
-}
-#endif
-
 static const module_t */*builtin_*/modules[] = {
-    &sqlite_module,
-    &openssl_module,
-    &curl_module,
-    &libxml_module,
-    &conv_module,
-    &table_module,
-    &account_module,
-    &api_module,
-    &base_module,
+    &home_module,    // R-dep: main.c, modules/sqlite.c
+    &sqlite_module,  // R-dep: most of commands/*.c
+    &openssl_module, // R-dep: modules/api.c
+    &curl_module,    // R-dep: modules/api.c
+    &libxml_module,  // R-dep: modules/api.c
+    &conv_module,    // R-dep: main.c (argv convertions), modules/tables.c
+    &table_module,   // R-dep: most of commands/*.c
+    &account_module, // R-dep: most of commands/*.c
+    &api_module,     // R-dep: most of commands/*.c
+    &base_module,    // R-dep: none
     // ---
 #ifdef WITH_NLS
-    &nls_module,
+    &nls_module,     // R-dep: modules/table.c for "test constructor"
 #endif /* WITH_NLS */
     &me_module,
     &key_module,
@@ -293,14 +280,15 @@ extern unsigned char graph_complete(EditLine *, int);
 // LANG="fr_FR.ISO-8859-1" ./ovh domain $'\xE9' record list
 int main(int argc, char **argv)
 {
+    int c;
     size_t i;
-    int c, ret;
     error_t *error;
+    command_status_t ret;
     main_options_t mainopts;
+    char history_path[MAXPATHLEN];
 
     error = NULL;
     g = graph_new();
-    ret = EXIT_SUCCESS;
     bzero(&mainopts, sizeof(mainopts));
     for (i = 0; i < ARRAY_SIZE(modules); i++) {
         if (NULL != modules[i]->early_init) {
@@ -342,21 +330,20 @@ int main(int argc, char **argv)
     if (optind == argc) {
         int count;
         EditLine *el;
+        HistEvent ev;
         History *hist;
         const char *line;
         editline_data_t client_data;
 
         puts(_("needs help? Type help!"));
+        build_path_from_home(OVH_HISTORY_FILENAME, history_path, ARRAY_SIZE(history_path));
         hist = history_init();
-        {
-            HistEvent ev;
-
-            history(hist, &ev, H_SETSIZE, 100);
-            history(hist, &ev, H_SETUNIQUE, 1);
-        }
         client_data.graph = g;
         client_data.tokenizer = tok_init(NULL);
         client_data.possibilities = dptrarray_new(NULL, NULL, NULL);
+        history(hist, &ev, H_SETSIZE, 100);
+        history(hist, &ev, H_SETUNIQUE, 1);
+        history(hist, &ev, H_LOAD, history_path);
         el = el_init(*argv, stdin, stdout, stderr);
         el_set(el, EL_CLIENTDATA, &client_data);
         el_set(el, EL_PROMPT, prompt);
@@ -366,7 +353,6 @@ int main(int argc, char **argv)
         while (NULL != (line = el_gets(el, &count)) && count > 0/* && -1 != count*/) {
            char **args;
             int args_len;
-            HistEvent ev;
             char *utf8_line;
 
             error = NULL; // reinitialize it
@@ -375,7 +361,7 @@ int main(int argc, char **argv)
             }
             if (convert_string_local_to_utf8(line, count, &utf8_line, NULL, &error)) {
                 args_len = str_split(utf8_line, client_data.tokenizer, &args);
-                graph_run_command(g, args_len, (const char **) args, (const main_options_t *) &mainopts, &error);
+                ret = graph_run_command(g, args_len, (const char **) args, (const main_options_t *) &mainopts, &error);
                 convert_string_free(line, &utf8_line);
 #if WITHOUT_LIBEDIT_TOKENIZER
                 free(args[0]);
@@ -383,8 +369,11 @@ int main(int argc, char **argv)
 #endif /* WITHOUT_LIBEDIT_TOKENIZER */
             }
             print_error(error);
-            history(hist, &ev, H_ENTER, line);
+            if (!HAS_FLAG(ret, CMD_FLAG_SKIP_HISTORY)) {
+                history(hist, &ev, H_ENTER, line);
+            }
         }
+        history(hist, &ev, H_SAVE, history_path);
         history_end(hist);
         tok_end(client_data.tokenizer);
         dptrarray_destroy(client_data.possibilities);
@@ -396,10 +385,10 @@ int main(int argc, char **argv)
         argc -= optind;
         argv += optind;
         convert_array_local_to_utf8(argc, argv, &utf8_argv, &error);
-        ret = graph_run_command(g, argc, (const char **) utf8_argv, (const main_options_t *) &mainopts, &error) ? EXIT_SUCCESS : EXIT_FAILURE;
+        ret = graph_run_command(g, argc, (const char **) utf8_argv, (const main_options_t *) &mainopts, &error);
         print_error(error);
         convert_array_free(argc, argv, utf8_argv);
     }
 
-    return ret;
+    return COMMAND_CODE(ret);
 }

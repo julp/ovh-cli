@@ -1,16 +1,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <pwd.h>
-#include <unistd.h>
 #include <string.h>
 #include "common.h"
 #include "command.h"
-#include "sqlite.h"
-
-#include <limits.h>
-#if !defined(MAXPATHLEN) && defined(PATH_MAX)
-# define MAXPATHLEN PATH_MAX
-#endif /* !MAXPATHLEN && PATH_MAX */
+#include "modules/home.h"
+#include "modules/sqlite.h"
 
 typedef struct {
     sqlite_bind_type_t type;
@@ -673,40 +667,15 @@ bool statement_fetch_to_model(sqlite_statement_t *stmt, model_t model, char *ptr
 static bool sqlite_early_ctor(error_t **error)
 {
     int ret;
-    char *home;
     mode_t old_umask;
 
     *db_path = '\0';
-    if (NULL == (home = getenv("HOME"))) {
-#ifdef _MSC_VER
-# ifndef CSIDL_PROFILE
-#  define CSIDL_PROFILE 40
-# endif /* CSIDL_PROFILE */
-        if (NULL == (home = getenv("USERPROFILE"))) {
-            HRESULT hr;
-            LPITEMIDLIST pidl = NULL;
-
-            if (S_OK == (hr = SHGetSpecialFolderLocation(NULL, CSIDL_PROFILE, &pidl)));
-                SHGetPathFromIDList(pidl, db_path);
-                home = db_path;
-                CoTaskMemFree(pidl);
-            }
-        }
-#else
-        struct passwd *pwd;
-
-        if (NULL != (pwd = getpwuid(getuid()))) {
-            home = pwd->pw_dir;
-        }
-#endif /* _MSC_VER */
-    }
-    if (NULL != home) {
-        ret = snprintf(db_path, ARRAY_SIZE(db_path), "%s%c%s", home, DIRECTORY_SEPARATOR, OVH_DB_FILENAME);
-        if (ret < 0 || ((size_t) ret) >= ARRAY_SIZE(db_path)) {
-            return FALSE;
-        }
+    if (build_path_from_home(OVH_DB_FILENAME, db_path, ARRAY_SIZE(db_path))) {
+        error_set(error, FATAL, _("buffer overflow"));
+        return FALSE;
     }
     if ('\0' == *db_path) {
+        error_set(error, FATAL, _("path to database is empty"));
         return FALSE;
     }
     // open database

@@ -70,7 +70,7 @@ set_package_properties(OpenSSL PROPERTIES TYPE REQUIRED PURPOSE "To sign (SHA1) 
 set_package_properties(EditLine PROPERTIES TYPE REQUIRED PURPOSE "For command line completion")
 set_package_properties(Gettext PROPERTIES TYPE OPTIONAL PURPOSE "The tools to manage files translation")
 set_package_properties(Intl PROPERTIES TYPE OPTIONAL PURPOSE "The library to translate internal strings")
-set_package_properties(SQLite3 PROPERTIES TYPE OPTIONAL PURPOSE "A permanent cache")
+set_package_properties(SQLite3 PROPERTIES TYPE OPTIONAL PURPOSE "Permanent storage for some datas")
 feature_summary(INCLUDE_QUIET_PACKAGES WHAT ALL)
 
 include_directories(
@@ -98,7 +98,7 @@ option(PRINT_OVH_ID "Enable/disable display of internal OVH identifiers" OFF)
 
 set(
     BUILTIN_MODULES
-    modules/sqlite.c modules/openssl.c modules/curl.c modules/libxml.c modules/api.c modules/conv.c modules/table.c modules/base.c
+    modules/home.c modules/sqlite.c modules/openssl.c modules/curl.c modules/libxml.c modules/api.c modules/conv.c modules/table.c modules/base.c
     commands/account.c
 )
 

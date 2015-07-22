@@ -65,6 +65,7 @@
 # include "config.h"
 # define DIRECTORY_SEPARATOR '/'
 # define OVH_DB_FILENAME ".ovh.sqlite"
+# define OVH_HISTORY_FILENAME ".ovh.history"
 
 # define ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
 # define STR_LEN(str)      (ARRAY_SIZE(str) - 1)

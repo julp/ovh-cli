@@ -811,7 +811,9 @@ static const char * const test_enum[] = {
 INITIALIZER_P(table_test)
 {
     table_t *t;
+    extern bool convert_ctor(error_t **error);
 
+    convert_ctor(NULL);
 #ifdef WITH_NLS
     extern bool nls_ctor(void);
     nls_ctor();
