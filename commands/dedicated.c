@@ -542,7 +542,7 @@ static command_status_t dedicated_list(COMMAND_ARGS)
     table_display(t, TABLE_FLAG_NONE);
     table_destroy(t);
 
-    return COMMAND_SUCCESS;
+    return COMMAND_SUCCESS /* TODO: | CMD_FLAG_NO_DATA */;
 }
 
 static command_status_t dedicated_check(COMMAND_ARGS)
