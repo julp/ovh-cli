@@ -183,6 +183,13 @@ void int_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
     }
 }
 
+void bool_colinit(table_t *UNUSED(t), va_list UNUSED(ap), column_t *c)
+{
+    if (max_false_true_len > c->max_len) {
+        c->len = c->min_len = c->max_len = max_false_true_len;
+    }
+}
+
 void bool_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
 {
     bool v;
@@ -191,8 +198,28 @@ void bool_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
     val->f = FALSE;
     val->v = (uintptr_t) v;
     val->l = false_true_len[v];
-    if (val->l > c->max_len) {
-        c->len = c->min_len = c->max_len = max_false_true_len;
+}
+
+void enum_colinit(table_t *UNUSED(t), va_list ap, column_t *c)
+{
+    size_t enum_size;
+    const char * const *v;
+    const char * const *values;
+
+    enum_size = 0;
+    c->enum_max_value_len = 0;
+    values = va_arg(ap, const char * const *);
+    for (v = values; NULL != *v; v++) {
+        ++enum_size;
+    }
+    c->enum_values = mem_new_n(*c->enum_values, enum_size);
+    c->enum_values_len = mem_new_n(*c->enum_values_len, enum_size);
+    for (v = values; NULL != *v; v++) {
+        c->enum_values[v - values] = _(*v);
+        cplen(c->enum_values[v - values], &c->enum_values_len[v - values], NULL);
+        if (c->enum_values_len[v - values] > c->enum_max_value_len) {
+            c->enum_max_value_len = c->enum_values_len[v - values];
+        }
     }
 }
 
@@ -244,6 +271,13 @@ print_error(error);
     }
 }
 
+void date_colinit(table_t *UNUSED(t), va_list UNUSED(ap), column_t *c)
+{
+    if (max_date_len > c->max_len) {
+        c->len = c->min_len = c->max_len = max_date_len;
+    }
+}
+
 void date_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
 {
     time_t v;
@@ -252,8 +286,12 @@ void date_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
     val->f = FALSE;
     val->v = (uintptr_t) v;
     val->l = max_date_len;
-    if (val->l > c->max_len) {
-        c->len = c->min_len = c->max_len = max_date_len;
+}
+
+void datetime_colinit(table_t *UNUSED(t), va_list UNUSED(ap), column_t *c)
+{
+    if (max_datetime_len > c->max_len) {
+        c->len = c->min_len = c->max_len = max_datetime_len;
     }
 }
 
@@ -265,9 +303,6 @@ void datetime_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
     val->f = FALSE;
     val->v = (uintptr_t) v;
     val->l = max_datetime_len;
-    if (val->l > c->max_len) {
-        c->len = c->min_len = c->max_len = max_datetime_len;
-    }
 }
 
 static int strcmpp_asc(const void *p1, const void *p2, void *arg)
@@ -292,9 +327,7 @@ static int intcmpp_desc(const void *p1, const void *p2, void *arg)
 }
 
 static struct {
-#if 0
-    void (*initialize)(void); // callback for table_new
-#endif
+    void (*colinit)(table_t *, va_list, column_t *);
     void (*store)(table_t *, va_list, column_t *, value_t *); // callback for table_store
 #if 0
     size_t (*display)(void); // callback for table_display
@@ -302,12 +335,12 @@ static struct {
 #endif
     CmpFuncArg sort[_TABLE_SORT_COUNT];
 } type_handlers[] = {
-    [ TABLE_TYPE_INT ]      = { int_store, { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
-    [ TABLE_TYPE_BOOL ]     = { bool_store, { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
-    [ TABLE_TYPE_ENUM ]     = { enum_store, { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
-    [ TABLE_TYPE_STRING ]   = { string_store, { [ TABLE_SORT_ASC ] = strcmpp_asc, [ TABLE_SORT_DESC ] = strcmpp_desc } },
-    [ TABLE_TYPE_DATE ]     = { date_store, { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
-    [ TABLE_TYPE_DATETIME ] = { datetime_store, { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } }
+    [ TABLE_TYPE_INT ]      = { NULL,             int_store,      { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
+    [ TABLE_TYPE_BOOL ]     = { bool_colinit,     bool_store,     { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
+    [ TABLE_TYPE_ENUM ]     = { enum_colinit,     enum_store,     { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
+    [ TABLE_TYPE_STRING ]   = { NULL,             string_store,   { [ TABLE_SORT_ASC ] = strcmpp_asc, [ TABLE_SORT_DESC ] = strcmpp_desc } },
+    [ TABLE_TYPE_DATE ]     = { date_colinit,     date_store,     { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
+    [ TABLE_TYPE_DATETIME ] = { datetime_colinit, datetime_store, { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } }
 };
 
 table_t *table_new(size_t columns_count, ...)
@@ -328,6 +361,7 @@ table_t *table_new(size_t columns_count, ...)
         t->columns[i].type = va_arg(ap, column_type_t);
         cplen(t->columns[i].title, &t->columns[i].title_len, NULL);
         t->columns[i].len = t->columns[i].min_len = t->columns[i].max_len = t->columns[i].title_len;
+#if 0
         if (TABLE_TYPE_ENUM == t->columns[i].type) {
             size_t enum_size;
             const char * const *v;
@@ -349,6 +383,12 @@ table_t *table_new(size_t columns_count, ...)
                 }
             }
         }
+#else
+        assert(TABLE_TYPE(t->columns[i].type) <= _TABLE_TYPE_LAST);
+        if (NULL != type_handlers[TABLE_TYPE(t->columns[i].type)].colinit) {
+            type_handlers[TABLE_TYPE(t->columns[i].type)].colinit(t, ap, &t->columns[i]);
+        }
+#endif
     }
     va_end(ap);
 
