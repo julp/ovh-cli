@@ -190,7 +190,7 @@ void bool_colinit(table_t *UNUSED(t), va_list UNUSED(ap), column_t *c)
     }
 }
 
-void bool_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
+void bool_store(table_t *UNUSED(t), va_list ap, column_t *UNUSED(c), value_t *val)
 {
     bool v;
 
@@ -278,7 +278,7 @@ void date_colinit(table_t *UNUSED(t), va_list UNUSED(ap), column_t *c)
     }
 }
 
-void date_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
+void date_store(table_t *UNUSED(t), va_list ap, column_t *UNUSED(c), value_t *val)
 {
     time_t v;
 
@@ -295,7 +295,7 @@ void datetime_colinit(table_t *UNUSED(t), va_list UNUSED(ap), column_t *c)
     }
 }
 
-void datetime_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
+void datetime_store(table_t *UNUSED(t), va_list ap, column_t *UNUSED(c), value_t *val)
 {
     time_t v;
 
