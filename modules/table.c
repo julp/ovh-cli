@@ -46,6 +46,11 @@ typedef struct {
     value_t *values;
 } row_t;
 
+typedef struct {
+    size_t charlen;
+    const char *part;
+} break_t;
+
 const char * const false_true[] = {
     N_("false"),
     N_("true"),
@@ -237,6 +242,47 @@ static void enum_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val
     }
 }
 
+static size_t string_break(size_t max_len, const char *string, size_t string_len, break_t **breaks)
+{
+    size_t i, breaks_len, breaks_size;
+
+    i = 0;
+    // NOTE: string_len unit is "character"
+    breaks_len = (string_len + max_len - 1) / max_len;
+    breaks_size = nearest_power(breaks_len, 8);
+    *breaks = mem_new_n(**breaks, breaks_size);
+    if (breaks_len <= 1 && NULL == strchr(string, '\n')) {
+        (*breaks)[i].charlen = string_len;
+        (*breaks)[i++].part = string; // don't free breaks[0].part if string == breaks[0].part (or 1 == breaks_count)
+    } else {
+        const char *p;
+        size_t start, end; // byte index
+
+        p = string;
+        start = end = 0;
+        while ('\0' != *p) {
+            bool forced;
+            size_t cp_len, cp_count;
+
+            forced = FALSE;
+            if (i >= breaks_size) {
+                breaks_size <<= 1;
+                *breaks = mem_renew(*breaks, **breaks, breaks_size);
+            }
+            for (cp_count = 0; !forced && cp_count < max_len && (cp_len = mblen(p, MB_CUR_MAX)) > 0; cp_count++) { // TODO: < 0 with size_t can't work
+                forced = 1 == cp_len && '\n' == *p;
+                p += cp_len;
+                end += cp_len;
+            }
+            (*breaks)[i].charlen = cp_count - forced;
+            (*breaks)[i++].part = strndup(string + start, end - start - forced);
+            start = end;
+        }
+    }
+
+    return i;
+}
+
 static void string_store(table_t *t, va_list ap, column_t *c, value_t *val)
 {
     char *s_local;
@@ -330,18 +376,19 @@ static int intcmpp_desc(const void *p1, const void *p2, void *arg)
 static struct {
     void (*colinit)(table_t *, va_list, column_t *);
     void (*store)(table_t *, va_list, column_t *, value_t *); // callback for table_store
+    size_t (*breakline)(size_t, const char *, size_t, break_t **);
 #if 0
     size_t (*display)(void); // callback for table_display
     void (*free)(void); // callback for table_display (free after displaying)
 #endif
     CmpFuncArg sort[_TABLE_SORT_COUNT];
 } type_handlers[] = {
-    [ TABLE_TYPE_INT ]      = { NULL,             int_store,      { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
-    [ TABLE_TYPE_BOOL ]     = { bool_colinit,     bool_store,     { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
-    [ TABLE_TYPE_ENUM ]     = { enum_colinit,     enum_store,     { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
-    [ TABLE_TYPE_STRING ]   = { NULL,             string_store,   { [ TABLE_SORT_ASC ] = strcmpp_asc, [ TABLE_SORT_DESC ] = strcmpp_desc } },
-    [ TABLE_TYPE_DATE ]     = { date_colinit,     date_store,     { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
-    [ TABLE_TYPE_DATETIME ] = { datetime_colinit, datetime_store, { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } }
+    [ TABLE_TYPE_INT ]      = { NULL,             int_store,      NULL,         { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
+    [ TABLE_TYPE_BOOL ]     = { bool_colinit,     bool_store,     NULL,         { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
+    [ TABLE_TYPE_ENUM ]     = { enum_colinit,     enum_store,     NULL,         { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
+    [ TABLE_TYPE_STRING ]   = { NULL,             string_store,   string_break, { [ TABLE_SORT_ASC ] = strcmpp_asc, [ TABLE_SORT_DESC ] = strcmpp_desc } },
+    [ TABLE_TYPE_DATE ]     = { date_colinit,     date_store,     NULL,         { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
+    [ TABLE_TYPE_DATETIME ] = { datetime_colinit, datetime_store, NULL,         { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } }
 };
 
 table_t *table_new(size_t columns_count, ...)
@@ -524,52 +571,6 @@ static void table_print_separator_line(table_t *t, FILE *fout, table_separator_l
     fputc('\n', fout);
 }
 
-typedef struct {
-    size_t charlen;
-    const char *part;
-} break_t;
-
-static size_t string_break(size_t max_len, const char *string, size_t string_len, break_t **breaks)
-{
-    size_t i, breaks_len, breaks_size;
-
-    i = 0;
-    // NOTE: string_len unit is "character"
-    breaks_len = (string_len + max_len - 1) / max_len;
-    breaks_size = nearest_power(breaks_len, 8);
-    *breaks = mem_new_n(**breaks, breaks_size);
-    if (breaks_len <= 1 && NULL == strchr(string, '\n')) {
-        (*breaks)[i].charlen = string_len;
-        (*breaks)[i++].part = string; // don't free breaks[0].part if string == breaks[0].part (or 1 == breaks_count)
-    } else {
-        const char *p;
-        size_t start, end; // byte index
-
-        p = string;
-        start = end = 0;
-        while ('\0' != *p) {
-            bool forced;
-            size_t cp_len, cp_count;
-
-            forced = FALSE;
-            if (i >= breaks_size) {
-                breaks_size <<= 1;
-                *breaks = mem_renew(*breaks, **breaks, breaks_size);
-            }
-            for (cp_count = 0; !forced && cp_count < max_len && (cp_len = mblen(p, MB_CUR_MAX)) > 0; cp_count++) { // TODO: < 0 with size_t can't work
-                forced = 1 == cp_len && '\n' == *p;
-                p += cp_len;
-                end += cp_len;
-            }
-            (*breaks)[i].charlen = cp_count - forced;
-            (*breaks)[i++].part = strndup(string + start, end - start - forced);
-            start = end;
-        }
-    }
-
-    return i;
-}
-
 /**
  * Sort table rows based on the values of a specific column
  *
@@ -680,6 +681,7 @@ void table_display(table_t *t, uint32_t flags)
             r = iterator_current(&it, NULL);
             bzero(breaks_count, sizeof(breaks_count) * t->columns_count);
             for (i = 0; i < t->columns_count; i++) {
+#if 0
                 /*if (r->values[i].l > t->columns[i].len && (r->values[i].l / t->columns[i].len + 1) > lines_needed) {
                     lines_needed = r->values[i].l / t->columns[i].len + 1;
                 }*/
@@ -701,6 +703,15 @@ void table_display(table_t *t, uint32_t flags)
                         assert(FALSE);
                         break;
                 }
+#else
+                assert(TABLE_TYPE(t->columns[i].type) <= _TABLE_TYPE_LAST);
+                if (NULL != type_handlers[TABLE_TYPE(t->columns[i].type)].breakline) {
+                    breaks_count[i] = type_handlers[TABLE_TYPE(t->columns[i].type)].breakline(t->columns[i].len, (const char *) r->values[i].v, r->values[i].l, &breaks[i]);
+                    if (breaks_count[i] > lines_needed) {
+                        lines_needed = breaks_count[i];
+                    }
+                }
+#endif
             }
             for (j =  0; j < lines_needed; j++) {
                 fputs(borders[border_type].v, fout);
@@ -851,13 +862,17 @@ static const char * const test_enum[] = {
 INITIALIZER_P(table_test)
 {
     table_t *t;
+#ifdef WITH_NLS
+    extern bool nls_ctor(error_t **error);
+#endif /* WITH_NLS */
     extern bool convert_ctor(error_t **error);
 
     convert_ctor(NULL);
 #ifdef WITH_NLS
-    extern bool nls_ctor(void);
-    nls_ctor();
+    nls_ctor(NULL);
 #endif /* WITH_NLS */
+    table_ctor(NULL);
+
     t = table_new(5, "id", TABLE_TYPE_INT, "subdomain", TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE, "target", TABLE_TYPE_STRING, "éïàùçè", TABLE_TYPE_STRING, "status", TABLE_TYPE_ENUM, test_enum);
     table_store(t, 1, strdup("abc"), "def", "", 0);
     table_store(t, 2, strdup("ghi"), "jkl", long_string, 1);
