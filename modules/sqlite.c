@@ -447,48 +447,57 @@ void statement_bind(sqlite_statement_t *stmt, const bool *nulls, ...)
     assert(strlen(stmt->inbinds) == ((size_t) sqlite3_bind_parameter_count(stmt->prepared)));
     va_start(ap, nulls);
     for (p = stmt->inbinds; '\0' != *p; p++) {
-        if (NULL == nulls || !nulls[p - stmt->inbinds]) {
-            switch (*p) {
-                case 'n':
-                    va_arg(ap, void *);
-                    sqlite3_bind_null(stmt->prepared, p - stmt->inbinds + 1);
-                    break;
-                case 'd':
-                {
-                    double v;
+        bool dobind;
 
-                    v = va_arg(ap, double);
+        dobind = NULL == nulls || !nulls[p - stmt->inbinds];
+        switch (*p) {
+            case 'n':
+                va_arg(ap, void *);
+                sqlite3_bind_null(stmt->prepared, p - stmt->inbinds + 1);
+                break;
+            case 'd':
+            {
+                double v;
+
+                v = va_arg(ap, double);
+                if (dobind) {
                     sqlite3_bind_double(stmt->prepared, p - stmt->inbinds + 1, v);
-                    break;
                 }
-                case 'b':
-                {
-                    bool v;
-
-                    v = va_arg(ap, bool);
-                    sqlite3_bind_int(stmt->prepared, p - stmt->inbinds + 1, v);
-                    break;
-                }
-                case 'i':
-                {
-                    int64_t v;
-
-                    v = va_arg(ap, int64_t);
-                    sqlite3_bind_int64(stmt->prepared, p - stmt->inbinds + 1, v);
-                    break;
-                }
-                case 's':
-                {
-                    char *v;
-
-                    v = va_arg(ap, char *);
-                    sqlite3_bind_text(stmt->prepared, p - stmt->inbinds + 1, v, -1, SQLITE_TRANSIENT);
-                    break;
-                }
-                default:
-                    assert(FALSE);
-                    break;
+                break;
             }
+            case 'b':
+            {
+                bool v;
+
+                v = va_arg(ap, bool);
+                if (dobind) {
+                    sqlite3_bind_int(stmt->prepared, p - stmt->inbinds + 1, v);
+                }
+                break;
+            }
+            case 'i':
+            {
+                int64_t v;
+
+                v = va_arg(ap, int64_t);
+                if (dobind) {
+                    sqlite3_bind_int64(stmt->prepared, p - stmt->inbinds + 1, v);
+                }
+                break;
+            }
+            case 's':
+            {
+                char *v;
+
+                v = va_arg(ap, char *);
+                if (dobind) {
+                    sqlite3_bind_text(stmt->prepared, p - stmt->inbinds + 1, v, -1, SQLITE_TRANSIENT);
+                }
+                break;
+            }
+            default:
+                assert(FALSE);
+                break;
         }
     }
     va_end(ap);

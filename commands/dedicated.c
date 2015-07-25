@@ -371,7 +371,7 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
         request_destroy(req);
         if (success) {
             json_value_t root, propvalue;
-            bool nulls[22] = { 0 };
+            bool nulls[22] = { FALSE };
 
             root = json_document_get_root(doc);
             json_object_get_property(root, "datacenter", &propvalue);
@@ -382,32 +382,26 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
             JSON_GET_PROP_STRING_EX(root, "ip", s.ip, FALSE);
             JSON_GET_PROP_STRING_EX(root, "name", s.name, FALSE);
             JSON_GET_PROP_STRING_EX(root, "commercialRange", s.commercialRange, FALSE);
-            if (NULL == s.commercialRange) {
-                nulls[6] = 'n';
-            }
+            nulls[6] = NULL == s.commercialRange;
             JSON_GET_PROP_STRING_EX(root, "os", s.os, FALSE);
             json_object_get_property(root, "state", &propvalue);
             s.state = json_get_enum(propvalue, states, -1);
             JSON_GET_PROP_STRING_EX(root, "reverse", s.reverse, FALSE);
-            if (NULL == s.reverse) {
-                nulls[10] = 'n';
-            }
+            nulls[10] = NULL == s.reverse;
             JSON_GET_PROP_INT(root, "serverId", s.serverId);
             JSON_GET_PROP_BOOL(root, "monitoring", s.monitoring);
             JSON_GET_PROP_STRING_EX(root, "rack", s.rack, FALSE);
             JSON_GET_PROP_STRING_EX(root, "rootDevice", s.rootDevice, FALSE);
-            if (NULL == s.rootDevice) {
-                nulls[13] = 'n';
-            }
+            nulls[13] = NULL == s.rootDevice;
             json_object_get_property(root, "linkSpeed", &propvalue);
             if (json_null == propvalue) {
-                nulls[14] = 'n';
+                nulls[14] = TRUE;
             } else {
                 s.linkSpeed = json_get_integer(propvalue);
             }
             json_object_get_property(root, "bootId", &propvalue);
             if (json_null == propvalue) {
-                nulls[15] = 'n';
+                nulls[15] = TRUE;
             } else {
                 s.bootId = json_get_integer(propvalue);
             }
