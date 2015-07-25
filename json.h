@@ -44,10 +44,10 @@ enum {
 
 #define JSON_GET_PROP_STRING_EX(object, property, lvalue, copy) \
     do { \
-        json_value_t v; \
+        json_value_t __v; \
  \
-        json_object_get_property(object, property, &v); \
-        lvalue = json_null == v ? NULL : (copy ? strdup(json_get_string(v)) : (char *) json_get_string(v)); \
+        json_object_get_property(object, property, &__v); \
+        lvalue = json_null == __v ? NULL : (copy ? strdup(json_get_string(__v)) : (char *) json_get_string(__v)); \
     } while (0);
 
 #define JSON_GET_PROP_STRING(object, property, lvalue) \
@@ -63,18 +63,18 @@ enum {
 
 #define JSON_GET_PROP_BOOL(object, property, lvalue) \
     do { \
-        json_value_t v; \
+        json_value_t __v; \
  \
-        json_object_get_property(object, property, &v); \
-        lvalue = json_true == v; \
+        json_object_get_property(object, property, &__v); \
+        lvalue = json_true == __v; \
     } while (0);
 
 #define JSON_GET_PROP_DOUBLE(object, property, lvalue) \
     do { \
-        json_value_t v; \
+        json_value_t __v; \
  \
-        json_object_get_property(object, property, &v); \
-        lvalue = json_get_number(v); \
+        json_object_get_property(object, property, &__v); \
+        lvalue = json_get_number(__v); \
     } while (0);
 
 json_value_t json_array(void) WARN_UNUSED_RESULT;

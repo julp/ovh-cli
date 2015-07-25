@@ -666,9 +666,9 @@ void table_display(table_t *t, uint32_t flags)
         }
         fputc('\n', fout);
     }
-    // +--- ... ---+
-    table_print_separator_line(t, fout, HAS_FLAG(flags, TABLE_FLAG_NO_HEADERS) ? TABLE_FIRST_LINE : TABLE_MIDDLE_LINE);
     if (dptrarray_length(t->rows) > 0) {
+        // +--- ... ---+
+        table_print_separator_line(t, fout, HAS_FLAG(flags, TABLE_FLAG_NO_HEADERS) ? TABLE_FIRST_LINE : TABLE_MIDDLE_LINE);
         // | ... | : data
         dptrarray_to_iterator(&it, t->rows);
         breaks = mem_new_n(*breaks, t->columns_count);
@@ -787,11 +787,11 @@ void table_display(table_t *t, uint32_t flags)
         iterator_close(&it);
         free(breaks);
         free(breaks_count);
-        // +--- ... ---+
-        table_print_separator_line(t, fout, TABLE_LAST_LINE);
-        if (stdout != fout) {
-            pclose(fout);
-        }
+    }
+    // +--- ... ---+
+    table_print_separator_line(t, fout, TABLE_LAST_LINE);
+    if (stdout != fout) {
+        pclose(fout);
     }
 }
 

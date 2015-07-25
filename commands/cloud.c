@@ -154,28 +154,175 @@ static command_status_t cloud_list(COMMAND_ARGS) // project(s)_list?
     return COMMAND_SUCCESS;
 }
 
+static const char * const status[] = {
+    "ACTIVE",
+    "BUILDING",
+    "DELETED",
+    "ERROR",
+    "HARD_REBOOT",
+    "PASSWORD",
+    "PAUSED",
+    "REBOOT",
+    "REBUILD",
+    "RESCUED",
+    "RESIZED",
+    "REVERT_RESIZE",
+    "SOFT_DELETED",
+    "STOPPED",
+    "SUSPENDED",
+    "UNKNOWN",
+    "VERIFY_RESIZE",
+    "MIGRATING",
+    "RESIZE",
+    "BUILD",
+    "SHUTOFF",
+    "RESCUE",
+    "SHELVED",
+    "SHELVED_OFFLOADED",
+    NULL
+};
+
+typedef struct {
+    int status;
+    char *name;
+    char *region;
+    char *imageId;
+    time_t created;
+    char *flavorId;
+    char *sshKeyId;
+    // monthlyBilling (json object with 2 properties ?)
+    // ipAddresses (array of json object with 2 properties ?)
+    char *id;
+} instance_t;
+
 static command_status_t instance_list(COMMAND_ARGS) // instances?
 {
+    bool success;
     project_argument_t *args;
 
-    USED(error); // TODO
     USED(mainopts);
     args = (project_argument_t *) arg;
-    debug("instance list");
+    {
+        table_t *t;
+        request_t *req;
+        json_document_t *doc;
 
-    return COMMAND_SUCCESS;
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/cloud/project/%s/instance", args->name);
+        success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+        request_destroy(req);
+        if (success) {
+            Iterator it;
+            json_value_t root;
+            instance_t instance;
+
+            t = table_new(
+                8,
+                _("status"), TABLE_TYPE_ENUM, status,
+                _("name"), TABLE_TYPE_STRING,
+                _("region"), TABLE_TYPE_STRING,
+                _("imageId"), TABLE_TYPE_STRING,
+                _("created"), TABLE_TYPE_DATETIME,
+                _("flavorId"), TABLE_TYPE_STRING,
+                _("sshKeyId"), TABLE_TYPE_STRING,
+                _("id"), TABLE_TYPE_STRING
+            );
+            // NOTE: GET /cloud/project/{serviceName}/instance/{instanceId} gives the same informations but include data of image and flavor instead of their ID ?
+            root = json_document_get_root(doc);
+            json_array_to_iterator(&it, root);
+            for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+                json_value_t v, propvalue;
+
+                v = (json_value_t) iterator_current(&it, NULL);
+                json_object_get_property(v, "status", &propvalue);
+                instance.status = json_get_enum(v, status, -1);
+                JSON_GET_PROP_STRING_EX(v, "name", instance.name, FALSE);
+                JSON_GET_PROP_STRING_EX(v, "region", instance.region, FALSE);
+                JSON_GET_PROP_STRING_EX(v, "imageId", instance.imageId, FALSE);
+                json_object_get_property(v, "created", &propvalue);
+                date_parse_to_timestamp(json_get_string(propvalue), "%F", &instance.created);
+                JSON_GET_PROP_STRING_EX(v, "flavorId", instance.flavorId, FALSE);
+                JSON_GET_PROP_STRING_EX(v, "sshKeyId", instance.sshKeyId, FALSE);
+                JSON_GET_PROP_STRING_EX(v, "id", instance.id, FALSE);
+                table_store(t, instance.status, instance.name, instance.region, instance.imageId, instance.created, instance.flavorId, instance.sshKeyId, instance.id);
+            }
+            iterator_close(&it);
+            table_display(t, TABLE_FLAG_NONE);
+            table_destroy(t);
+            json_document_destroy(doc);
+        }
+    }
+
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
+
+typedef struct {
+    char *visibility; // enum in fact even if OVH document it as string ?
+    time_t creationDate;
+    char *status; // enum in fact even if OVH document it as string ?
+    char *name;
+    char *region; // enum in fact even if OVH document it as string ?
+    char *id;
+    char *type; // enum in fact even if OVH document it as string ?
+    int minDisk;
+} image_t;
 
 static command_status_t image_list(COMMAND_ARGS) // images?
 {
+    bool success;
     project_argument_t *args;
 
-    USED(error); // TODO
     USED(mainopts);
     args = (project_argument_t *) arg;
-    debug("image list");
+    {
+        table_t *t;
+        request_t *req;
+        json_document_t *doc;
 
-    return COMMAND_SUCCESS;
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/cloud/project/%s/image", args->name);
+        success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+        request_destroy(req);
+        if (success) {
+            Iterator it;
+            image_t image;
+            json_value_t root;
+
+            t = table_new(
+                8,
+                _("visibility"), TABLE_TYPE_STRING,
+                _("creationDate"), TABLE_TYPE_DATETIME,
+                _("status"), TABLE_TYPE_STRING,
+                _("name"), TABLE_TYPE_STRING,
+                _("region"), TABLE_TYPE_STRING,
+                _("id"), TABLE_TYPE_STRING,
+                _("type"), TABLE_TYPE_STRING,
+                _("minDisk"), TABLE_TYPE_INT
+            );
+            // NOTE: GET /cloud/project/{serviceName}/image/{imageId} seems to only add minRam information
+            root = json_document_get_root(doc);
+            json_array_to_iterator(&it, root);
+            for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+                json_value_t v, propvalue;
+
+                v = (json_value_t) iterator_current(&it, NULL);
+                JSON_GET_PROP_STRING_EX(v, "visibility", image.visibility, FALSE);
+                json_object_get_property(v, "creationDate", &propvalue);
+                date_parse_to_timestamp(json_get_string(propvalue), "%F", &image.creationDate);
+                JSON_GET_PROP_STRING_EX(v, "status", image.status, FALSE);
+                JSON_GET_PROP_STRING_EX(v, "name", image.name, FALSE);
+                JSON_GET_PROP_STRING_EX(v, "region", image.region, FALSE);
+                JSON_GET_PROP_STRING_EX(v, "id", image.id, FALSE);
+                JSON_GET_PROP_STRING_EX(v, "type", image.type, FALSE);
+                JSON_GET_PROP_INT(v, "minDisk", image.minDisk);
+                table_store(t, image.visibility, image.creationDate, image.status, image.name, image.region, image.id, image.type, image.minDisk);
+            }
+            iterator_close(&it);
+            table_display(t, TABLE_FLAG_NONE);
+            table_destroy(t);
+            json_document_destroy(doc);
+        }
+    }
+
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
 static bool complete_projects(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *UNUSED(data))
