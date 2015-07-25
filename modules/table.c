@@ -10,6 +10,7 @@
 #include "date.h"
 #include "modules/conv.h"
 #include "struct/dptrarray.h"
+#include "nearest_power.h"
 
 #define DEFAULT_PAGER "less"
 
@@ -170,7 +171,7 @@ static void row_destroy(void *data)
     free(r);
 }
 
-void int_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
+static void int_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
 {
     int v;
 
@@ -183,14 +184,14 @@ void int_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
     }
 }
 
-void bool_colinit(table_t *UNUSED(t), va_list UNUSED(ap), column_t *c)
+static void bool_colinit(table_t *UNUSED(t), va_list UNUSED(ap), column_t *c)
 {
     if (max_false_true_len > c->max_len) {
         c->len = c->min_len = c->max_len = max_false_true_len;
     }
 }
 
-void bool_store(table_t *UNUSED(t), va_list ap, column_t *UNUSED(c), value_t *val)
+static void bool_store(table_t *UNUSED(t), va_list ap, column_t *UNUSED(c), value_t *val)
 {
     bool v;
 
@@ -200,7 +201,7 @@ void bool_store(table_t *UNUSED(t), va_list ap, column_t *UNUSED(c), value_t *va
     val->l = false_true_len[v];
 }
 
-void enum_colinit(table_t *UNUSED(t), va_list ap, column_t *c)
+static void enum_colinit(table_t *UNUSED(t), va_list ap, column_t *c)
 {
     size_t enum_size;
     const char * const *v;
@@ -223,7 +224,7 @@ void enum_colinit(table_t *UNUSED(t), va_list ap, column_t *c)
     }
 }
 
-void enum_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
+static void enum_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
 {
     int v;
 
@@ -236,7 +237,7 @@ void enum_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
     }
 }
 
-void string_store(table_t *t, va_list ap, column_t *c, value_t *val)
+static void string_store(table_t *t, va_list ap, column_t *c, value_t *val)
 {
     char *s_local;
     error_t *error;
@@ -271,14 +272,14 @@ print_error(error);
     }
 }
 
-void date_colinit(table_t *UNUSED(t), va_list UNUSED(ap), column_t *c)
+static void date_colinit(table_t *UNUSED(t), va_list UNUSED(ap), column_t *c)
 {
     if (max_date_len > c->max_len) {
         c->len = c->min_len = c->max_len = max_date_len;
     }
 }
 
-void date_store(table_t *UNUSED(t), va_list ap, column_t *UNUSED(c), value_t *val)
+static void date_store(table_t *UNUSED(t), va_list ap, column_t *UNUSED(c), value_t *val)
 {
     time_t v;
 
@@ -288,14 +289,14 @@ void date_store(table_t *UNUSED(t), va_list ap, column_t *UNUSED(c), value_t *va
     val->l = max_date_len;
 }
 
-void datetime_colinit(table_t *UNUSED(t), va_list UNUSED(ap), column_t *c)
+static void datetime_colinit(table_t *UNUSED(t), va_list UNUSED(ap), column_t *c)
 {
     if (max_datetime_len > c->max_len) {
         c->len = c->min_len = c->max_len = max_datetime_len;
     }
 }
 
-void datetime_store(table_t *UNUSED(t), va_list ap, column_t *UNUSED(c), value_t *val)
+static void datetime_store(table_t *UNUSED(t), va_list ap, column_t *UNUSED(c), value_t *val)
 {
     time_t v;
 
@@ -528,7 +529,6 @@ typedef struct {
     const char *part;
 } break_t;
 
-#include "nearest_power.h"
 static size_t string_break(size_t max_len, const char *string, size_t string_len, break_t **breaks)
 {
     size_t i, breaks_len, breaks_size;
