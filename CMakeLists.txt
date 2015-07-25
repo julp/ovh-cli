@@ -63,7 +63,37 @@ check_function_exists("strncasecmp" HAVE_STRNCASECMP)
 check_function_exists("strtod_l" HAVE_STRTOD_L)
 check_library_exists("iconv" "iconvctl" ${ICONV_LIBRARIES} HAVE_ICONVCTL)
 
+option(DEBUG "Enable/disable debugging" OFF)
+option(PRINT_OVH_ID "Enable/disable display of internal OVH identifiers" OFF)
+
+# option(WITH_CLOUD_MODULE "Build cloud module" ON)
+# option(WITH_DEDICATED_MODULE "Build cloud module" ON)
+# option(WITH_DOMAIN_MODULE "Build cloud module" ON)
+# option(WITH_HOSTING_MODULE "Build hosting module" ON)
+# option(WITH_KEY_MODULE "Build key module to manage global SSH keys" ON)
+# option(WITH_ME_MODULE "Build me module" ON)
+# option(WITH_SUPPORT_MODULE "Build support module" ON)
+# option(WITH_VPS_MODULE "Build vps module" ON)
+
 include(FeatureSummary)
+
+set(EXTRA_MODULES )
+macro(declare_module _NAME _DESC)
+    string(TOUPPER ${_NAME} UC_NAME)
+    option(WITH_${UC_NAME}_MODULE "Build ${_NAME} module" ON)
+    add_feature_info(${_NAME} WITH_${UC_NAME}_MODULE ${_DESC})
+    list(APPEND EXTRA_MODULES ${_NAME})
+endmacro(declare_module)
+
+declare_module("cloud" "public dedicated cloud")
+declare_module("dedicated" "dedicated servers")
+declare_module("domain" "DNS zone")
+declare_module("hosting" "shared hosting")
+declare_module("key" "global SSH keys")
+declare_module("me" "personnal informations, account and credentials")
+declare_module("support" "read, write, close and reopen your tickets")
+declare_module("vps" "virtual servers")
+
 set_package_properties(CURL PROPERTIES TYPE REQUIRED PURPOSE "HTTP(S) client to interact with OVH API")
 set_package_properties(LibXml2 PROPERTIES TYPE REQUIRED PURPOSE "For configuration file management and auto-generation of consumer key")
 set_package_properties(OpenSSL PROPERTIES TYPE REQUIRED PURPOSE "To sign (SHA1) HTTP request")
@@ -71,6 +101,7 @@ set_package_properties(EditLine PROPERTIES TYPE REQUIRED PURPOSE "For command li
 set_package_properties(Gettext PROPERTIES TYPE OPTIONAL PURPOSE "The tools to manage files translation")
 set_package_properties(Intl PROPERTIES TYPE OPTIONAL PURPOSE "The library to translate internal strings")
 set_package_properties(SQLite3 PROPERTIES TYPE OPTIONAL PURPOSE "Permanent storage for some datas")
+
 feature_summary(INCLUDE_QUIET_PACKAGES WHAT ALL)
 
 include_directories(
@@ -93,20 +124,20 @@ if(INTL_FOUND)
     list(APPEND MISC_SOURCES "modules/nls.c")
 endif(INTL_FOUND)
 
-option(DEBUG "Enable/disable debugging" OFF)
-option(PRINT_OVH_ID "Enable/disable display of internal OVH identifiers" OFF)
-
 set(
     BUILTIN_MODULES
     modules/home.c modules/sqlite.c modules/openssl.c modules/curl.c modules/libxml.c modules/api.c modules/conv.c modules/table.c modules/base.c
     commands/account.c
 )
 
-set(EXTRA_MODULES domain me dedicated hosting vps key support)
+# set(EXTRA_MODULES cloud dedicated domain me hosting vps key support)
 
 set(EXTRA_MODULES_ENABLED )
 foreach(MODULE ${EXTRA_MODULES})
-    list(APPEND EXTRA_MODULES_ENABLED "commands/${MODULE}.c")
+    string(TOUPPER ${MODULE} UC_NAME)
+    if(WITH_${UC_NAME}_MODULE)
+        list(APPEND EXTRA_MODULES_ENABLED "commands/${MODULE}.c")
+    endif(WITH_${UC_NAME}_MODULE)
 endforeach(MODULE)
 
 configure_file(

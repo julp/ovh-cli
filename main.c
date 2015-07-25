@@ -32,13 +32,30 @@ extern module_t account_module;
 #ifdef WITH_NLS
 extern module_t nls_module;
 #endif /* WITH_NLS */
+#ifdef WITH_ME_MODULE
 extern module_t me_module;
+#endif /* WITH_ME_MODULE */
+#ifdef WITH_KEY_MODULE
 extern module_t key_module;
+#endif /* WITH_KEY_MODULE */
+#ifdef WITH_VPS_MODULE
 extern module_t vps_module;
+#endif /* WITH_VPS_MODULE */
+#ifdef WITH_CLOUD_MODULE
+extern module_t cloud_module;
+#endif /* WITH_CLOUD_MODULE */
+#ifdef WITH_DOMAIN_MODULE
 extern module_t domain_module;
+#endif /* WITH_DOMAIN_MODULE */
+#ifdef WITH_SUPPORT_MODULE
 extern module_t support_module;
+#endif /* WITH_SUPPORT_MODULE */
+#ifdef WITH_HOSTING_MODULE
 extern module_t hosting_module;
+#endif /* WITH_HOSTING_MODULE */
+#ifdef WITH_DEDICATED_MODULE
 extern module_t dedicated_module;
+#endif /* WITH_DEDICATED_MODULE */
 
 static int verbosity = 0;
 /*static */graph_t *g = NULL;
@@ -75,13 +92,154 @@ const char *endpoint_names[] = {
     s, STR_LEN(s)
 
 const endpoint_t endpoints[] = {
-    { "ovh-eu",        S("https://eu.api.ovh.com/1.0"),        (const module_t * const []) { &me_module, &key_module, &vps_module, &hosting_module, &dedicated_module, &support_module, &domain_module, NULL } },
-    { "ovh-ca",        S("https://ca.api.ovh.com/1.0"),        (const module_t * const []) { &me_module, &key_module, &vps_module, &hosting_module, &dedicated_module, &support_module, NULL } },
-    { "soyoustart-eu", S("https://eu.api.soyoustart.com/1.0"), (const module_t * const []) { &me_module, &key_module, &dedicated_module, &support_module, NULL } },
-    { "soyoustart-ca", S("https://ca.api.soyoustart.com/1.0"), (const module_t * const []) { &me_module, &key_module, &dedicated_module, &support_module, NULL } },
-    { "kimsufi-eu",    S("https://eu.api.kimsufi.com/1.0"),    (const module_t * const []) { &me_module, &key_module, &dedicated_module, &support_module, NULL } },
-    { "kimsufi-ca",    S("https://ca.api.kimsufi.com/1.0"),    (const module_t * const []) { &me_module, &key_module, &dedicated_module, &support_module, NULL } },
-    { "runabove-ca",   S("https://api.runabove.com/1.0"),      (const module_t * const []) { &me_module, &support_module, NULL } },
+    {
+        "ovh-eu",
+        S("https://eu.api.ovh.com/1.0"),
+        (const module_t * const []) {
+#ifdef WITH_ME_MODULE
+            &me_module,
+#endif /* WITH_ME_MODULE */
+#ifdef WITH_KEY_MODULE
+            &key_module,
+#endif /* WITH_KEY_MODULE */
+#ifdef WITH_VPS_MODULE
+            &vps_module,
+#endif /* WITH_VPS_MODULE */
+#ifdef WITH_CLOUD_MODULE
+            &cloud_module,
+#endif /* WITH_CLOUD_MODULE */
+#ifdef WITH_DOMAIN_MODULE
+            &domain_module,
+#endif /* WITH_DOMAIN_MODULE */
+#ifdef WITH_SUPPORT_MODULE
+            &support_module,
+#endif /* WITH_SUPPORT_MODULE */
+#ifdef WITH_HOSTING_MODULE
+            &hosting_module,
+#endif /* WITH_HOSTING_MODULE */
+#ifdef WITH_DEDICATED_MODULE
+            &dedicated_module,
+#endif /* WITH_DEDICATED_MODULE */
+            NULL
+        }
+    },
+    {
+        "ovh-ca",
+        S("https://ca.api.ovh.com/1.0"),
+        (const module_t * const []) {
+#ifdef WITH_ME_MODULE
+            &me_module,
+#endif /* WITH_ME_MODULE */
+#ifdef WITH_KEY_MODULE
+            &key_module,
+#endif /* WITH_KEY_MODULE */
+#ifdef WITH_VPS_MODULE
+            &vps_module,
+#endif /* WITH_VPS_MODULE */
+#ifdef WITH_SUPPORT_MODULE
+            &support_module,
+#endif /* WITH_SUPPORT_MODULE */
+#ifdef WITH_HOSTING_MODULE
+            &hosting_module,
+#endif /* WITH_HOSTING_MODULE */
+#ifdef WITH_DEDICATED_MODULE
+            &dedicated_module,
+#endif /* WITH_DEDICATED_MODULE */
+            NULL
+        }
+    },
+    {
+        "soyoustart-eu",
+        S("https://eu.api.soyoustart.com/1.0"),
+        (const module_t * const []) {
+#ifdef WITH_ME_MODULE
+            &me_module,
+#endif /* WITH_ME_MODULE */
+#ifdef WITH_KEY_MODULE
+            &key_module,
+#endif /* WITH_KEY_MODULE */
+#ifdef WITH_SUPPORT_MODULE
+            &support_module,
+#endif /* WITH_SUPPORT_MODULE */
+#ifdef WITH_DEDICATED_MODULE
+            &dedicated_module,
+#endif /* WITH_DEDICATED_MODULE */
+            NULL
+        }
+    },
+    {
+        "soyoustart-ca",
+        S("https://ca.api.soyoustart.com/1.0"),
+        (const module_t * const []) {
+#ifdef WITH_ME_MODULE
+            &me_module,
+#endif /* WITH_ME_MODULE */
+#ifdef WITH_KEY_MODULE
+            &key_module,
+#endif /* WITH_KEY_MODULE */
+#ifdef WITH_SUPPORT_MODULE
+            &support_module,
+#endif /* WITH_SUPPORT_MODULE */
+#ifdef WITH_DEDICATED_MODULE
+            &dedicated_module,
+#endif /* WITH_DEDICATED_MODULE */
+            NULL
+        }
+    },
+    {
+        "kimsufi-eu",
+        S("https://eu.api.kimsufi.com/1.0"),
+        (const module_t * const []) {
+#ifdef WITH_ME_MODULE
+            &me_module,
+#endif /* WITH_ME_MODULE */
+#ifdef WITH_KEY_MODULE
+            &key_module,
+#endif /* WITH_KEY_MODULE */
+#ifdef WITH_SUPPORT_MODULE
+            &support_module,
+#endif /* WITH_SUPPORT_MODULE */
+#ifdef WITH_DEDICATED_MODULE
+            &dedicated_module,
+#endif /* WITH_DEDICATED_MODULE */
+            NULL
+        }
+    },
+    {
+        "kimsufi-ca",
+        S("https://ca.api.kimsufi.com/1.0"),
+        (const module_t * const []) {
+#ifdef WITH_ME_MODULE
+            &me_module,
+#endif /* WITH_ME_MODULE */
+#ifdef WITH_KEY_MODULE
+            &key_module,
+#endif /* WITH_KEY_MODULE */
+#ifdef WITH_SUPPORT_MODULE
+            &support_module,
+#endif /* WITH_SUPPORT_MODULE */
+#ifdef WITH_DEDICATED_MODULE
+            &dedicated_module,
+#endif /* WITH_DEDICATED_MODULE */
+            NULL
+        }
+    },
+    {
+        "runabove-ca",
+        S("https://api.runabove.com/1.0"),
+        (const module_t * const []) {
+#ifdef WITH_ME_MODULE
+            &me_module,
+#endif /* WITH_ME_MODULE */
+#ifdef WITH_CLOUD_MODULE
+            &cloud_module,
+#endif /* WITH_CLOUD_MODULE */
+#ifdef WITH_SUPPORT_MODULE
+            &support_module,
+#endif /* WITH_SUPPORT_MODULE */
+            NULL
+        }
+    },
     { NULL, NULL, 0, NULL }
 };
 
@@ -102,13 +260,30 @@ static const module_t */*builtin_*/modules[] = {
 #ifdef WITH_NLS
     &nls_module,     // R-dep: modules/table.c for "test constructor"
 #endif /* WITH_NLS */
+#ifdef WITH_ME_MODULE
     &me_module,
+#endif /* WITH_ME_MODULE */
+#ifdef WITH_KEY_MODULE
     &key_module,
+#endif /* WITH_KEY_MODULE */
+#ifdef WITH_VPS_MODULE
     &vps_module,
+#endif /* WITH_VPS_MODULE */
+#ifdef WITH_CLOUD_MODULE
+    &cloud_module,
+#endif /* WITH_CLOUD_MODULE */
+#ifdef WITH_DOMAIN_MODULE
     &domain_module,
+#endif /* WITH_DOMAIN_MODULE */
+#ifdef WITH_SUPPORT_MODULE
     &support_module,
+#endif /* WITH_SUPPORT_MODULE */
+#ifdef WITH_HOSTING_MODULE
     &hosting_module,
+#endif /* WITH_HOSTING_MODULE */
+#ifdef WITH_DEDICATED_MODULE
     &dedicated_module
+#endif /* WITH_DEDICATED_MODULE */
 };
 
 #ifndef EUSAGE

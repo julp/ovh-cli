@@ -7,6 +7,16 @@
 #cmakedefine HAVE_STRTOD_L
 #cmakedefine WITH_NLS
 #cmakedefine WITH_EDITLINE
+
+#cmakedefine WITH_CLOUD_MODULE
+#cmakedefine WITH_DEDICATED_MODULE
+#cmakedefine WITH_DOMAIN_MODULE
+#cmakedefine WITH_HOSTING_MODULE
+#cmakedefine WITH_KEY_MODULE
+#cmakedefine WITH_ME_MODULE
+#cmakedefine WITH_VPS_MODULE
+#cmakedefine WITH_SUPPORT_MODULE
+
 #define LOCALEDIR "@LOCALEDIR@"
 #define ICONV_CONST @ICONV_CONST@
 
