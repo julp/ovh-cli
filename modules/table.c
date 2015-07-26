@@ -22,7 +22,7 @@ typedef struct resource_t {
 
 typedef struct {
     const char *title;
-    column_type_t type;
+    model_field_type_t type;
     size_t *enum_values_len;
     const char **enum_values;
     size_t enum_max_value_len;
@@ -34,6 +34,7 @@ struct table_t {
     column_t *columns;
     resource_t *strings;
     size_t columns_count;
+    const model_t *model;
 };
 
 typedef struct {
@@ -176,11 +177,8 @@ static void row_destroy(void *data)
     free(r);
 }
 
-static void int_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
+static void _int_store_real(column_t *c, value_t *val, int v)
 {
-    int v;
-
-    v = va_arg(ap, int);
     val->f = FALSE;
     val->v = (uintptr_t) v;
     val->l = snprintf(NULL, 0, "%d", v);
@@ -189,24 +187,54 @@ static void int_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
     }
 }
 
-static void bool_colinit(table_t *UNUSED(t), va_list UNUSED(ap), column_t *c)
+static void int_store(table_t *UNUSED(t), column_t *c, value_t *val, va_list ap)
+{
+    int v;
+
+    v = va_arg(ap, int);
+    _int_store_real(c, val, v);
+}
+
+static void int_store_modelized(table_t *UNUSED(t), column_t *c, value_t *val, char *ptr)
+{
+    _int_store_real(c, val, *((int *) ptr));
+}
+
+static void bool_colinit_from_ap(table_t *UNUSED(t), column_t *c, va_list UNUSED(ap))
 {
     if (max_false_true_len > c->max_len) {
         c->len = c->min_len = c->max_len = max_false_true_len;
     }
 }
 
-static void bool_store(table_t *UNUSED(t), va_list ap, column_t *UNUSED(c), value_t *val)
+static void bool_colinit_from_model(table_t *UNUSED(t), column_t *c, const model_field_t *UNUSED(f))
+{
+    if (max_false_true_len > c->max_len) {
+        c->len = c->min_len = c->max_len = max_false_true_len;
+    }
+}
+
+static void _bool_store_real(value_t *val, bool v)
+{
+    val->f = FALSE;
+    val->v = (uintptr_t) v;
+    val->l = false_true_len[v];    
+}
+
+static void bool_store(table_t *UNUSED(t), column_t *UNUSED(c), value_t *val, va_list ap)
 {
     bool v;
 
     v = va_arg(ap, bool);
-    val->f = FALSE;
-    val->v = (uintptr_t) v;
-    val->l = false_true_len[v];
+    _bool_store_real(val, v);
 }
 
-static void enum_colinit(table_t *UNUSED(t), va_list ap, column_t *c)
+static void bool_store_modelized(table_t *UNUSED(t), column_t *UNUSED(c), value_t *val, char *ptr)
+{
+    _bool_store_real(val, *((bool *) ptr));
+}
+
+static void enum_colinit_from_ap(table_t *UNUSED(t), column_t *c, va_list ap)
 {
     size_t enum_size;
     const char * const *v;
@@ -229,17 +257,48 @@ static void enum_colinit(table_t *UNUSED(t), va_list ap, column_t *c)
     }
 }
 
-static void enum_store(table_t *UNUSED(t), va_list ap, column_t *c, value_t *val)
+static void enum_colinit_from_model(table_t *UNUSED(t), column_t *c, const model_field_t *f)
 {
-    int v;
+    size_t enum_size;
+    const char * const *v;
 
-    v = va_arg(ap, int);
+    enum_size = 0;
+    c->enum_max_value_len = 0;
+    for (v = f->enum_values; NULL != *v; v++) {
+        ++enum_size;
+    }
+    c->enum_values = mem_new_n(*c->enum_values, enum_size);
+    c->enum_values_len = mem_new_n(*c->enum_values_len, enum_size);
+    for (v = f->enum_values; NULL != *v; v++) {
+        c->enum_values[v - f->enum_values] = _(*v);
+        cplen(c->enum_values[v - f->enum_values], &c->enum_values_len[v - f->enum_values], NULL);
+        if (c->enum_values_len[v - f->enum_values] > c->enum_max_value_len) {
+            c->enum_max_value_len = c->enum_values_len[v - f->enum_values];
+        }
+    }
+}
+
+static void _enum_store_real(column_t *c, value_t *val, int v)
+{
     val->f = FALSE;
     val->v = (uintptr_t) /*c->enum_values[*/v/*]*/;
     val->l = c->enum_values_len[v];
     if (val->l > c->max_len) {
         c->len = c->min_len = c->max_len = c->enum_max_value_len;
     }
+}
+
+static void enum_store(table_t *UNUSED(t), column_t *c, value_t *val, va_list ap)
+{
+    int v;
+
+    v = va_arg(ap, int);
+    _enum_store_real(c, val, v);
+}
+
+static void enum_store_modelized(table_t *UNUSED(t), column_t *c, value_t *val, char *ptr)
+{
+    _enum_store_real(c, val, *((int *) ptr));
 }
 
 static size_t string_break(size_t max_len, const char *string, size_t string_len, break_t **breaks)
@@ -283,15 +342,14 @@ static size_t string_break(size_t max_len, const char *string, size_t string_len
     return i;
 }
 
-static void string_store(table_t *t, va_list ap, column_t *c, value_t *val)
+static void _string_store_real(table_t *t, column_t *c, value_t *val, const char *s_utf8)
 {
     char *s_local;
     error_t *error;
-    const char *s_utf8;
 
     // TODO: real error handling! Let caller handle this by adding a error_t **error in argument?
 error = NULL;
-    if (NULL == (s_utf8 = va_arg(ap, const char *))) {
+    if (NULL == s_utf8) {
         s_local = (char *) "-";
         val->f = FALSE;
         val->l = STR_LEN("-");
@@ -318,38 +376,78 @@ print_error(error);
     }
 }
 
-static void date_colinit(table_t *UNUSED(t), va_list UNUSED(ap), column_t *c)
+static void string_store(table_t *t, column_t *c, value_t *val, va_list ap)
+{
+    const char *s_utf8;
+
+    s_utf8 = va_arg(ap, const char *);
+    _string_store_real(t, c, val, s_utf8);
+}
+
+static void string_store_modelized(table_t *t, column_t *c, value_t *val, char *ptr)
+{
+    _string_store_real(t, c, val, *((char **) ptr));
+}
+
+static void date_colinit_from_ap(table_t *UNUSED(t), column_t *c, va_list UNUSED(ap))
 {
     if (max_date_len > c->max_len) {
         c->len = c->min_len = c->max_len = max_date_len;
     }
 }
 
-static void date_store(table_t *UNUSED(t), va_list ap, column_t *UNUSED(c), value_t *val)
+static void date_colinit_from_model(table_t *UNUSED(t), column_t *c, const model_field_t *UNUSED(f))
+{
+    if (max_date_len > c->max_len) {
+        c->len = c->min_len = c->max_len = max_date_len;
+    }
+}
+
+static void _date_store_real(value_t *val, time_t v, bool with_time)
+{
+    val->f = FALSE;
+    val->v = (uintptr_t) v;
+    val->l = with_time ? max_datetime_len : max_date_len;
+}
+
+static void date_store(table_t *UNUSED(t), column_t *UNUSED(c), value_t *val, va_list ap)
 {
     time_t v;
 
     v = va_arg(ap, time_t);
-    val->f = FALSE;
-    val->v = (uintptr_t) v;
-    val->l = max_date_len;
+    _date_store_real(val, v, FALSE);
 }
 
-static void datetime_colinit(table_t *UNUSED(t), va_list UNUSED(ap), column_t *c)
+static void date_store_modelized(table_t *UNUSED(t), column_t *UNUSED(c), value_t *val, char *ptr)
+{
+    _date_store_real(val, *((time_t *) ptr), FALSE);
+}
+
+static void datetime_colinit_from_ap(table_t *UNUSED(t), column_t *c, va_list UNUSED(ap))
 {
     if (max_datetime_len > c->max_len) {
         c->len = c->min_len = c->max_len = max_datetime_len;
     }
 }
 
-static void datetime_store(table_t *UNUSED(t), va_list ap, column_t *UNUSED(c), value_t *val)
+static void datetime_colinit_from_model(table_t *UNUSED(t), column_t *c, const model_field_t *UNUSED(f))
+{
+    if (max_datetime_len > c->max_len) {
+        c->len = c->min_len = c->max_len = max_datetime_len;
+    }
+}
+
+static void datetime_store(table_t *UNUSED(t), column_t *UNUSED(c), value_t *val, va_list ap)
 {
     time_t v;
 
     v = va_arg(ap, time_t);
-    val->f = FALSE;
-    val->v = (uintptr_t) v;
-    val->l = max_datetime_len;
+    _date_store_real(val, v, TRUE);
+}
+
+static void datetime_store_modelized(table_t *UNUSED(t), column_t *UNUSED(c), value_t *val, char *ptr)
+{
+    _date_store_real(val, *((time_t *) ptr), TRUE);
 }
 
 static int strcmpp_asc(const void *p1, const void *p2, void *arg)
@@ -374,8 +472,10 @@ static int intcmpp_desc(const void *p1, const void *p2, void *arg)
 }
 
 static struct {
-    void (*colinit)(table_t *, va_list, column_t *);
-    void (*store)(table_t *, va_list, column_t *, value_t *); // callback for table_store
+    void (*colinit_from_ap)(table_t *, column_t *, va_list);
+    void (*colinit_from_model)(table_t *, column_t *, const model_field_t *f);
+    void (*store)(table_t *, column_t *, value_t *, va_list); // callback for table_store
+    void (*store_modelized)(table_t *, column_t *, value_t *, char *);
     size_t (*breakline)(size_t, const char *, size_t, break_t **);
 #if 0
     size_t (*display)(void); // callback for table_display
@@ -383,12 +483,12 @@ static struct {
 #endif
     CmpFuncArg sort[_TABLE_SORT_COUNT];
 } type_handlers[] = {
-    [ TABLE_TYPE_INT ]      = { NULL,             int_store,      NULL,         { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
-    [ TABLE_TYPE_BOOL ]     = { bool_colinit,     bool_store,     NULL,         { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
-    [ TABLE_TYPE_ENUM ]     = { enum_colinit,     enum_store,     NULL,         { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
-    [ TABLE_TYPE_STRING ]   = { NULL,             string_store,   string_break, { [ TABLE_SORT_ASC ] = strcmpp_asc, [ TABLE_SORT_DESC ] = strcmpp_desc } },
-    [ TABLE_TYPE_DATE ]     = { date_colinit,     date_store,     NULL,         { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
-    [ TABLE_TYPE_DATETIME ] = { datetime_colinit, datetime_store, NULL,         { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } }
+    [ TABLE_TYPE_INT ]      = { NULL,                     NULL,                        int_store,      int_store_modelized,      NULL,         { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
+    [ TABLE_TYPE_BOOL ]     = { bool_colinit_from_ap,     bool_colinit_from_model,     bool_store,     bool_store_modelized,     NULL,         { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
+    [ TABLE_TYPE_ENUM ]     = { enum_colinit_from_ap,     enum_colinit_from_model,     enum_store,     enum_store_modelized,     NULL,         { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
+    [ TABLE_TYPE_STRING ]   = { NULL,                     NULL,                        string_store,   string_store_modelized,   string_break, { [ TABLE_SORT_ASC ] = strcmpp_asc, [ TABLE_SORT_DESC ] = strcmpp_desc } },
+    [ TABLE_TYPE_DATE ]     = { date_colinit_from_ap,     date_colinit_from_model,     date_store,     date_store_modelized,     NULL,         { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } },
+    [ TABLE_TYPE_DATETIME ] = { datetime_colinit_from_ap, datetime_colinit_from_model, datetime_store, datetime_store_modelized, NULL,         { [ TABLE_SORT_ASC ] = intcmpp_asc, [ TABLE_SORT_DESC ] = intcmpp_desc } }
 };
 
 table_t *table_new(size_t columns_count, ...)
@@ -406,50 +506,42 @@ table_t *table_new(size_t columns_count, ...)
     va_start(ap, columns_count);
     for (i = 0; i < columns_count; i++) {
         t->columns[i].title = va_arg(ap, const char *);
-        t->columns[i].type = va_arg(ap, column_type_t);
+        t->columns[i].type = va_arg(ap, model_field_type_t);
         cplen(t->columns[i].title, &t->columns[i].title_len, NULL);
         t->columns[i].len = t->columns[i].min_len = t->columns[i].max_len = t->columns[i].title_len;
-#if 0
-        if (TABLE_TYPE_ENUM == t->columns[i].type) {
-            size_t enum_size;
-            const char * const *v;
-            const char * const *values;
-
-            enum_size = 0;
-            t->columns[i].enum_max_value_len = 0;
-            values = va_arg(ap, const char * const *);
-            for (v = values; NULL != *v; v++) {
-                ++enum_size;
-            }
-            t->columns[i].enum_values = mem_new_n(*t->columns[i].enum_values, enum_size);
-            t->columns[i].enum_values_len = mem_new_n(*t->columns[i].enum_values_len, enum_size);
-            for (v = values; NULL != *v; v++) {
-                t->columns[i].enum_values[v - values] = _(*v);
-                cplen(t->columns[i].enum_values[v - values], &t->columns[i].enum_values_len[v - values], NULL);
-                if (t->columns[i].enum_values_len[v - values] > t->columns[i].enum_max_value_len) {
-                    t->columns[i].enum_max_value_len = t->columns[i].enum_values_len[v - values];
-                }
-            }
-        }
-#else
         assert(TABLE_TYPE(t->columns[i].type) <= _TABLE_TYPE_LAST);
-        if (NULL != type_handlers[TABLE_TYPE(t->columns[i].type)].colinit) {
-            type_handlers[TABLE_TYPE(t->columns[i].type)].colinit(t, ap, &t->columns[i]);
+        if (NULL != type_handlers[TABLE_TYPE(t->columns[i].type)].colinit_from_ap) {
+            type_handlers[TABLE_TYPE(t->columns[i].type)].colinit_from_ap(t, &t->columns[i], ap);
         }
-#endif
     }
     va_end(ap);
 
     return t;
 }
 
-table_t *table_model_new(model_t model)
+table_t *table_new_from_model(const model_t *model, uint32_t UNUSED(flags))
 {
     table_t *t;
+    const model_field_t *f;
 
     t = mem_new(*t);
+    t->model = model;
     t->strings = NULL;
-
+    for (f = model->fields; NULL != f->column_name; f++) {
+        ++t->columns_count;
+    }
+    t->columns = mem_new_n(*t->columns, t->columns_count);
+    t->rows = dptrarray_new(NULL, row_destroy, NULL);
+    for (f = t->model->fields; NULL != f->column_name; f++) {
+        t->columns[f - t->model->fields].title = gettext(f->column_name);
+        t->columns[f - t->model->fields].type = f->type;
+        cplen(t->columns[f - t->model->fields].title, &t->columns[f - t->model->fields].title_len, NULL);
+        t->columns[f - t->model->fields].len = t->columns[f - t->model->fields].min_len = t->columns[f - t->model->fields].max_len = t->columns[f - t->model->fields].title_len;
+        if (NULL != type_handlers[t->columns[f - t->model->fields].type].colinit_from_model) {
+            type_handlers[t->columns[f - t->model->fields].type].colinit_from_model(t, &t->columns[f - t->model->fields], f);
+        }
+    }
+    
     return t;
 }
 
@@ -496,7 +588,7 @@ void table_store(table_t *t, ...)
         assert(TABLE_TYPE(t->columns[i].type) <= _TABLE_TYPE_LAST);
         assert(NULL != type_handlers[TABLE_TYPE(t->columns[i].type)].store);
 
-        type_handlers[TABLE_TYPE(t->columns[i].type)].store(t, ap, &t->columns[i], &r->values[i]);
+        type_handlers[TABLE_TYPE(t->columns[i].type)].store(t, &t->columns[i], &r->values[i], ap);
     }
     va_end(ap);
     dptrarray_push(t->rows, r);
@@ -526,9 +618,8 @@ static bool camel_to_snake_case(const char *camel, char *snake, size_t snake_siz
 }
 #endif
 
-void table_model_store(table_t *t, char *ptr)
+void table_store_modelized(table_t *t, void *ptr)
 {
-#if 0
 //     bool ok;
     size_t i;
     row_t *r;
@@ -538,17 +629,16 @@ void table_model_store(table_t *t, char *ptr)
     i = 0;
     r = mem_new(*r);
     r->values = mem_new_n(*r->values, t->columns_count);
-    for (f = t->model.fields, i = 0; NULL != f->column_name; f++) {
+    for (f = t->model->fields, i = 0; NULL != f->column_name; f++) {
         if (TRUE/*!f->hidden*/) {
-            assert(TABLE_TYPE(t->columns[i].type) <= _TABLE_TYPE_LAST);
-            assert(NULL != type_handlers[TABLE_TYPE(t->columns[i].type)].store);
+            assert(t->columns[i].type <= _TABLE_TYPE_LAST);
+            assert(NULL != type_handlers[t->columns[i].type].store_modelized);
 
-            type_handlers[TABLE_TYPE(t->columns[i].type)].store(t, ap, &t->columns[i], &r->values[i]);
+            type_handlers[t->columns[i].type].store_modelized(t, &t->columns[i], &r->values[i], ((char *) ptr) + f->offset);
             ++i;
         }
     }
     dptrarray_push(t->rows, r);
-#endif
 }
 
 typedef enum {

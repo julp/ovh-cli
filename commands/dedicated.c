@@ -49,10 +49,16 @@ enum {
     STMT_COUNT
 };
 
+#define MODELIZED 0
+
 #define BOOT_OUTPUT_BINDS "iss"
 
 static sqlite_statement_t statements[STMT_COUNT] = {
+#if !MODELIZED
     [ STMT_DEDICATED_LIST ]            = DECL_STMT("SELECT name, ip, os, reverse, kernel, datacenter, professional_use, support_level, commercial_range, state, monitoring, rack, root_device, link_speed, engaged_up_to, contact_billing, expiration, contact_tech, contact_admin, creation FROM dedicated JOIN boots ON dedicated.boot_id = boots.id WHERE account_id = ?", "i", "sssssibisibssi" "isissi"),
+#else
+    [ STMT_DEDICATED_LIST ]            = DECL_STMT("SELECT * FROM dedicated WHERE account_id = ?", "i", "isssssibisibssi" "isissi"),
+#endif
     [ STMT_DEDICATED_UPSERT ]          = DECL_STMT("INSERT OR REPLACE INTO dedicated(account_id, id, name, datacenter, professional_use, support_level, commercial_range, ip, os, state, reverse, monitoring, rack, root_device, link_speed, boot_id, engaged_up_to, contact_billing, expiration, contact_tech, contact_admin, creation) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", "i" "isibisssisbssii" "isissi", ""),
     [ STMT_DEDICATED_GET_IP ]          = DECL_STMT("SELECT ip FROM dedicated WHERE account_id = ? AND name = ?", "is", "s"),
     [ STMT_DEDICATED_NEAR_EXPIRATION ] = DECL_STMT("SELECT julianday(datetime(expiration, 'unixepoch', 'localtime')) - julianday('now') AS days, name FROM dedicated WHERE account_id = ? AND days < 120", "i", "is"),
@@ -172,7 +178,8 @@ static const char *mrtg_periods[] = {
     "hourly",
     "monthly",
     "weekly",
-    "yearly"
+    "yearly",
+    NULL
 };
 
 static const char *mrtg_types[] = {
@@ -182,41 +189,42 @@ static const char *mrtg_types[] = {
     "packets:upload",
     "traffic:download",
     "traffic:upload",
+    NULL
 };
 
 static model_t server_model = {
     (const model_field_t []) {
-        { "id",               MODEL_TYPE_INT,    offsetof(server_t, serverId),        0 },
-        { "name",             MODEL_TYPE_STRING, offsetof(server_t, name),            0 },
-        { "datacenter",       MODEL_TYPE_ENUM,   offsetof(server_t, datacenter),      0 },
-        { "professional_use", MODEL_TYPE_BOOL,   offsetof(server_t, professionalUse), 0 },
-        { "support_level",    MODEL_TYPE_ENUM,   offsetof(server_t, supportLevel),    0 },
-        { "commercial_range", MODEL_TYPE_STRING, offsetof(server_t, commercialRange), 0 },
-        { "ip",               MODEL_TYPE_STRING, offsetof(server_t, ip),              0 },
-        { "os",               MODEL_TYPE_STRING, offsetof(server_t, os),              0 },
-        { "state",            MODEL_TYPE_ENUM,   offsetof(server_t, state),           0 },
-        { "reverse",          MODEL_TYPE_STRING, offsetof(server_t, reverse),         0 },
-        { "monitoring",       MODEL_TYPE_BOOL,   offsetof(server_t, monitoring),      0 },
-        { "rack",             MODEL_TYPE_STRING, offsetof(server_t, rack),            0 },
-        { "root_device",      MODEL_TYPE_STRING, offsetof(server_t, rootDevice),      0 },
-        { "link_speed",       MODEL_TYPE_INT,    offsetof(server_t, linkSpeed),       0 },
-        { "boot_id",          MODEL_TYPE_INT,    offsetof(server_t, bootId),          0 },
-        { "engaged_up_to",    MODEL_TYPE_DATE,   offsetof(server_t, engagedUpTo),     0 },
-        { "contact_billing",  MODEL_TYPE_STRING, offsetof(server_t, contactBilling),  0 },
-        { "expiration",       MODEL_TYPE_DATE,   offsetof(server_t, expiration),      0 },
-        { "contact_tech",     MODEL_TYPE_STRING, offsetof(server_t, contactTech),     0 },
-        { "contact_admin",    MODEL_TYPE_STRING, offsetof(server_t, contactAdmin),    0 },
-        { "creation",         MODEL_TYPE_DATE,   offsetof(server_t, creation),        0 },
+        { "id",               MODEL_TYPE_INT,    offsetof(server_t, serverId),        0, NULL },
+        { "name",             MODEL_TYPE_STRING, offsetof(server_t, name),            0, NULL },
+        { "datacenter",       MODEL_TYPE_ENUM,   offsetof(server_t, datacenter),      0, datacenters },
+        { "professional_use", MODEL_TYPE_BOOL,   offsetof(server_t, professionalUse), 0, NULL },
+        { "support_level",    MODEL_TYPE_ENUM,   offsetof(server_t, supportLevel),    0, support_levels },
+        { "commercial_range", MODEL_TYPE_STRING, offsetof(server_t, commercialRange), 0, NULL },
+        { "ip",               MODEL_TYPE_STRING, offsetof(server_t, ip),              0, NULL },
+        { "os",               MODEL_TYPE_STRING, offsetof(server_t, os),              0, NULL },
+        { "state",            MODEL_TYPE_ENUM,   offsetof(server_t, state),           0, states },
+        { "reverse",          MODEL_TYPE_STRING, offsetof(server_t, reverse),         0, NULL },
+        { "monitoring",       MODEL_TYPE_BOOL,   offsetof(server_t, monitoring),      0, NULL },
+        { "rack",             MODEL_TYPE_STRING, offsetof(server_t, rack),            0, NULL },
+        { "root_device",      MODEL_TYPE_STRING, offsetof(server_t, rootDevice),      0, NULL },
+        { "link_speed",       MODEL_TYPE_INT,    offsetof(server_t, linkSpeed),       0, NULL },
+        { "boot_id",          MODEL_TYPE_INT,    offsetof(server_t, bootId),          0, NULL },
+        { "engaged_up_to",    MODEL_TYPE_DATE,   offsetof(server_t, engagedUpTo),     0, NULL },
+        { "contact_billing",  MODEL_TYPE_STRING, offsetof(server_t, contactBilling),  0, NULL },
+        { "expiration",       MODEL_TYPE_DATE,   offsetof(server_t, expiration),      0, NULL },
+        { "contact_tech",     MODEL_TYPE_STRING, offsetof(server_t, contactTech),     0, NULL },
+        { "contact_admin",    MODEL_TYPE_STRING, offsetof(server_t, contactAdmin),    0, NULL },
+        { "creation",         MODEL_TYPE_DATE,   offsetof(server_t, creation),        0, NULL },
         MODEL_FIELD_SENTINEL
     }
 };
 
 static model_t boot_model = {
     (const model_field_t []) {
-        { "id",          MODEL_TYPE_INT,    offsetof(boot_t, id),          0 },
-        { "boot_type",   MODEL_TYPE_ENUM,   offsetof(boot_t, type),        0 },
-        { "kernel",      MODEL_TYPE_STRING, offsetof(boot_t, kernel),      0 },
-        { "description", MODEL_TYPE_STRING, offsetof(boot_t, description), 0 },
+        { "id",          MODEL_TYPE_INT,    offsetof(boot_t, id),          0, NULL },
+        { "boot_type",   MODEL_TYPE_ENUM,   offsetof(boot_t, type),        0, boot_types },
+        { "kernel",      MODEL_TYPE_STRING, offsetof(boot_t, kernel),      0, NULL },
+        { "description", MODEL_TYPE_STRING, offsetof(boot_t, description), 0, NULL },
         MODEL_FIELD_SENTINEL
     }
 };
@@ -497,6 +505,7 @@ static command_status_t dedicated_list(COMMAND_ARGS)
     // populate
     FETCH_SERVERS_IF_NEEDED;
     // display
+#if !MODELIZED
     t = table_new(
         20,
         _("name"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
@@ -520,17 +529,28 @@ static command_status_t dedicated_list(COMMAND_ARGS)
         _("contactAdmin"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
         _("creation"), TABLE_TYPE_DATE
     );
+#else
+    t = table_new_from_model(&server_model, 0); // TODO: free strings
+#endif
     statement_bind(&statements[STMT_DEDICATED_LIST], NULL, current_account->id);
+#if !MODELIZED
     statement_to_iterator(&it, &statements[STMT_DEDICATED_LIST],
         &server.name, &server.ip, &server.os, &server.reverse, &boot, &server.datacenter, &server.professionalUse, &server.supportLevel, &server.commercialRange, &server.state, &server.monitoring, &server.rack, &server.rootDevice, &server.linkSpeed,
         &server.engagedUpTo, &server.contactBilling, &server.expiration, &server.contactTech, &server.contactAdmin, &server.creation
     );
+#else
+    statement_model_to_iterator(&it, &statements[STMT_DEDICATED_LIST], server_model, (char *) &server);
+#endif
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
+#if !MODELIZED
         table_store(t,
             server.name, server.ip, server.os, server.reverse, boot, server.datacenter, server.professionalUse, server.supportLevel, server.commercialRange, server.state, server.monitoring, server.rack, server.rootDevice, server.linkSpeed,
             server.engagedUpTo, server.contactBilling, server.expiration, server.contactTech, server.contactAdmin, server.creation
         );
+#else
+        table_store_modelized(t, &server);
+#endif
     }
     iterator_close(&it);
     table_display(t, TABLE_FLAG_NONE);

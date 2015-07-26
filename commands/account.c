@@ -106,22 +106,22 @@ static sqlite_statement_t statements[STMT_COUNT] = {
 
 static model_t account_model = {
     (const model_field_t []) {
-        { "id",           MODEL_TYPE_INT,    offsetof(account_t, id),           0 },
-        { "is_default",   MODEL_TYPE_BOOL,   offsetof(account_t, isdefault),    0 },
-        { "name",         MODEL_TYPE_STRING, offsetof(account_t, name),         0 },
-        { "password",     MODEL_TYPE_STRING, offsetof(account_t, password),     0 },
-        { "expires_at",   MODEL_TYPE_INT,    offsetof(account_t, expires_at),   0 },
-        { "consumer_key", MODEL_TYPE_STRING, offsetof(account_t, consumer_key), 0 },
-        { "endpoint_id",  MODEL_TYPE_INT,    offsetof(account_t, endpoint_id),  0 },
+        { "id",           MODEL_TYPE_INT,    offsetof(account_t, id),           0, NULL },
+        { "is_default",   MODEL_TYPE_BOOL,   offsetof(account_t, isdefault),    0, NULL },
+        { "name",         MODEL_TYPE_STRING, offsetof(account_t, name),         0, NULL },
+        { "password",     MODEL_TYPE_STRING, offsetof(account_t, password),     0, NULL },
+        { "expires_at",   MODEL_TYPE_INT,    offsetof(account_t, expires_at),   0, NULL },
+        { "consumer_key", MODEL_TYPE_STRING, offsetof(account_t, consumer_key), 0, NULL },
+        { "endpoint_id",  MODEL_TYPE_INT,    offsetof(account_t, endpoint_id),  0, NULL },
         MODEL_FIELD_SENTINEL
     }
 };
 
 static model_t application_model = {
     (const model_field_t []) {
-        { "app_key",     MODEL_TYPE_STRING, offsetof(application_t, key),         0 },
-        { "secret",      MODEL_TYPE_STRING, offsetof(application_t, secret),      0 },
-        { "endpoint_id", MODEL_TYPE_INT,    offsetof(application_t, endpoint_id), 0 },
+        { "app_key",     MODEL_TYPE_STRING, offsetof(application_t, key),         0, NULL },
+        { "secret",      MODEL_TYPE_STRING, offsetof(application_t, secret),      0, NULL },
+        { "endpoint_id", MODEL_TYPE_INT,    offsetof(application_t, endpoint_id), 0, NULL },
         MODEL_FIELD_SENTINEL
     }
 };
