@@ -260,10 +260,11 @@ static void _statement_model_set_output_bind(sqlite_statement_t *stmt, model_t m
                 match = TRUE;
             }
         }
-        if (!match) {
+#ifdef DEBUG
+        if (!match && 0 != strcmp(column_name, "account_id")) {
             debug(_("Column '%s' unmapped for output (query: %s)"), column_name, sqlite3_sql(stmt->prepared));
-//             assert(FALSE);
         }
+#endif /* DEBUG */
     }
 }
 
@@ -677,20 +678,23 @@ bool statement_fetch_to_model(sqlite_statement_t *stmt, model_t model, char *ptr
     return ret;
 }
 
-command_status_t statement_to_table(const model_t *model, sqlite_statement_t *stmt, void *ptr)
+command_status_t statement_to_table(const model_t *model, sqlite_statement_t *stmt)
 {
     table_t *t;
     Iterator it;
+    char buffer[512];
     command_status_t ret;
 
+    assert(ARRAY_SIZE(buffer) >= model->size);
     ret = COMMAND_SUCCESS;
+    bzero(buffer, ARRAY_SIZE(buffer));
     t = table_new_from_model(model, TABLE_FLAG_DELEGATE);
-    statement_model_to_iterator(&it, stmt, *model, (char *) ptr);
+    statement_model_to_iterator(&it, stmt, *model, buffer);
     iterator_first(&it);
     if (iterator_is_valid(&it)) {
         do {
             iterator_current(&it, NULL);
-            table_store_modelized(t, ptr);
+            table_store_modelized(t, buffer);
             iterator_next(&it);
         } while (iterator_is_valid(&it));
     } else {

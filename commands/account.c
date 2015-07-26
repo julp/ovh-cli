@@ -105,6 +105,7 @@ static sqlite_statement_t statements[STMT_COUNT] = {
 };
 
 static model_t account_model = {
+    sizeof(account_t),
     (const model_field_t []) {
         { "id",           MODEL_TYPE_INT,      offsetof(account_t, id),           0, NULL },
         { "is_default",   MODEL_TYPE_BOOL,     offsetof(account_t, isdefault),    0, NULL },
@@ -118,6 +119,7 @@ static model_t account_model = {
 };
 
 static model_t application_model = {
+    sizeof(application_t),
     (const model_field_t []) {
         { "app_key",     MODEL_TYPE_STRING, offsetof(application_t, key),         0, NULL },
         { "secret",      MODEL_TYPE_STRING, offsetof(application_t, secret),      0, NULL },
@@ -411,13 +413,11 @@ static void account_dtor(void)
 
 static command_status_t account_list(COMMAND_ARGS)
 {
-    account_t account = { 0 };
-
     USED(arg);
     USED(error);
     USED(mainopts);
 
-    return statement_to_table(&account_model, &statements[STMT_ACCOUNT_LIST], &account);
+    return statement_to_table(&account_model, &statements[STMT_ACCOUNT_LIST]);
 }
 
 static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
@@ -584,9 +584,11 @@ static command_status_t account_switch(COMMAND_ARGS)
 
 static command_status_t application_list(COMMAND_ARGS)
 {
-    application_t application = { 0 };
+    USED(arg);
+    USED(error);
+    USED(mainopts);
 
-    return statement_to_table(&application_model, &statements[STMT_APPLICATION_LIST], &application);
+    return statement_to_table(&application_model, &statements[STMT_APPLICATION_LIST]);
 }
 
 static command_status_t application_add(COMMAND_ARGS)

@@ -21,6 +21,7 @@ typedef struct {
 } model_field_t;
 
 typedef struct {
+    size_t size;
     const model_field_t *fields;
 } model_t;
 

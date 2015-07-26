@@ -191,6 +191,7 @@ static const char *mrtg_types[] = {
 };
 
 static model_t server_model = {
+    sizeof(server_t),
     (const model_field_t []) {
         { "id",               MODEL_TYPE_INT,    offsetof(server_t, serverId),        0, NULL },
         { "name",             MODEL_TYPE_STRING, offsetof(server_t, name),            0, NULL },
@@ -218,6 +219,7 @@ static model_t server_model = {
 };
 
 static model_t boot_model = {
+    sizeof(boot_t),
     (const model_field_t []) {
         { "id",          MODEL_TYPE_INT,    offsetof(boot_t, id),          0, NULL },
         { "boot_type",   MODEL_TYPE_ENUM,   offsetof(boot_t, type),        0, boot_types },
@@ -491,10 +493,12 @@ static bool fetch_servers(bool force, error_t **error)
 
 static command_status_t dedicated_list(COMMAND_ARGS)
 {
+#if !MODELIZED
     table_t *t;
     Iterator it;
     server_t server;
     const char *boot;
+#endif
     dedicated_argument_t *args;
 
     USED(arg);
@@ -527,34 +531,28 @@ static command_status_t dedicated_list(COMMAND_ARGS)
         _("contactAdmin"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
         _("creation"), TABLE_TYPE_DATE
     );
-#else
-    t = table_new_from_model(&server_model, TABLE_FLAG_DELEGATE);
-#endif
     statement_bind(&statements[STMT_DEDICATED_LIST], NULL, current_account->id);
-#if !MODELIZED
     statement_to_iterator(&it, &statements[STMT_DEDICATED_LIST],
         &server.name, &server.ip, &server.os, &server.reverse, &boot, &server.datacenter, &server.professionalUse, &server.supportLevel, &server.commercialRange, &server.state, &server.monitoring, &server.rack, &server.rootDevice, &server.linkSpeed,
         &server.engagedUpTo, &server.contactBilling, &server.expiration, &server.contactTech, &server.contactAdmin, &server.creation
     );
-#else
-    statement_model_to_iterator(&it, &statements[STMT_DEDICATED_LIST], server_model, (char *) &server);
-#endif
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
-#if !MODELIZED
         table_store(t,
             server.name, server.ip, server.os, server.reverse, boot, server.datacenter, server.professionalUse, server.supportLevel, server.commercialRange, server.state, server.monitoring, server.rack, server.rootDevice, server.linkSpeed,
             server.engagedUpTo, server.contactBilling, server.expiration, server.contactTech, server.contactAdmin, server.creation
         );
-#else
-        table_store_modelized(t, &server);
-#endif
     }
     iterator_close(&it);
     table_display(t, TABLE_FLAG_NONE);
     table_destroy(t);
 
     return COMMAND_SUCCESS /* TODO: | CMD_FLAG_NO_DATA */;
+#else
+    statement_bind(&statements[STMT_DEDICATED_LIST], NULL, current_account->id);
+
+    return statement_to_table(&server_model, &statements[STMT_DEDICATED_LIST]);
+#endif
 }
 
 static command_status_t dedicated_check(COMMAND_ARGS)
