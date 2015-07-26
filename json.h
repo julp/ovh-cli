@@ -103,4 +103,7 @@ void json_object_set_property(json_value_t, const char *, json_value_t);
 void json_object_to_iterator(Iterator *, json_value_t);
 json_value_t json_string(const char *) WARN_UNUSED_RESULT;
 
+# include "model.h"
+void json_object_to_modelized(json_value_t, model_t, bool, void *);
+
 #endif /* !JSON_H */

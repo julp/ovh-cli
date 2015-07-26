@@ -53,7 +53,7 @@ enum {
 
 static sqlite_statement_t statements[STMT_COUNT] = {
 #if !MODELIZED
-    [ STMT_DEDICATED_LIST ]            = DECL_STMT("SELECT name, ip, os, reverse, kernel, datacenter, professional_use, support_level, commercial_range, state, monitoring, rack, root_device, link_speed, engaged_up_to, contact_billing, expiration, contact_tech, contact_admin, creation FROM dedicated JOIN boots ON dedicated.boot_id = boots.id WHERE account_id = ?", "i", "sssssibisibssi" "isissi"),
+    [ STMT_DEDICATED_LIST ]            = DECL_STMT("SELECT name, ip, os, reverse, kernel, datacenter, professional_use, support_level, commercial_range, state, monitoring, rack, root_device, link_speed, engaged_up_to, contact_billing, expiration, contact_tech, contact_admin, creation FROM dedicated JOIN boots ON dedicated.boot_id = boots.bootId WHERE account_id = ?", "i", "sssssibisibssi" "isissi"),
 #else
     [ STMT_DEDICATED_LIST ]            = DECL_STMT("SELECT * FROM dedicated WHERE account_id = ?", "i", "isssssibisibssi" "isissi"),
 #endif
@@ -62,12 +62,12 @@ static sqlite_statement_t statements[STMT_COUNT] = {
     [ STMT_DEDICATED_NEAR_EXPIRATION ] = DECL_STMT("SELECT julianday(datetime(expiration, 'unixepoch', 'localtime')) - julianday('now') AS days, name FROM dedicated WHERE account_id = ? AND days < 120", "i", "is"),
     [ STMT_DEDICATED_SET_REVERSE ]     = DECL_STMT("UPDATE dedicated SET reverse = ? WHERE account_id = ? AND name = ?", "sis", ""),
     [ STMT_DEDICATED_COMPLETION ]      = DECL_STMT("SELECT name FROM dedicated WHERE account_id = ? AND name LIKE ? || '%'", "is", "s"),
-    [ STMT_DEDICATED_CURRENT_BOOT ]    = DECL_STMT("SELECT boots.* FROM boots JOIN dedicated ON boots.id = dedicated.boot_id WHERE account_id = ? AND name = ?", "is", BOOT_OUTPUT_BINDS),
-    [ STMT_BOOT_LIST ]                 = DECL_STMT("SELECT boots.* FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.id JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ?", "is", BOOT_OUTPUT_BINDS),
-    [ STMT_BOOT_UPSERT ]               = DECL_STMT("INSERT OR REPLACE INTO boots(id, boot_type, kernel, description) VALUES(?, ?, ?, ?)", "iiss", ""),
-    [ STMT_BOOT_COMPLETION ]           = DECL_STMT("SELECT kernel FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.id JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ? AND kernel LIKE ? || '%'", "iss", "s"),
+    [ STMT_DEDICATED_CURRENT_BOOT ]    = DECL_STMT("SELECT boots.* FROM boots JOIN dedicated ON boots.bootId = dedicated.boot_id WHERE account_id = ? AND name = ?", "is", BOOT_OUTPUT_BINDS),
+    [ STMT_BOOT_LIST ]                 = DECL_STMT("SELECT boots.* FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.bootId JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ?", "is", BOOT_OUTPUT_BINDS),
+    [ STMT_BOOT_UPSERT ]               = DECL_STMT("INSERT OR REPLACE INTO boots(bootId, bootType, kernel, description) VALUES(:bootId, :bootType, :kernel, :description)", "iiss", ""),
+    [ STMT_BOOT_COMPLETION ]           = DECL_STMT("SELECT kernel FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.bootId JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ? AND kernel LIKE ? || '%'", "iss", "s"),
     [ STMT_B_D_LINK ]                  = DECL_STMT("INSERT OR IGNORE INTO boots_dedicated(boot_id, dedicated_id) VALUES(?, ?)", "ii", ""),
-    [ STMT_B_D_FIND_BY_NAME ]          = DECL_STMT("SELECT boots.id FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.id JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ? AND kernel = ?", "iss", "i"),
+    [ STMT_B_D_FIND_BY_NAME ]          = DECL_STMT("SELECT boots.bootId FROM boots JOIN boots_dedicated ON boots_dedicated.boot_id = boots.bootId JOIN dedicated ON boots_dedicated.dedicated_id = dedicated.id WHERE account_id = ? AND name = ? AND kernel = ?", "iss", "i"),
 };
 
 #define FETCH_SERVERS_IF_NEEDED \
@@ -115,7 +115,7 @@ typedef struct {
 // arguments
 typedef struct {
     bool nocache;
-    int boot_type;
+//     int boot_type;
     char *boot_name;
     char *server_name;
     char *reverse;
@@ -222,7 +222,7 @@ static model_t boot_model = {
     sizeof(boot_t),
     (const model_field_t []) {
         { "id",          MODEL_TYPE_INT,    offsetof(boot_t, id),          0, NULL },
-        { "boot_type",   MODEL_TYPE_ENUM,   offsetof(boot_t, type),        0, boot_types },
+        { "bootType",    MODEL_TYPE_ENUM,   offsetof(boot_t, type),        0, boot_types },
         { "kernel",      MODEL_TYPE_STRING, offsetof(boot_t, kernel),      0, NULL },
         { "description", MODEL_TYPE_STRING, offsetof(boot_t, description), 0, NULL },
         MODEL_FIELD_SENTINEL
@@ -249,8 +249,8 @@ static void server_init(server_t *s)
 static bool dedicated_ctor(error_t **error)
 {
     if (!create_or_migrate("boots", "CREATE TABLE boots(\n\
-        id INTEGER NOT NULL PRIMARY KEY, -- OVH ID (bootId)\n\
-        boot_type INT NOT NULL, -- enum\n\
+        bootId INTEGER NOT NULL PRIMARY KEY, -- OVH ID (bootId)\n\
+        bootType INT NOT NULL, -- enum\n\
         kernel TEXT NOT NULL,\n\
         description TEXT NOT NULL\n\
     )", NULL, 0, error)) {
@@ -273,7 +273,7 @@ static bool dedicated_ctor(error_t **error)
         rack TEXT NOT NULL,\n\
         root_device TEXT, -- nullable\n\
         link_speed INT, -- nullable\n\
-        boot_id INT REFERENCES boots(id) ON UPDATE CASCADE ON DELETE CASCADE,\n\
+        boot_id INT REFERENCES boots(bootId) ON UPDATE CASCADE ON DELETE CASCADE,\n\
         -- From GET /dedicated/server/{serviceName}/serviceInfos\n\
         -- status INT NOT NULL, -- enum\n\
         engaged_up_to INT, -- data, nullable\n\
@@ -290,7 +290,7 @@ static bool dedicated_ctor(error_t **error)
     }
     if (!create_or_migrate("boots_dedicated", "CREATE TABLE boots_dedicated(\n\
         dedicated_id INT NOT NULL REFERENCES dedicated(id) ON UPDATE CASCADE ON DELETE CASCADE,\n\
-        boot_id INT NOT NULL REFERENCES boots(id) ON UPDATE CASCADE ON DELETE CASCADE,\n\
+        boot_id INT NOT NULL REFERENCES boots(bootId) ON UPDATE CASCADE ON DELETE CASCADE,\n\
         PRIMARY KEY (dedicated_id, boot_id)\n\
     )", NULL, 0, error)) {
         return FALSE;
@@ -312,11 +312,15 @@ static bool parse_boot(server_t *s, json_document_t *doc, error_t **error)
     json_value_t root, v;
 
     root = json_document_get_root(doc);
+#if 0
     JSON_GET_PROP_INT(root, "bootId", boot.id);
     JSON_GET_PROP_STRING_EX(root, "kernel", boot.kernel, FALSE);
     JSON_GET_PROP_STRING_EX(root, "description", boot.description, FALSE);
     json_object_get_property(root, "bootType", &v);
     boot.type = json_get_enum(v, boot_types, -1);
+#else
+    json_object_to_modelized(root, boot_model, FALSE, &boot);
+#endif
 
     statement_bind_from_model(&statements[STMT_BOOT_UPSERT], boot_model, NULL, (char *) &boot);
     statement_fetch(&statements[STMT_BOOT_UPSERT], error);

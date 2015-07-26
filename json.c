@@ -454,6 +454,74 @@ bool json_object_get_property(json_value_t object, const char *key, json_value_t
     return hashtable_get((HashTable *) node->value, key, value);
 }
 
+#include "model.h"
+void json_object_to_modelized(json_value_t object, model_t model, bool copy, void *ptr)
+{
+    const model_field_t *f;
+
+    for (f = model.fields; NULL != f->column_name; f++) {
+        json_value_t propvalue;
+
+        if (json_object_get_property(object, f->column_name, &propvalue)) {
+            switch (f->type) {
+                case MODEL_TYPE_BOOL:
+                    *((bool *) (ptr + f->offset)) = json_true == propvalue;
+                    break;
+                case MODEL_TYPE_INT:
+                    *((int64_t *) (ptr + f->offset)) = json_get_integer(propvalue);
+                    break;
+                case MODEL_TYPE_ENUM:
+                    *((int64_t *) (ptr + f->offset)) = json_get_enum(propvalue, f->enum_values, -1);
+                    break;
+                case MODEL_TYPE_DATE:
+                {
+                    time_t v;
+
+                    v = 0;
+                    if (json_null != propvalue) {
+                        date_parse_to_timestamp(json_get_string(propvalue), "%c", &v);
+                    }
+                    *((time_t *) (ptr + f->offset)) = v;
+                    break;
+                }
+                case MODEL_TYPE_DATETIME:
+                {
+                    time_t v;
+
+                    v = 0;
+                    if (json_null != propvalue) {
+                        date_parse_to_timestamp(json_get_string(propvalue), "%F", &v);
+                    }
+                    *((time_t *) (ptr + f->offset)) = v;
+                    break;
+                }
+                case MODEL_TYPE_STRING:
+                    *((char **) (ptr + f->offset)) = json_null == propvalue ? NULL : (copy ? strdup(json_get_string(propvalue)) : (char *) json_get_string(propvalue));
+                    break;
+                default:
+                    assert(FALSE);
+                    break;
+            }
+        }
+    }
+}
+
+#if 0
+size_t json_array_objects_to_modelized(json_value_t array, model_t model, char **ptr)
+{
+    Iterator it;
+    size_t count;
+
+    assert(JSON_TYPE_ARRAY == json_get_type(array));
+    count = 0;
+    // alloc array length * model->size or just call a callback?
+    *ptr = malloc(model->size);
+    // iterate and call json_object_to_modelized ?
+
+    return count;
+}
+#endif
+
 bool json_object_remove_property(json_value_t object, const char *key)
 {
     json_node_t *node;
