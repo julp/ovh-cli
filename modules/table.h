@@ -4,6 +4,7 @@
 
 # define TABLE_FLAG_NONE       (0)
 # define TABLE_FLAG_NO_HEADERS (1<<0)
+# define TABLE_FLAG_DELEGATE   (1<<1)
 
 # define TABLE_TYPE_FLAGS 0xFF00
 

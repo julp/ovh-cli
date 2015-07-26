@@ -30,6 +30,7 @@ typedef struct {
 } column_t;
 
 struct table_t {
+    uint32_t flags;
     DPtrArray *rows;
     column_t *columns;
     resource_t *strings;
@@ -354,7 +355,7 @@ error = NULL;
         val->f = FALSE;
         val->l = STR_LEN("-");
     } else {
-        if (HAS_FLAG(c->type, TABLE_TYPE_DELEGATE)) {
+        if (HAS_FLAG(c->type, TABLE_TYPE_DELEGATE) || HAS_FLAG(t->flags, TABLE_FLAG_DELEGATE)) {
             resource_t *r;
 
             r = mem_new(*r);
@@ -498,6 +499,7 @@ table_t *table_new(size_t columns_count, ...)
     va_list ap;
 
     t = mem_new(*t);
+    t->flags = 0;
     t->strings = NULL;
     t->columns_count = columns_count;
     t->columns = mem_new_n(*t->columns, columns_count);
@@ -519,26 +521,34 @@ table_t *table_new(size_t columns_count, ...)
     return t;
 }
 
-table_t *table_new_from_model(const model_t *model, uint32_t UNUSED(flags))
+table_t *table_new_from_model(const model_t *model, uint32_t flags)
 {
+    size_t i;
     table_t *t;
     const model_field_t *f;
 
     t = mem_new(*t);
+    t->flags = flags;
     t->model = model;
     t->strings = NULL;
+    t->columns_count = 0;
     for (f = model->fields; NULL != f->column_name; f++) {
-        ++t->columns_count;
+        if (TRUE/*!f->hidden*/) {
+            ++t->columns_count;
+        }
     }
     t->columns = mem_new_n(*t->columns, t->columns_count);
     t->rows = dptrarray_new(NULL, row_destroy, NULL);
-    for (f = t->model->fields; NULL != f->column_name; f++) {
-        t->columns[f - t->model->fields].title = gettext(f->column_name);
-        t->columns[f - t->model->fields].type = f->type;
-        cplen(t->columns[f - t->model->fields].title, &t->columns[f - t->model->fields].title_len, NULL);
-        t->columns[f - t->model->fields].len = t->columns[f - t->model->fields].min_len = t->columns[f - t->model->fields].max_len = t->columns[f - t->model->fields].title_len;
-        if (NULL != type_handlers[t->columns[f - t->model->fields].type].colinit_from_model) {
-            type_handlers[t->columns[f - t->model->fields].type].colinit_from_model(t, &t->columns[f - t->model->fields], f);
+    for (i = 0, f = t->model->fields; NULL != f->column_name; f++) {
+        if (TRUE/*!f->hidden*/) {
+            t->columns[i].title = gettext(f->column_name);
+            t->columns[i].type = f->type;
+            cplen(t->columns[i].title, &t->columns[i].title_len, NULL);
+            t->columns[i].len = t->columns[i].min_len = t->columns[i].max_len = t->columns[i].title_len;
+            if (NULL != type_handlers[t->columns[i].type].colinit_from_model) {
+                type_handlers[t->columns[i].type].colinit_from_model(t, &t->columns[i], f);
+            }
+            ++i;
         }
     }
     

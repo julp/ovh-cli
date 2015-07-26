@@ -43,4 +43,6 @@ bool statement_batched_prepare(sqlite_statement_t *, size_t, error_t **);
 void statement_to_iterator(Iterator *, sqlite_statement_t *, ...);
 void statement_model_to_iterator(Iterator *, sqlite_statement_t *, model_t, char *);
 
+command_status_t statement_to_table(const model_t *, sqlite_statement_t *, void *);
+
 #endif /* SQLITE_H */

@@ -4,6 +4,7 @@
 #include "common.h"
 #include "command.h"
 #include "modules/home.h"
+#include "modules/table.h"
 #include "modules/sqlite.h"
 
 typedef struct {
@@ -513,6 +514,7 @@ void statement_bind(sqlite_statement_t *stmt, const bool *nulls, ...)
  */
 void statement_bind_from_model(sqlite_statement_t *stmt, model_t model, const bool *nulls, char *ptr/*, ...*/)
 {
+    char placeholder[512];
     const model_field_t *f;
 
 #if 0
@@ -526,10 +528,12 @@ void statement_bind_from_model(sqlite_statement_t *stmt, model_t model, const bo
     sqlite3_reset(stmt->prepared);
     sqlite3_clear_bindings(stmt->prepared);
 #endif
+    placeholder[0] = ':';
     for (f = model.fields; NULL != f->column_name; f++) {
         int paramno;
 
-        if (0 != (paramno = sqlite3_bind_parameter_index(stmt->prepared, f->column_name))) {
+        strlcpy(placeholder + 1, f->column_name, ARRAY_SIZE(placeholder) - 1);
+        if (0 != (paramno = sqlite3_bind_parameter_index(stmt->prepared, placeholder))) {
             if (NULL == nulls || !nulls[paramno]) {
                 switch (f->type) {
 #if 0
@@ -669,6 +673,32 @@ bool statement_fetch_to_model(sqlite_statement_t *stmt, model_t model, char *ptr
             error_set(error, WARN, _("%s for %s"), sqlite3_errmsg(db), sqlite3_sql(stmt->prepared));
             break;
     }
+
+    return ret;
+}
+
+command_status_t statement_to_table(const model_t *model, sqlite_statement_t *stmt, void *ptr)
+{
+    table_t *t;
+    Iterator it;
+    command_status_t ret;
+
+    ret = COMMAND_SUCCESS;
+    t = table_new_from_model(model, TABLE_FLAG_DELEGATE);
+    statement_model_to_iterator(&it, stmt, *model, (char *) ptr);
+    iterator_first(&it);
+    if (iterator_is_valid(&it)) {
+        do {
+            iterator_current(&it, NULL);
+            table_store_modelized(t, ptr);
+            iterator_next(&it);
+        } while (iterator_is_valid(&it));
+    } else {
+        ret |= CMD_FLAG_NO_DATA;
+    }
+    iterator_close(&it);
+    table_display(t, TABLE_FLAG_NONE);
+    table_destroy(t);
 
     return ret;
 }

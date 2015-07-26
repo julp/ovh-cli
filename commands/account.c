@@ -106,13 +106,13 @@ static sqlite_statement_t statements[STMT_COUNT] = {
 
 static model_t account_model = {
     (const model_field_t []) {
-        { "id",           MODEL_TYPE_INT,    offsetof(account_t, id),           0, NULL },
-        { "is_default",   MODEL_TYPE_BOOL,   offsetof(account_t, isdefault),    0, NULL },
-        { "name",         MODEL_TYPE_STRING, offsetof(account_t, name),         0, NULL },
-        { "password",     MODEL_TYPE_STRING, offsetof(account_t, password),     0, NULL },
-        { "expires_at",   MODEL_TYPE_INT,    offsetof(account_t, expires_at),   0, NULL },
-        { "consumer_key", MODEL_TYPE_STRING, offsetof(account_t, consumer_key), 0, NULL },
-        { "endpoint_id",  MODEL_TYPE_INT,    offsetof(account_t, endpoint_id),  0, NULL },
+        { "id",           MODEL_TYPE_INT,      offsetof(account_t, id),           0, NULL },
+        { "is_default",   MODEL_TYPE_BOOL,     offsetof(account_t, isdefault),    0, NULL },
+        { "name",         MODEL_TYPE_STRING,   offsetof(account_t, name),         0, NULL },
+        { "password",     MODEL_TYPE_STRING,   offsetof(account_t, password),     0, NULL },
+        { "expires_at",   MODEL_TYPE_DATETIME, offsetof(account_t, expires_at),   0, NULL },
+        { "consumer_key", MODEL_TYPE_STRING,   offsetof(account_t, consumer_key), 0, NULL },
+        { "endpoint_id",  MODEL_TYPE_ENUM,     offsetof(account_t, endpoint_id),  0, endpoint_names },
         MODEL_FIELD_SENTINEL
     }
 };
@@ -121,7 +121,7 @@ static model_t application_model = {
     (const model_field_t []) {
         { "app_key",     MODEL_TYPE_STRING, offsetof(application_t, key),         0, NULL },
         { "secret",      MODEL_TYPE_STRING, offsetof(application_t, secret),      0, NULL },
-        { "endpoint_id", MODEL_TYPE_INT,    offsetof(application_t, endpoint_id), 0, NULL },
+        { "endpoint_id", MODEL_TYPE_ENUM,   offsetof(application_t, endpoint_id), 0, endpoint_names },
         MODEL_FIELD_SENTINEL
     }
 };
@@ -411,34 +411,13 @@ static void account_dtor(void)
 
 static command_status_t account_list(COMMAND_ARGS)
 {
-    table_t *t;
-    Iterator it;
     account_t account = { 0 };
 
     USED(arg);
     USED(error);
     USED(mainopts);
-    t = table_new(
-        7,
-        _("account"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
-        _("consumer key"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
-        _("key expiration"), TABLE_TYPE_DATETIME,
-        _("password"), TABLE_TYPE_BOOLEAN,
-        _("endpoint"), TABLE_TYPE_ENUM, endpoint_names,
-        _("current"), TABLE_TYPE_BOOLEAN,
-        _("default"), TABLE_TYPE_BOOLEAN
-    );
-    statement_model_to_iterator(&it, &statements[STMT_ACCOUNT_LIST], account_model, (char *) &account);
-    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        iterator_current(&it, NULL);
-        table_store(t, account.name, account.consumer_key, account.expires_at, !NULL_OR_EMPTY(account.password), account.endpoint_id, acd.current_account.id == account.id, account.isdefault);
-        free(account.password);
-    }
-    iterator_close(&it);
-    table_display(t, TABLE_FLAG_NONE);
-    table_destroy(t);
 
-    return COMMAND_SUCCESS;
+    return statement_to_table(&account_model, &statements[STMT_ACCOUNT_LIST], &account);
 }
 
 static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
@@ -605,29 +584,9 @@ static command_status_t account_switch(COMMAND_ARGS)
 
 static command_status_t application_list(COMMAND_ARGS)
 {
-    table_t *t;
-    Iterator it;
     application_t application = { 0 };
 
-    USED(arg);
-    USED(error);
-    USED(mainopts);
-    t = table_new(
-        3,
-        _("endpoint"), TABLE_TYPE_ENUM, endpoint_names,
-        _("key"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
-        _("secret"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE
-    );
-    statement_model_to_iterator(&it, &statements[STMT_APPLICATION_LIST], application_model, (char *) &application);
-    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        iterator_current(&it, NULL);
-        table_store(t, application.endpoint_id, application.key, application.secret);
-    }
-    iterator_close(&it);
-    table_display(t, TABLE_FLAG_NONE);
-    table_destroy(t);
-
-    return COMMAND_SUCCESS;
+    return statement_to_table(&application_model, &statements[STMT_APPLICATION_LIST], &application);
 }
 
 static command_status_t application_add(COMMAND_ARGS)

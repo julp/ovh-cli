@@ -2,6 +2,8 @@
 
 #define CONFIG_H
 
+#define MODELIZED 1
+
 #cmakedefine DEBUG
 #cmakedefine PRINT_OVH_ID
 #cmakedefine HAVE_STRTOD_L

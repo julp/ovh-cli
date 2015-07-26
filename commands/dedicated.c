@@ -49,8 +49,6 @@ enum {
     STMT_COUNT
 };
 
-#define MODELIZED 0
-
 #define BOOT_OUTPUT_BINDS "iss"
 
 static sqlite_statement_t statements[STMT_COUNT] = {
@@ -530,7 +528,7 @@ static command_status_t dedicated_list(COMMAND_ARGS)
         _("creation"), TABLE_TYPE_DATE
     );
 #else
-    t = table_new_from_model(&server_model, 0); // TODO: free strings
+    t = table_new_from_model(&server_model, TABLE_FLAG_DELEGATE);
 #endif
     statement_bind(&statements[STMT_DEDICATED_LIST], NULL, current_account->id);
 #if !MODELIZED
