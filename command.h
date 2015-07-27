@@ -47,6 +47,4 @@ typedef struct {
     void (*dtor)(void);
 } module_t;
 
-# include <sqlite3.h>
-
 #endif /* !COMMAND_H */
