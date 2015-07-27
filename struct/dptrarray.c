@@ -1,7 +1,7 @@
 #include <string.h>
 
 #include "common.h"
-#include "dptrarray.h"
+#include "struct/dptrarray.h"
 
 #define D_PTR_ARRAY_INCREMENT 8
 
@@ -221,14 +221,16 @@ void dptrarray_sort(DPtrArray *this, CmpFuncArg cmpfn, void *arg)
     assert(NULL != this);
     assert(NULL != cmpfn);
 
+    qsort_r(this->data, this->length, sizeof(*this->data),
 #ifdef BSD
-    qsort_r(this->data, this->length, sizeof(*this->data), arg, cmpfn);
+        arg, cmpfn
 #else
-    qsort_r(this->data, this->length, sizeof(*this->data), cmpfn, arg);
+        cmpfn, arg
 #endif
+    );
 }
 
-void *dptrarray_to_array(DPtrArray *this, int copy, int null_terminated) /* NONNULL() */
+void *dptrarray_to_array(DPtrArray *this, bool copy, bool null_terminated) /* NONNULL() */
 {
     void **ary;
 
