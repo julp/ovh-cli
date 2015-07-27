@@ -58,6 +58,17 @@ typedef struct {
     bool delegated;
 } possibility_t;
 
+static void possibility_destroy(void *data)
+{
+    possibility_t *p;
+
+    assert(NULL != data);
+    p = (possibility_t *) data;
+    if (p->delegated) {
+        free((void *) p->string);
+    }
+}
+
 static completer_t *completer_new(void)
 {
     completer_t *c;
@@ -73,7 +84,7 @@ static void completer_clear(completer_t *c)
     dptrarray_clear(c->ary);
 }
 
-void completer_push(completer_t *c, const char *string, bool delegate)
+void completer_push(completer_t *c, const char *string, bool UNUSED(delegate))
 {
     dptrarray_push(c->ary, (void *) string);
 }
