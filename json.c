@@ -465,13 +465,13 @@ void json_object_to_modelized(json_value_t object, model_t model, bool copy, voi
         if (json_object_get_property(object, f->column_name, &propvalue)) {
             switch (f->type) {
                 case MODEL_TYPE_BOOL:
-                    *((bool *) (ptr + f->offset)) = json_true == propvalue;
+                    *((bool *) (((char *) ptr) + f->offset)) = json_true == propvalue;
                     break;
                 case MODEL_TYPE_INT:
-                    *((int64_t *) (ptr + f->offset)) = json_get_integer(propvalue);
+                    *((int64_t *) (((char *) ptr) + f->offset)) = json_get_integer(propvalue);
                     break;
                 case MODEL_TYPE_ENUM:
-                    *((int64_t *) (ptr + f->offset)) = json_get_enum(propvalue, f->enum_values, -1);
+                    *((int *) (((char *) ptr) + f->offset)) = json_get_enum(propvalue, f->enum_values, -1);
                     break;
                 case MODEL_TYPE_DATE:
                 {
@@ -481,7 +481,7 @@ void json_object_to_modelized(json_value_t object, model_t model, bool copy, voi
                     if (json_null != propvalue) {
                         date_parse_to_timestamp(json_get_string(propvalue), "%c", &v);
                     }
-                    *((time_t *) (ptr + f->offset)) = v;
+                    *((time_t *) (((char *) ptr) + f->offset)) = v;
                     break;
                 }
                 case MODEL_TYPE_DATETIME:
@@ -492,11 +492,11 @@ void json_object_to_modelized(json_value_t object, model_t model, bool copy, voi
                     if (json_null != propvalue) {
                         date_parse_to_timestamp(json_get_string(propvalue), "%F", &v);
                     }
-                    *((time_t *) (ptr + f->offset)) = v;
+                    *((time_t *) (((char *) ptr) + f->offset)) = v;
                     break;
                 }
                 case MODEL_TYPE_STRING:
-                    *((char **) (ptr + f->offset)) = json_null == propvalue ? NULL : (copy ? strdup(json_get_string(propvalue)) : (char *) json_get_string(propvalue));
+                    *((char **) (((char *) ptr) + f->offset)) = json_null == propvalue ? NULL : (copy ? strdup(json_get_string(propvalue)) : (char *) json_get_string(propvalue));
                     break;
                 default:
                     assert(FALSE);

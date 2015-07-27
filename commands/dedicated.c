@@ -296,7 +296,9 @@ static bool dedicated_ctor(error_t **error)
         return FALSE;
     }
 
-    statement_batched_prepare(statements, STMT_COUNT, error);
+    if (!statement_batched_prepare(statements, STMT_COUNT, error)) {
+        return FALSE;
+    }
 
     return TRUE;
 }
@@ -866,7 +868,6 @@ static void dedicated_regcomm(graph_t *g)
     argument_t *lit_dedicated;
 
     lit_dedicated = argument_create_literal("dedicated", NULL);
-
     arg_server = argument_create_string(offsetof(dedicated_argument_t, server_name), "<server>", complete_servers, NULL);
 
     // dedicated ...

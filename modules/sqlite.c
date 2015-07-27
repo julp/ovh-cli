@@ -729,7 +729,9 @@ static bool sqlite_early_ctor(error_t **error)
     }
     umask(old_umask);
     // preprepare own statement
-    statement_batched_prepare(statements, STMT_COUNT, error);
+    if (!statement_batched_prepare(statements, STMT_COUNT, error)) {
+        return FALSE;
+    }
     // fetch user_version
     if (SQLITE_ROW != sqlite3_step(statements[STMT_GET_USER_VERSION].prepared)) {
         error_set(error, FATAL, _("can't retrieve database version: %s"), sqlite3_errmsg(db));

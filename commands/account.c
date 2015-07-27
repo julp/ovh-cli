@@ -384,7 +384,9 @@ static bool account_early_ctor(error_t **error)
         return FALSE;
     }
 
-    statement_batched_prepare(statements, STMT_COUNT, error);
+    if (!statement_batched_prepare(statements, STMT_COUNT, error)) {
+        return FALSE;
+    }
 
     current_account = &acd.current_account;
     current_application = &acd.current_application;
