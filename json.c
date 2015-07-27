@@ -7,6 +7,7 @@
 
 #include "common.h"
 #include "json.h"
+#include "date.h"
 #include "struct/hashtable.h"
 #include "struct/dptrarray.h"
 
@@ -454,7 +455,6 @@ bool json_object_get_property(json_value_t object, const char *key, json_value_t
     return hashtable_get((HashTable *) node->value, key, value);
 }
 
-#include "model.h"
 void json_object_to_modelized(json_value_t object, model_t model, bool copy, void *ptr)
 {
     const model_field_t *f;

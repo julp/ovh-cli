@@ -309,7 +309,11 @@ static void dedicated_dtor(void)
 static bool parse_boot(server_t *s, json_document_t *doc, error_t **error)
 {
     boot_t boot;
+#if 0
     json_value_t root, v;
+#else
+    json_value_t root;
+#endif
 
     root = json_document_get_root(doc);
 #if 0
@@ -858,48 +862,62 @@ static bool complete_boots(void *parsed_arguments, const char *current_argument,
 
 static void dedicated_regcomm(graph_t *g)
 {
-    argument_t *arg_period, *arg_type;
-    argument_t *arg_server, *arg_boot, *arg_reverse;
-    argument_t *lit_boot, *lit_boot_list, *lit_boot_show;
-    argument_t *lit_reverse, *lit_rev_set, *lit_rev_delete;
-    argument_t *lit_dedicated, *lit_dedi_reboot, *lit_dedi_list, *lit_dedi_check, *lit_dedi_mrtg, *lit_dedi_nocache;
+    argument_t *arg_server;
+    argument_t *lit_dedicated;
 
-    // dedicated ...
     lit_dedicated = argument_create_literal("dedicated", NULL);
-    lit_dedi_mrtg = argument_create_literal("mrtg", dedicated_mrtg);
-    lit_dedi_list = argument_create_literal("list", dedicated_list);
-    lit_dedi_check = argument_create_literal("check", dedicated_check);
-    lit_dedi_reboot = argument_create_literal("reboot", dedicated_reboot);
-    // dedicated <server> boot ...
-    lit_boot = argument_create_literal("boot", /*NULL*/dedicated_boot_set);
-    lit_boot_show = argument_create_literal("show", dedicated_boot_get);
-    lit_boot_list = argument_create_literal("list", dedicated_boot_list);
-    // dedicated <server> reverse ...
-    lit_reverse = argument_create_literal("reverse", NULL);
-    lit_rev_set = argument_create_literal("set", dedicated_reverse_set);
-    lit_rev_delete = argument_create_literal("delete", dedicated_reverse_delete);
-
-    lit_dedi_nocache = argument_create_relevant_literal(offsetof(dedicated_argument_t, nocache), "nocache", NULL);
 
     arg_server = argument_create_string(offsetof(dedicated_argument_t, server_name), "<server>", complete_servers, NULL);
-    arg_boot = argument_create_string(offsetof(dedicated_argument_t, boot_name), "<boot>", complete_boots, NULL);
-    arg_reverse = argument_create_string(offsetof(dedicated_argument_t, reverse), "<reverse>", NULL, NULL);
-    arg_type = argument_create_choices(offsetof(dedicated_argument_t, mrtg_type), "<types>",  mrtg_types);
-    arg_period = argument_create_choices(offsetof(dedicated_argument_t, mrtg_period), "<period>",  mrtg_periods);
 
     // dedicated ...
-    graph_create_full_path(g, lit_dedicated, lit_dedi_list, NULL);
-    graph_create_path(g, lit_dedi_list, NULL, lit_dedi_nocache, NULL);
-    graph_create_full_path(g, lit_dedicated, lit_dedi_check, NULL);
-    graph_create_full_path(g, lit_dedicated, arg_server, lit_dedi_reboot, NULL);
-    graph_create_full_path(g, lit_dedicated, arg_server, lit_dedi_mrtg, arg_type, arg_period, NULL);
+    {
+        argument_t *arg_period, *arg_type;
+        argument_t *lit_reboot, *lit_list, *lit_check, *lit_mrtg, *lit_nocache;
+
+        lit_mrtg = argument_create_literal("mrtg", dedicated_mrtg);
+        lit_list = argument_create_literal("list", dedicated_list);
+        lit_check = argument_create_literal("check", dedicated_check);
+        lit_reboot = argument_create_literal("reboot", dedicated_reboot);
+        lit_nocache = argument_create_relevant_literal(offsetof(dedicated_argument_t, nocache), "nocache", NULL);
+
+        arg_type = argument_create_choices(offsetof(dedicated_argument_t, mrtg_type), "<types>",  mrtg_types);
+        arg_period = argument_create_choices(offsetof(dedicated_argument_t, mrtg_period), "<period>",  mrtg_periods);
+
+        graph_create_full_path(g, lit_dedicated, lit_list, NULL);
+        graph_create_path(g, lit_list, NULL, lit_nocache, NULL);
+        graph_create_full_path(g, lit_dedicated, lit_check, NULL);
+        graph_create_full_path(g, lit_dedicated, arg_server, lit_reboot, NULL);
+        graph_create_full_path(g, lit_dedicated, arg_server, lit_mrtg, arg_type, arg_period, NULL);
+    }
     // dedicated <server> boot ...
-    graph_create_full_path(g, lit_dedicated, arg_server, lit_boot, lit_boot_list, NULL);
-    graph_create_full_path(g, lit_dedicated, arg_server, lit_boot, lit_boot_show, NULL);
-    graph_create_full_path(g, lit_dedicated, arg_server, lit_boot, arg_boot, NULL);
+    {
+        argument_t *arg_boot;
+        argument_t *lit_boot, *lit_list, *lit_show;
+
+        lit_boot = argument_create_literal("boot", /*NULL*/dedicated_boot_set);
+        lit_show = argument_create_literal("show", dedicated_boot_get);
+        lit_list = argument_create_literal("list", dedicated_boot_list);
+
+        arg_boot = argument_create_string(offsetof(dedicated_argument_t, boot_name), "<boot>", complete_boots, NULL);
+
+        graph_create_full_path(g, lit_dedicated, arg_server, lit_boot, lit_list, NULL);
+        graph_create_full_path(g, lit_dedicated, arg_server, lit_boot, lit_show, NULL);
+        graph_create_full_path(g, lit_dedicated, arg_server, lit_boot, arg_boot, NULL);
+    }
     // dedicated <server> reverse ...
-    graph_create_full_path(g, lit_dedicated, arg_server, lit_reverse, lit_rev_delete, NULL);
-    graph_create_full_path(g, lit_dedicated, arg_server, lit_reverse, lit_rev_set, arg_reverse, NULL);
+    {
+        argument_t *arg_reverse;
+        argument_t *lit_reverse, *lit_set, *lit_delete;
+
+        lit_reverse = argument_create_literal("reverse", NULL);
+        lit_set = argument_create_literal("set", dedicated_reverse_set);
+        lit_delete = argument_create_literal("delete", dedicated_reverse_delete);
+
+        arg_reverse = argument_create_string(offsetof(dedicated_argument_t, reverse), "<reverse>", NULL, NULL);
+
+        graph_create_full_path(g, lit_dedicated, arg_server, lit_reverse, lit_delete, NULL);
+        graph_create_full_path(g, lit_dedicated, arg_server, lit_reverse, lit_set, arg_reverse, NULL);
+    }
 }
 
 static void dedicated_register_rules(json_value_t rules, bool ro)
