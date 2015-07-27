@@ -875,7 +875,7 @@ static command_status_t hosting_database_delete(COMMAND_ARGS)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static bool complete_hosting(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *UNUSED(data))
+static bool complete_hosting(void *parsed_arguments, const char *current_argument, size_t current_argument_len, completer_t *possibilities, void *UNUSED(data))
 {
     service_set_t *ss;
 

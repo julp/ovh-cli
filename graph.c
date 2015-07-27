@@ -8,6 +8,7 @@
 #include "modules/sqlite.h"
 #include "struct/xtring.h"
 #include "struct/hashtable.h"
+#include "struct/dptrarray.h"
 
 #define STRING_APPEND_STRING(dest, suffix) \
     do { \
@@ -40,7 +41,73 @@ struct graph_t {
     HashTable *roots;
     HashTable *nodes;
     graph_node_t *end;
+    completer_t *possibilities;
 };
+
+/**
+ * Abstraction layer to store possibilities for current completion
+ */
+
+// wrap DPtrArray even if it is alone, future change should be simpler
+struct completer_t {
+    DPtrArray *ary;
+};
+
+typedef struct {
+    const char *string;
+    bool delegated;
+} possibility_t;
+
+static completer_t *completer_new(void)
+{
+    completer_t *c;
+
+    c = mem_new(*c);
+    c->ary = dptrarray_new(NULL, NULL, NULL);
+
+    return c;
+}
+
+static void completer_clear(completer_t *c)
+{
+    dptrarray_clear(c->ary);
+}
+
+void completer_push(completer_t *c, const char *string, bool delegate)
+{
+    dptrarray_push(c->ary, (void *) string);
+}
+
+static int strcmpp(const void *p1, const void *p2, void *UNUSED(arg))
+{
+    return strcmp(*(char * const *) p1, *(char * const *) p2);
+}
+
+static void completer_sort(completer_t *c)
+{
+    dptrarray_sort(c->ary, strcmpp, NULL);
+}
+
+static void completer_destroy(completer_t *c)
+{
+    dptrarray_destroy(c->ary);
+    free(c);
+}
+
+static void completer_to_iterator(Iterator *it, completer_t *c)
+{
+    return dptrarray_to_iterator(it, c->ary);
+}
+
+static size_t completer_length(completer_t *c)
+{
+    return dptrarray_length(c->ary);
+}
+
+static const char *completer_at(completer_t *c, size_t offset)
+{
+    return dptrarray_at_unsafe(c->ary, offset, const char);
+}
 
 #define CREATE_ARG(node, arg_type, string_or_hint) \
     do { \
@@ -71,6 +138,7 @@ graph_t *graph_new(void)
     graph_t *g;
 
     g = mem_new(*g);
+    g->possibilities = completer_new();
     CREATE_ARG(g->end, ARG_TYPE_END, "(END)");
     g->roots = hashtable_ascii_cs_new(NULL, NULL, graph_node_destroy);
     g->nodes = hashtable_new(value_hash, value_equal, NULL, NULL, graph_node_destroy);
@@ -78,10 +146,10 @@ graph_t *graph_new(void)
     return g;
 }
 
-static bool complete_literal(void *UNUSED(parsed_arguments), const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *data)
+static bool complete_literal(void *UNUSED(parsed_arguments), const char *current_argument, size_t current_argument_len, completer_t *possibilities, void *data)
 {
     if (0 == strncmp(current_argument, (const char *) data, current_argument_len)) {
-        dptrarray_push(possibilities, (void *) data);
+        completer_push(possibilities, (void *) data, FALSE);
     }
 
     return TRUE;
@@ -119,13 +187,13 @@ argument_t *argument_create_relevant_literal(size_t offset, const char *string, 
     return node;
 }
 
-static bool complete_choices(void *UNUSED(parsed_arguments), const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *data)
+static bool complete_choices(void *UNUSED(parsed_arguments), const char *current_argument, size_t current_argument_len, completer_t *possibilities, void *data)
 {
     const char * const *v;
 
     for (v = (const char * const *) data; NULL != *v; v++) {
         if (0 == strncmp(current_argument, *v, current_argument_len)) {
-            dptrarray_push(possibilities, (void *) *v);
+            completer_push(possibilities, *v, FALSE);
         }
     }
 
@@ -200,6 +268,7 @@ void graph_destroy(graph_t *g)
 
     hashtable_destroy(g->roots);
     hashtable_destroy(g->nodes);
+    completer_destroy(g->possibilities);
     free(g);
 }
 
@@ -520,16 +589,10 @@ static void traverse_graph_node(graph_node_t *node, int depth, bool indent)
 typedef struct {
     graph_t *graph;
     Tokenizer *tokenizer;
-    DPtrArray *possibilities;
 } editline_data_t;
 /* </TODO: DRY> */
 
-static int strcmpp(const void *p1, const void *p2, void *UNUSED(arg))
-{
-    return strcmp(*(char * const *) p1, *(char * const *) p2);
-}
-
-bool complete_from_statement(void *UNUSED(parsed_arguments), const char *current_argument, size_t UNUSED(current_argument_len), DPtrArray *possibilities, void *data)
+bool complete_from_statement(void *UNUSED(parsed_arguments), const char *current_argument, size_t UNUSED(current_argument_len), completer_t *possibilities, void *data)
 {
     char *v;
     Iterator it;
@@ -541,14 +604,14 @@ bool complete_from_statement(void *UNUSED(parsed_arguments), const char *current
     statement_to_iterator(&it, stmt, &v); // TODO: bind only current_argument_len first characters of current_argument?
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
-        dptrarray_push(possibilities, v); // TODO: values need to be freed
+        completer_push(possibilities, v, TRUE); // TODO: values need to be freed
     }
     iterator_close(&it);
 
     return TRUE;
 }
 
-bool complete_from_hashtable_keys(void *UNUSED(parsed_arguments), const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *data)
+bool complete_from_hashtable_keys(void *UNUSED(parsed_arguments), const char *current_argument, size_t current_argument_len, completer_t *possibilities, void *data)
 {
     Iterator it;
 
@@ -559,7 +622,7 @@ bool complete_from_hashtable_keys(void *UNUSED(parsed_arguments), const char *cu
 
         iterator_current(&it, &k);
         if (0 == strncmp(current_argument, (const char *) k, current_argument_len)) {
-            dptrarray_push(possibilities, k);
+            completer_push(possibilities, k, FALSE);
         }
     }
     iterator_close(&it);
@@ -843,7 +906,7 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
         return res;
     }
     tok_reset(client_data->tokenizer);
-    dptrarray_clear(client_data->possibilities);
+    completer_clear(client_data->graph->possibilities);
     if (-1 == tok_line(client_data->tokenizer, li, &argc, &argv, &cursorc, &cursoro)) { // TODO: handle cases tok_line returns value > 0
         return res;
     } else {
@@ -856,12 +919,10 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
 
             hashtable_to_iterator(&it, client_data->graph->roots);
             for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-                argument_t *arg;
-
                 arg = iterator_current(&it, NULL);
                 assert(ARG_TYPE_LITERAL == arg->type);
                 if (0 == strncmp(arg->string, argv[0], cursoro)) {
-                    dptrarray_push(client_data->possibilities, (void *) arg->string);
+                    completer_push(client_data->graph->possibilities, (void *) arg->string, FALSE);
                 }
             }
             iterator_close(&it);
@@ -894,19 +955,19 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
 
                         child = dptrarray_at_unsafe(arg->children, i, graph_node_t);
                         if (NULL != child->complete) {
-                            child->complete((void *) arguments, NULL == argv[cursorc] ? "" : argv[cursorc], cursoro, client_data->possibilities, child->completion_data);
+                            child->complete((void *) arguments, NULL == argv[cursorc] ? "" : argv[cursorc], cursoro, client_data->graph->possibilities, child->completion_data);
                         }
                     }
                 }
             }
         }
     }
-    switch (dptrarray_length(client_data->possibilities)) {
+    switch (completer_length(client_data->graph->possibilities)) {
         case 0:
             res = CC_ERROR;
             break;
         case 1:
-            if (-1 == el_insertstr(el, dptrarray_at_unsafe(client_data->possibilities, 0, const char) + cursoro)) {
+            if (-1 == el_insertstr(el, completer_at(client_data->graph->possibilities, 0) + cursoro)) {
                 res = CC_ERROR;
             } else {
                 res = CC_REFRESH;
@@ -931,11 +992,11 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
             puts("");
             *prefix = '\0';
             prefix_len = 0;
-            dptrarray_sort(client_data->possibilities, strcmpp, NULL);
-            dptrarray_to_iterator(&it, client_data->possibilities);
+            completer_sort(client_data->graph->possibilities);
+            completer_to_iterator(&it, client_data->graph->possibilities);
 #if 1
             iterator_first(&it);
-            v = iterator_current(&it, NULL); // this is safe because if we are here, we know client_data->possibilities has at least 2 entries
+            v = iterator_current(&it, NULL); // this is safe because if we are here, we know client_data->graph->possibilities has at least 2 entries
             prefix_len = strlen(v);
             strncpy(prefix, v, ARRAY_SIZE(prefix));
             do {
@@ -967,7 +1028,7 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
     return res;
 }
 
-command_status_t graph_run_command(graph_t *g, int args_count, const char **args, const main_options_t *mainopts, error_t **error)
+command_status_t graph_dispatch_command(graph_t *g, int args_count, const char **args, const main_options_t *mainopts, error_t **error)
 {
     char arguments[8192];
     command_status_t ret;

@@ -325,7 +325,7 @@ static command_status_t image_list(COMMAND_ARGS) // images?
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static bool complete_projects(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *UNUSED(data))
+static bool complete_projects(void *parsed_arguments, const char *current_argument, size_t current_argument_len, completer_t *possibilities, void *UNUSED(data))
 {
     cloud_set_t *cs;
 

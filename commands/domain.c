@@ -846,7 +846,7 @@ static command_status_t dnssec_enable_disable(COMMAND_ARGS)
     return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static bool complete_domains(void *UNUSED(parsed_arguments), const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *UNUSED(data))
+static bool complete_domains(void *UNUSED(parsed_arguments), const char *current_argument, size_t current_argument_len, completer_t *possibilities, void *UNUSED(data))
 {
     char *v;
     Iterator it;
@@ -855,14 +855,14 @@ static bool complete_domains(void *UNUSED(parsed_arguments), const char *current
     statement_to_iterator(&it, &statements[STMT_DOMAIN_COMPLETION], &v); // TODO: bind only current_argument_len first characters of current_argument?
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
-        dptrarray_push(possibilities, v); // TODO: values need to be freed
+        completer_push(possibilities, v, TRUE);
     }
     iterator_close(&it);
 
     return TRUE;
 }
 
-static bool complete_records(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *UNUSED(data))
+static bool complete_records(void *parsed_arguments, const char *current_argument, size_t current_argument_len, completer_t *possibilities, void *UNUSED(data))
 {
     domain_t *d;
     bool request_success;
@@ -879,7 +879,7 @@ static bool complete_records(void *parsed_arguments, const char *current_argumen
 
             r = iterator_current(&it, NULL);
             if (0 == strncmp(r->name, current_argument, current_argument_len)) {
-                dptrarray_push(possibilities, (void *) r->name);
+                completer_push(possibilities, r->name, FALSE);
             }
         }
         iterator_close(&it);

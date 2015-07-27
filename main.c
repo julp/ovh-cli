@@ -15,7 +15,6 @@
 typedef struct {
     graph_t *graph;
     Tokenizer *tokenizer;
-    DPtrArray *possibilities;
 } editline_data_t;
 
 extern module_t home_module;
@@ -515,7 +514,6 @@ int main(int argc, char **argv)
         hist = history_init();
         client_data.graph = g;
         client_data.tokenizer = tok_init(NULL);
-        client_data.possibilities = dptrarray_new(NULL, NULL, NULL);
         history(hist, &ev, H_SETSIZE, 100);
         history(hist, &ev, H_SETUNIQUE, 1);
         history(hist, &ev, H_LOAD, history_path);
@@ -536,7 +534,7 @@ int main(int argc, char **argv)
             }
             if (convert_string_local_to_utf8(line, count, &utf8_line, NULL, &error)) {
                 args_len = str_split(utf8_line, client_data.tokenizer, &args);
-                ret = graph_run_command(g, args_len, (const char **) args, (const main_options_t *) &mainopts, &error);
+                ret = graph_dispatch_command(g, args_len, (const char **) args, (const main_options_t *) &mainopts, &error);
                 convert_string_free(line, &utf8_line);
 #if WITHOUT_LIBEDIT_TOKENIZER
                 free(args[0]);
@@ -551,7 +549,6 @@ int main(int argc, char **argv)
         history(hist, &ev, H_SAVE, history_path);
         history_end(hist);
         tok_end(client_data.tokenizer);
-        dptrarray_destroy(client_data.possibilities);
         el_end(el);
         puts("");
     } else {
@@ -560,7 +557,7 @@ int main(int argc, char **argv)
         argc -= optind;
         argv += optind;
         convert_array_local_to_utf8(argc, argv, &utf8_argv, &error);
-        ret = graph_run_command(g, argc, (const char **) utf8_argv, (const main_options_t *) &mainopts, &error);
+        ret = graph_dispatch_command(g, argc, (const char **) utf8_argv, (const main_options_t *) &mainopts, &error);
         print_error(error);
         convert_array_free(argc, argv, utf8_argv);
     }

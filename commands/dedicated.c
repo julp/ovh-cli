@@ -827,7 +827,7 @@ static command_status_t dedicated_mrtg(COMMAND_ARGS)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static bool complete_servers(void *UNUSED(parsed_arguments), const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *UNUSED(data))
+static bool complete_servers(void *UNUSED(parsed_arguments), const char *current_argument, size_t current_argument_len, completer_t *possibilities, void *UNUSED(data))
 {
     char *v;
     Iterator it;
@@ -836,14 +836,14 @@ static bool complete_servers(void *UNUSED(parsed_arguments), const char *current
     statement_to_iterator(&it, &statements[STMT_DEDICATED_COMPLETION], &v); // TODO: bind only current_argument_len first characters of current_argument?
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
-        dptrarray_push(possibilities, v); // TODO: values need to be freed
+        completer_push(possibilities, v, TRUE);
     }
     iterator_close(&it);
 
     return TRUE;
 }
 
-static bool complete_boots(void *parsed_arguments, const char *current_argument, size_t current_argument_len, DPtrArray *possibilities, void *UNUSED(data))
+static bool complete_boots(void *parsed_arguments, const char *current_argument, size_t current_argument_len, completer_t *possibilities, void *UNUSED(data))
 {
     char *v;
     Iterator it;
@@ -855,7 +855,7 @@ static bool complete_boots(void *parsed_arguments, const char *current_argument,
     statement_to_iterator(&it, &statements[STMT_BOOT_COMPLETION], &v); // TODO: bind only current_argument_len first characters of current_argument?
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
-        dptrarray_push(possibilities, v); // TODO: values need to be freed
+        completer_push(possibilities, v, TRUE);
     }
     iterator_close(&it);
 
