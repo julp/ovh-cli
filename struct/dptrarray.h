@@ -14,8 +14,6 @@
     DtorFunc dtor_func;
 } DPtrArray;
 
-typedef int (*CmpFuncArg)(const void *, const void *, void *);
-
 # define dptrarray_at_unsafe(/*DPtrArray **/ da, /*uint*/ offset, T) \
     ((T *) ((da)->data)[(offset)])
 
