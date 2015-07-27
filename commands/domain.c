@@ -724,72 +724,83 @@ static command_status_t dnssec_enable_disable(COMMAND_ARGS)
 
 static void domain_regcomm(graph_t *g)
 {
-    argument_t
-        *arg_ttl,
-        *arg_name,
-        *arg_domain,
-        *arg_record, // called subdomain by OVH
-        *arg_type,
-        *arg_value, // called target by OVH
-        *arg_dnssec_on_off
-    ;
-    argument_t *lit_ttl, *lit_name, *lit_target;
-    argument_t *lit_dnssec, *lit_dnssec_status;
-    argument_t *lit_domain, *lit_domain_list, *lit_domain_check, *lit_domain_refresh, *lit_domain_export, *lit_domain_nocache;
-    argument_t *lit_record, *lit_record_list, *lit_record_add, *lit_record_delete, *lit_record_update, /**lit_record_type, */*lit_record_nocache;
-    argument_t *lit_record_list_type, *lit_record_add_type;
+    argument_t *lit_domain;
+    argument_t *arg_domain;
 
-    lit_ttl = argument_create_literal("ttl", NULL);
-    lit_name = argument_create_literal("name", NULL);
-    lit_target = argument_create_literal("target", NULL);
-    // domain ...
     lit_domain = argument_create_literal("domain", NULL);
-    lit_domain_list = argument_create_literal("list", domain_list);
-    lit_domain_check = argument_create_literal("check", domain_check);
-    lit_domain_export = argument_create_literal("export", domain_export);
-    lit_domain_refresh = argument_create_literal("refresh", domain_refresh);
-    lit_domain_nocache = argument_create_relevant_literal(offsetof(domain_record_argument_t, nocache), "nocache", NULL);
-    // domain X dnssec ...
-    lit_dnssec = argument_create_literal("dnssec", NULL);
-    lit_dnssec_status = argument_create_literal("status", dnssec_status);
-    // domain X record ...
-    lit_record = argument_create_literal("record", NULL);
-    lit_record_list = argument_create_literal("list", record_list);
-    lit_record_add = argument_create_literal("add", record_add);
-    lit_record_delete = argument_create_literal("delete", record_delete);
-    lit_record_update = argument_create_literal("update", record_update);
-//     lit_record_type = argument_create_literal("type", NULL);
-    lit_record_add_type = argument_create_literal("type", NULL);
-    lit_record_list_type = argument_create_literal("type", NULL);
-    lit_record_nocache = argument_create_relevant_literal(offsetof(domain_record_argument_t, nocache), "nocache", NULL);
-
-    arg_ttl = argument_create_uint(offsetof(domain_record_argument_t, ttl), "<ttl>");
     arg_domain = argument_create_string(offsetof(domain_record_argument_t, domain), "<domain>", complete_domains, NULL);
-    arg_record = argument_create_string(offsetof(domain_record_argument_t, record), "<record>", complete_records, NULL);
-    arg_type = argument_create_choices(offsetof(domain_record_argument_t, type), "<type>",  domain_record_types);
-    arg_name = argument_create_string(offsetof(domain_record_argument_t, name), "<name>", NULL, NULL);
-    arg_value = argument_create_string(offsetof(domain_record_argument_t, value), "<value>", NULL, NULL);
-    arg_dnssec_on_off = argument_create_choices_disable_enable(offsetof(domain_record_argument_t, on_off), dnssec_enable_disable);
 
     // domain ...
-    graph_create_full_path(g, lit_domain, lit_domain_list, NULL);
-    graph_create_full_path(g, lit_domain, lit_domain_check, NULL);
-    graph_create_path(g, lit_domain_list, NULL, lit_domain_nocache, NULL);
-    graph_create_full_path(g, lit_domain, arg_domain, lit_domain_export, NULL);
-    graph_create_full_path(g, lit_domain, arg_domain, lit_domain_refresh, NULL);
-    // domain X dnssec ...
-    graph_create_full_path(g, lit_domain, arg_domain, lit_dnssec, lit_dnssec_status, NULL);
-    graph_create_full_path(g, lit_domain, arg_domain, lit_dnssec, arg_dnssec_on_off, NULL);
-    // domain X record ...
-    graph_create_full_path(g, lit_domain, arg_domain, lit_record, lit_record_list, NULL);
-    graph_create_all_path(g, lit_record_list, NULL, 1, lit_record_nocache, 2, /*lit_record_type*/lit_record_list_type, arg_type, 0);
-    // needs 2 distinct arg_type: 1 for record add command and 1 for record list?
-    graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_add, arg_value, /*lit_record_type*/lit_record_add_type, arg_type, NULL);
-    graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_record_delete, NULL);
+    {
+        argument_t *lit_list, *lit_check, *lit_refresh, *lit_export, *lit_nocache;
 
-//     graph_create_path(g, /*lit_domain*/arg_domain, lit_record_update, /*arg_domain, */lit_record, arg_record, NULL);
-    graph_create_path(g, arg_record, lit_record_update, NULL);
-    graph_create_all_path(g, lit_record_update, NULL, 2, lit_name, arg_name, 2, lit_target, arg_value, 2, lit_ttl, arg_ttl, 0);
+        lit_list = argument_create_literal("list", domain_list);
+        lit_check = argument_create_literal("check", domain_check);
+        lit_export = argument_create_literal("export", domain_export);
+        lit_refresh = argument_create_literal("refresh", domain_refresh);
+        lit_nocache = argument_create_relevant_literal(offsetof(domain_record_argument_t, nocache), "nocache", NULL);
+
+        graph_create_full_path(g, lit_domain, lit_list, NULL);
+        graph_create_full_path(g, lit_domain, lit_check, NULL);
+        graph_create_path(g, lit_list, NULL, lit_nocache, NULL);
+        graph_create_full_path(g, lit_domain, arg_domain, lit_export, NULL);
+        graph_create_full_path(g, lit_domain, arg_domain, lit_refresh, NULL);
+    }
+    // domain X dnssec ...
+    {
+        argument_t *arg_dnssec_on_off;
+        argument_t *lit_dnssec, *lit_status;
+
+        lit_dnssec = argument_create_literal("dnssec", NULL);
+        lit_status = argument_create_literal("status", dnssec_status);
+
+        arg_dnssec_on_off = argument_create_choices_disable_enable(offsetof(domain_record_argument_t, on_off), dnssec_enable_disable);
+
+        graph_create_full_path(g, lit_domain, arg_domain, lit_dnssec, lit_status, NULL);
+        graph_create_full_path(g, lit_domain, arg_domain, lit_dnssec, arg_dnssec_on_off, NULL);
+    }
+    // domain X record ...
+    {
+        argument_t
+            *arg_ttl,
+            *arg_name,
+            *arg_record, // called subdomain by OVH
+            *arg_type,
+            *arg_value // called target by OVH
+        ;
+        argument_t *lit_ttl, *lit_name, *lit_target;
+        argument_t *lit_record, *lit_list, *lit_add, *lit_delete, *lit_update, /**lit_type, */*lit_nocache;
+        argument_t *lit_list_type, *lit_add_type;
+
+        lit_ttl = argument_create_literal("ttl", NULL);
+        lit_name = argument_create_literal("name", NULL);
+        lit_target = argument_create_literal("target", NULL);
+        lit_record = argument_create_literal("record", NULL);
+        lit_list = argument_create_literal("list", record_list);
+        lit_add = argument_create_literal("add", record_add);
+        lit_delete = argument_create_literal("delete", record_delete);
+        lit_update = argument_create_literal("update", record_update);
+//         lit_type = argument_create_literal("type", NULL);
+        lit_add_type = argument_create_literal("type", NULL);
+        lit_list_type = argument_create_literal("type", NULL);
+        lit_nocache = argument_create_relevant_literal(offsetof(domain_record_argument_t, nocache), "nocache", NULL);
+
+        arg_ttl = argument_create_uint(offsetof(domain_record_argument_t, ttl), "<ttl>");
+        arg_record = argument_create_string(offsetof(domain_record_argument_t, record), "<record>", complete_records, NULL);
+        arg_type = argument_create_choices(offsetof(domain_record_argument_t, type), "<type>",  domain_record_types);
+        arg_name = argument_create_string(offsetof(domain_record_argument_t, name), "<name>", NULL, NULL);
+        arg_value = argument_create_string(offsetof(domain_record_argument_t, value), "<value>", NULL, NULL);
+
+        graph_create_full_path(g, lit_domain, arg_domain, lit_record, lit_list, NULL);
+        graph_create_all_path(g, lit_list, NULL, 1, lit_nocache, 2, /*lit_type*/lit_list_type, arg_type, 0);
+        // needs 2 distinct arg_type: 1 for record add command and 1 for record list?
+        graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_add, arg_value, /*lit_type*/lit_add_type, arg_type, NULL);
+        graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_delete, NULL);
+
+//         graph_create_path(g, /*lit_domain*/arg_domain, lit_update, /*arg_domain, */lit_record, arg_record, NULL);
+        graph_create_path(g, arg_record, lit_update, NULL);
+        graph_create_all_path(g, lit_update, NULL, 2, lit_name, arg_name, 2, lit_target, arg_value, 2, lit_ttl, arg_ttl, 0);
+    }
 }
 
 static void domain_register_rules(json_value_t rules, bool ro)
