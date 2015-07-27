@@ -28,11 +28,11 @@ extern module_t table_module;
 extern module_t api_module;
 extern module_t base_module;
 extern module_t account_module;
-// ---
 #ifdef WITH_NLS
 extern module_t nls_module;
 #endif /* WITH_NLS */
 #ifdef WITH_ME_MODULE
+// ---
 extern module_t me_module;
 #endif /* WITH_ME_MODULE */
 #ifdef WITH_KEY_MODULE
@@ -252,14 +252,14 @@ static const module_t */*builtin_*/modules[] = {
     &curl_module,    // R-dep: modules/api.c
     &libxml_module,  // R-dep: modules/api.c
     &conv_module,    // R-dep: main.c (argv convertions), modules/tables.c
-    &table_module,   // R-dep: most of commands/*.c
     &account_module, // R-dep: most of commands/*.c
     &api_module,     // R-dep: most of commands/*.c
     &base_module,    // R-dep: none
-    // ---
 #ifdef WITH_NLS
-    &nls_module,     // R-dep: modules/table.c for "test constructor"
+    &nls_module,     // R-dep: modules/table.c
 #endif /* WITH_NLS */
+    &table_module,   // R-dep: most of commands/*.c
+    // ---
 #ifdef WITH_ME_MODULE
     &me_module,
 #endif /* WITH_ME_MODULE */
