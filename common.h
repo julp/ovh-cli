@@ -139,6 +139,7 @@ typedef enum {
 # endif /* WITH_NLS */
 
 typedef int (*CmpFunc)(const void *, const void *);
+typedef int (*CmpFuncArg)(const void *, const void *, void *);
 // typedef bool (*EqualFunc)(const void *, const void *);
 typedef void (*DtorFunc)(void *);
 typedef void *(*DupFunc)(const void *);
