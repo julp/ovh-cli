@@ -191,7 +191,7 @@ static const char *mrtg_types[] = {
 };
 
 static model_t server_model = {
-    sizeof(server_t),
+    sizeof(server_t), NULL, NULL,
     (const model_field_t []) {
         { "id",               MODEL_TYPE_INT,    offsetof(server_t, serverId),        0, NULL },
         { "name",             MODEL_TYPE_STRING, offsetof(server_t, name),            0, NULL },
@@ -219,7 +219,7 @@ static model_t server_model = {
 };
 
 static model_t boot_model = {
-    sizeof(boot_t),
+    sizeof(boot_t), NULL, NULL,
     (const model_field_t []) {
         { "id",          MODEL_TYPE_INT,    offsetof(boot_t, id),          0, NULL },
         { "bootType",    MODEL_TYPE_ENUM,   offsetof(boot_t, type),        0, boot_types },

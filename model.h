@@ -22,6 +22,8 @@ typedef struct {
 
 typedef struct {
     size_t size;
+    const char *(*to_s)(void *); // ou simplement size_t vers offsetof du champ à utiliser ?
+    const char *(*to_name)(void *); // ou on copie la chaîne à la suite du buffer (String?) ? - void (*to_name)(void *, String *)
     const model_field_t *fields;
 } model_t;
 

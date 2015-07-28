@@ -132,7 +132,7 @@ static const char * const name_server_types[] = {
 };
 
 static model_t domain_model = {
-    sizeof(domain_t),
+    sizeof(domain_t), NULL, NULL,
     (const model_field_t []) {
         { "name",               MODEL_TYPE_STRING, offsetof(domain_t, name),               0, NULL },
         { "hasDnsAnycast",      MODEL_TYPE_BOOL,   offsetof(domain_t, hasDnsAnycast),      0, NULL },

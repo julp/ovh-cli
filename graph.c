@@ -45,8 +45,28 @@ struct graph_t {
     completer_t *possibilities;
 };
 
+static const char *argument_to_s(void *ptr)
+{
+    argument_t *arg;
+
+    assert(NULL != ptr);
+    arg = (argument_t *) ptr;
+
+    return NULL == arg->description ? NULL : strdup(arg->description);
+}
+
+static const char *argument_to_name(void *ptr)
+{
+    argument_t *arg;
+
+    assert(NULL != ptr);
+    arg = (argument_t *) ptr;
+
+    return strdup(arg->string);
+}
+
 static model_t argument_model = { /* dummy model */
-    0/*sizeof(argument_t)*/,
+    0/*sizeof(argument_t)*/, argument_to_s, argument_to_name,
 #if 0
     (const model_field_t []) {
         MODEL_FIELD_SENTINEL
@@ -66,8 +86,10 @@ struct completer_t {
 };
 
 typedef struct {
-    const char *string;
+    void *data;
     bool delegated;
+    const char *name;
+    const model_t *model;
 } possibility_t;
 
 static void possibility_destroy(void *data)
@@ -77,8 +99,9 @@ static void possibility_destroy(void *data)
     assert(NULL != data);
     p = (possibility_t *) data;
     if (p->delegated) {
-        free((void *) p->string);
+        free((void *) p->name);
     }
+    free(p);
 }
 
 static completer_t *completer_new(void)
@@ -86,7 +109,7 @@ static completer_t *completer_new(void)
     completer_t *c;
 
     c = mem_new(*c);
-    c->ary = dptrarray_new(NULL, NULL, NULL);
+    c->ary = dptrarray_new(NULL, possibility_destroy, NULL);
 
     return c;
 }
@@ -96,24 +119,44 @@ static void completer_clear(completer_t *c)
     dptrarray_clear(c->ary);
 }
 
-void completer_push(completer_t *c, const char *string, bool UNUSED(delegate))
+// NOTE: for compatibility
+void completer_push(completer_t *c, const char *string, bool delegate)
 {
-    dptrarray_push(c->ary, (void *) string);
+    possibility_t *p;
+
+    p = mem_new(*p);
+    p->data = NULL;
+    p->model = NULL;
+    p->delegated = delegate;
+    p->name = string;
+    dptrarray_push(c->ary, (void *) p);
 }
 
-void completer_push_modelized(completer_t *c, model_t model, void *ptr)
+void completer_push_modelized(completer_t *c, const model_t *model, void *ptr)
 {
-    // TODO
+    possibility_t *p;
+
+    p = mem_new(*p);
+    p->data = ptr;
+    p->model = model;
+    p->delegated = TRUE;
+    p->name = model->to_name(ptr);
+    dptrarray_push(c->ary, (void *) p);
 }
 
-static int strcmpp(const void *p1, const void *p2, void *UNUSED(arg))
+static int possibility_cmpp(const void *a, const void *b, void *UNUSED(arg))
 {
-    return strcmp(*(char * const *) p1, *(char * const *) p2);
+    const possibility_t *p1, *p2;
+
+    p1 = *(possibility_t **) a;
+    p2 = *(possibility_t **) b;
+
+    return strcmp(p1->name, p2->name);
 }
 
 static void completer_sort(completer_t *c)
 {
-    dptrarray_sort(c->ary, strcmpp, NULL);
+    dptrarray_sort(c->ary, possibility_cmpp, NULL);
 }
 
 static void completer_destroy(completer_t *c)
@@ -132,9 +175,9 @@ static size_t completer_length(completer_t *c)
     return dptrarray_length(c->ary);
 }
 
-static const char *completer_at(completer_t *c, size_t offset)
+static const possibility_t *completer_at(completer_t *c, size_t offset)
 {
-    return dptrarray_at_unsafe(c->ary, offset, const char);
+    return dptrarray_at_unsafe(c->ary, offset, possibility_t);
 }
 
 #define CREATE_ARG(node, arg_type, string_or_hint) \
@@ -177,8 +220,17 @@ graph_t *graph_new(void)
 
 static bool complete_literal(void *UNUSED(parsed_arguments), const char *current_argument, size_t current_argument_len, completer_t *possibilities, void *data)
 {
+#ifdef OLD_DUMMY_COMPLETION
     if (0 == strncmp(current_argument, (const char *) data, current_argument_len)) {
+
         completer_push(possibilities, (void *) data, FALSE);
+#else
+    argument_t *arg;
+
+    arg = (argument_t *) data;
+    if (0 == strncmp(current_argument, arg->string, current_argument_len)) {
+        completer_push_modelized(possibilities, &argument_model, arg);
+#endif
     }
 
     return TRUE;
@@ -200,7 +252,11 @@ argument_t *argument_create_literal(const char *string, handle_t handle, const c
 
     CREATE_ARG(node, ARG_TYPE_LITERAL, string);
     node->handle = handle;
+#ifdef OLD_DUMMY_COMPLETION
     node->completion_data = (void *) string;
+#else
+    node->completion_data = node;
+#endif
     node->complete = complete_literal;
     node->description = description;
 
@@ -697,7 +753,7 @@ static bool argument_choices_match(argument_t *arg, const char *value)
     return FALSE;
 }
 
-static bool argument_number_match(argument_t *arg, const char *value)
+static bool argument_number_match(argument_t *UNUSED(arg), const char *value)
 {
     bool match;
 
@@ -976,7 +1032,7 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
                 arg = iterator_current(&it, NULL);
                 assert(ARG_TYPE_LITERAL == arg->type);
                 if (0 == strncmp(arg->string, argv[0], cursoro)) {
-                    completer_push(client_data->graph->possibilities, (void *) arg->string, FALSE);
+                    completer_push_modelized(client_data->graph->possibilities, &argument_model, arg);
                 }
             }
             iterator_close(&it);
@@ -1021,45 +1077,60 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
             res = CC_ERROR;
             break;
         case 1:
-            if (-1 == el_insertstr(el, completer_at(client_data->graph->possibilities, 0) + cursoro)) {
+        {
+            const possibility_t *p;
+
+            p = completer_at(client_data->graph->possibilities, 0);
+            if (-1 == el_insertstr(el, p->name + cursoro)) {
                 res = CC_ERROR;
             } else {
                 res = CC_REFRESH;
             }
-#if TODO
-            if (FALSE) { // TODO: add space if more arguments are expected
+            // TODO: to be "smart", we should push argument_t *, the argument itself, instead of its values (const char *)
+            // it's only here (in these switch/cases) that we should expand it?
+            if (&argument_model == p->model && !graph_node_end_in_children((argument_t *) p->data)) { // TODO: better (add space if END is not the only child)?
                 if (-1 == el_insertstr(el, " ")) {
                     res = CC_ERROR;
                 } else {
                     res = CC_REFRESH;
                 }
             }
-#endif
             break;
+        }
         default:
         {
             Iterator it;
             char prefix[1024];
             size_t prefix_len;
-            const char *v;
+            const possibility_t *p;
 
-            puts("");
+            fputc('\n', stdout);
             *prefix = '\0';
             prefix_len = 0;
             completer_sort(client_data->graph->possibilities);
             completer_to_iterator(&it, client_data->graph->possibilities);
 #if 1
             iterator_first(&it);
-            v = iterator_current(&it, NULL); // this is safe because if we are here, we know client_data->graph->possibilities has at least 2 entries
-            prefix_len = strlen(v);
-            strncpy(prefix, v, ARRAY_SIZE(prefix));
+            p = iterator_current(&it, NULL); // this is safe because if we are here, we know client_data->graph->possibilities has at least 2 entries
+            prefix_len = strlen(p->name);
+            strncpy(prefix, p->name, ARRAY_SIZE(prefix));
             do {
                 fputc('\t', stdout);
-                v = iterator_current(&it, NULL);
+                p = iterator_current(&it, NULL);
                 if (0 != prefix_len) { // if there is no common prefix, don't continue to look for one
-                    prefix_len = longest_prefix(v, prefix);
+                    prefix_len = longest_prefix(p->name, prefix);
                 }
-                fputs(v, stdout);
+                fputs(p->name, stdout);
+                if (NULL != p->model) {
+                    const char *longdesc;
+
+                    longdesc = p->model->to_s(p->data);
+                    if (NULL != longdesc) {
+                        fputs(" - ", stdout);
+                        fputs(longdesc, stdout);
+                        free((void *) longdesc);
+                    }
+                }
                 fputc('\n', stdout);
                 iterator_next(&it);
             } while (iterator_is_valid(&it));
