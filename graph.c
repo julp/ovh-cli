@@ -42,6 +42,7 @@ struct graph_t {
     HashTable *roots;
     HashTable *nodes;
     graph_node_t *end;
+    DPtrArray *compargs;
     completer_t *possibilities;
 };
 
@@ -212,12 +213,14 @@ graph_t *graph_new(void)
     g = mem_new(*g);
     g->possibilities = completer_new();
     CREATE_ARG(g->end, ARG_TYPE_END, "(END)");
+    g->compargs = dptrarray_new(NULL, NULL, NULL);
     g->roots = hashtable_ascii_cs_new(NULL, NULL, graph_node_destroy);
     g->nodes = hashtable_new(value_hash, value_equal, NULL, NULL, graph_node_destroy);
 
     return g;
 }
 
+// #define OLD_DUMMY_COMPLETION 1
 static bool complete_literal(void *UNUSED(parsed_arguments), const char *current_argument, size_t current_argument_len, completer_t *possibilities, void *data)
 {
 #ifdef OLD_DUMMY_COMPLETION
@@ -757,7 +760,7 @@ static bool argument_number_match(argument_t *UNUSED(arg), const char *value)
 {
     bool match;
 
-    // ARG_TYPE_NUMBER acts as ^\d+$
+    // ARG_TYPE_NUMBER acts as ^\d+$ ; better to use strto* function? (overflow & co)
     for (match = '\0' != *value; match && '\0' != *value; value++) {
         match &= *value >= '0' && *value <= '9';
     }
@@ -1016,6 +1019,7 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
         return res;
     }
     tok_reset(client_data->tokenizer);
+    dptrarray_clear(client_data->graph->compargs);
     completer_clear(client_data->graph->possibilities);
     if (-1 == tok_line(client_data->tokenizer, li, &argc, &argv, &cursorc, &cursoro)) { // TODO: handle cases tok_line returns value > 0
         return res;
@@ -1032,6 +1036,7 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
                 arg = iterator_current(&it, NULL);
                 assert(ARG_TYPE_LITERAL == arg->type);
                 if (0 == strncmp(arg->string, argv[0], cursoro)) {
+                    dptrarray_push(client_data->graph->compargs, arg);
                     completer_push_modelized(client_data->graph->possibilities, &argument_model, arg);
                 }
             }
@@ -1065,7 +1070,13 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
 
                         child = dptrarray_at_unsafe(arg->children, i, graph_node_t);
                         if (NULL != child->complete) {
+                            size_t before;
+
+                            before = completer_length(client_data->graph->possibilities);
                             child->complete((void *) arguments, NULL == argv[cursorc] ? "" : argv[cursorc], cursoro, client_data->graph->possibilities, child->completion_data);
+                            if (before != completer_length(client_data->graph->possibilities)) {
+                                dptrarray_push(client_data->graph->compargs, child);
+                            }
                         }
                     }
                 }
@@ -1086,13 +1097,26 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
             } else {
                 res = CC_REFRESH;
             }
-            // TODO: to be "smart", we should push argument_t *, the argument itself, instead of its values (const char *)
-            // it's only here (in these switch/cases) that we should expand it?
-            if (&argument_model == p->model && !graph_node_end_in_children((argument_t *) p->data)) { // TODO: better (add space if END is not the only child)?
-                if (-1 == el_insertstr(el, " ")) {
-                    res = CC_ERROR;
-                } else {
-                    res = CC_REFRESH;
+//             if (&argument_model == p->model) {
+            if (1 == dptrarray_length(client_data->graph->compargs)) {
+                bool nospace;
+                argument_t *arg;
+
+//                 arg = (argument_t *) p->data;
+                arg = dptrarray_at_unsafe(client_data->graph->compargs, 0, argument_t);
+                nospace = 1 == dptrarray_length(arg->children);
+                if (nospace) {
+                    argument_t *child;
+
+                    child = dptrarray_at_unsafe(arg->children, 0, argument_t);
+                    nospace = ARG_TYPE_END == child->type;
+                }
+                if (!nospace) {
+                    if (-1 == el_insertstr(el, " ")) {
+                        res = CC_ERROR;
+                    } else {
+                        res = CC_REFRESH;
+                    }
                 }
             }
             break;
@@ -1113,7 +1137,7 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
             iterator_first(&it);
             p = iterator_current(&it, NULL); // this is safe because if we are here, we know client_data->graph->possibilities has at least 2 entries
             prefix_len = strlen(p->name);
-            strncpy(prefix, p->name, ARRAY_SIZE(prefix));
+            strlcpy(prefix, p->name, ARRAY_SIZE(prefix));
             do {
                 fputc('\t', stdout);
                 p = iterator_current(&it, NULL);
