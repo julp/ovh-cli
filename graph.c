@@ -26,14 +26,14 @@ typedef enum {
 // méthode toString pour intégrer un élément quelconque (record_t *, server_t *, ...) à la ligne de commande (ie le résultat de la complétion) ?
 // méthode toString pour représenter un élément quelconque (record_t *, server_t *, ...) parmi les propositions à faire à l'utilisateur ?
 struct argument_t {
-    size_t offset; // offsetof
-    argument_type_t type;
-    complete_t complete; // ARG_TYPE_STRING and ARG_TYPE_CHOICES specific
-    const char *string;
-    handle_t handle;
-    DPtrArray *children;
-    void *command_data; // data to run command
-    void *completion_data; // data for completion
+    size_t offset;         // result of offsetof, address to copy value of argument
+    argument_type_t type;  // one of the ARG_TYPE_* constant
+    complete_t complete;   // ARG_TYPE_STRING and ARG_TYPE_CHOICES specific
+    const char *string;    // a (short) string to represent the argument in help, eg: "help" (literal), "<on/off>" (limited choices), "<endpoint>" (string)
+    handle_t handle;       // the function to run
+    DPtrArray *children;   // dynamic array of possible children (arguments we can find next)
+    void *command_data;    // user data to run command
+    void *completion_data; // user data for completion
 //     graph_t *owner;
 };
 
@@ -615,7 +615,7 @@ bool complete_from_statement(void *UNUSED(parsed_arguments), const char *current
     statement_to_iterator(&it, stmt, &v); // TODO: bind only current_argument_len first characters of current_argument?
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
-        completer_push(possibilities, v, TRUE); // TODO: values need to be freed
+        completer_push(possibilities, v, TRUE);
     }
     iterator_close(&it);
 
@@ -642,11 +642,11 @@ bool complete_from_hashtable_keys(void *UNUSED(parsed_arguments), const char *cu
 }
 
 typedef struct {
-    const char *name;
+    const char *name; // unused
     bool (*matcher)(argument_t *, const char *); // exact match (use strcmp, not strncmp - this is not intended for completion)
 } argument_description_t;
 
-static bool agument_literal_match(argument_t *arg, const char *value)
+static bool argument_literal_match(argument_t *arg, const char *value)
 {
     return '\0' != *value && 0 == strcmp(arg->string, value);
 }
@@ -677,11 +677,11 @@ static bool argument_end_match(argument_t *UNUSED(arg), const char *UNUSED(value
 }
 
 static argument_description_t descriptions[] = {
-    [ ARG_TYPE_NUMBER ] = { "number", NULL },
-    [ ARG_TYPE_END ] = { "", argument_end_match },
-    [ ARG_TYPE_LITERAL ] = { "literal", agument_literal_match },
-    [ ARG_TYPE_CHOICES ] = { "choices", argument_choices_match },
-    [ ARG_TYPE_STRING ] = { "a free string", argument_string_match }
+    [ ARG_TYPE_END ]     = { "",              argument_end_match },
+    [ ARG_TYPE_NUMBER ]  = { "number",        NULL },
+    [ ARG_TYPE_LITERAL ] = { "literal",       argument_literal_match },
+    [ ARG_TYPE_CHOICES ] = { "choices",       argument_choices_match },
+    [ ARG_TYPE_STRING ]  = { "a free string", argument_string_match }
 };
 
 static graph_node_t *graph_node_find(graph_node_t *parent, const char *value)
