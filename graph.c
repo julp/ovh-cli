@@ -357,6 +357,7 @@ void graph_destroy(graph_t *g)
 
     hashtable_destroy(g->roots);
     hashtable_destroy(g->nodes);
+    dptrarray_destroy(g->compargs);
     completer_destroy(g->possibilities);
     free(g);
 }
