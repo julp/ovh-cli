@@ -6,14 +6,6 @@
 # include "model.h"
 # include "struct/iterator.h"
 
-typedef enum {
-    SQLITE_TYPE_BOOL,
-    SQLITE_TYPE_BOOLEAN = SQLITE_TYPE_BOOL,
-    SQLITE_TYPE_INT,
-    SQLITE_TYPE_STRING,
-    SQLITE_TYPE_IGNORE
-} sqlite_bind_type_t;
-
 typedef struct {
     int version;
     const char *statement;

@@ -90,12 +90,12 @@ typedef struct {
     char *os;
     int state;
     char *reverse;
-    int64_t serverId;
+    int serverId;
     bool monitoring;
     char *rack;
     char *rootDevice;
-    int64_t linkSpeed;
-    int64_t bootId;
+    int linkSpeed;
+    int bootId;
     time_t engagedUpTo;
     char *contactBilling;
     time_t expiration;
@@ -107,7 +107,7 @@ typedef struct {
 // describe a boot
 typedef struct {
     int type;
-    int64_t id;
+    int id;
     const char *kernel;
     const char *description;
 } boot_t;
@@ -119,8 +119,8 @@ typedef struct {
     char *boot_name;
     char *server_name;
     char *reverse;
-    int64_t mrtg_period;
-    int64_t mrtg_type;
+    int mrtg_period;
+    int mrtg_type;
 } dedicated_argument_t;
 
 // enums

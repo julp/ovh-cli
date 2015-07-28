@@ -7,6 +7,15 @@
 #include "modules/table.h"
 #include "modules/sqlite.h"
 
+typedef enum {
+    SQLITE_TYPE_BOOL,
+    SQLITE_TYPE_BOOLEAN = SQLITE_TYPE_BOOL,
+    SQLITE_TYPE_INT,
+    SQLITE_TYPE_INT64,
+    SQLITE_TYPE_STRING,
+    SQLITE_TYPE_IGNORE
+} sqlite_bind_type_t;
+
 typedef struct {
     sqlite_bind_type_t type;
     void *ptr;
@@ -118,6 +127,9 @@ static void statement_iterator_current(const void *collection, void **state, voi
                     *((bool *) sss->output_binds[i].ptr) = /*!!*/sqlite3_column_int64(stmt->prepared, i);
                     break;
                 case SQLITE_TYPE_INT:
+                    *((int *) sss->output_binds[i].ptr) = sqlite3_column_int(stmt->prepared, i);
+                    break;
+                case SQLITE_TYPE_INT64:
                     *((int64_t *) sss->output_binds[i].ptr) = sqlite3_column_int64(stmt->prepared, i);
                     break;
                 case SQLITE_TYPE_STRING:
@@ -188,7 +200,12 @@ void statement_to_iterator(Iterator *it, sqlite_statement_t *stmt, ...)
                     sss->output_binds[i].type = SQLITE_TYPE_BOOL;
                     break;
                 case 'i':
+                case 'e':
                     sss->output_binds[i].type = SQLITE_TYPE_INT;
+                    break;
+                case 'd':
+                case 't':
+                    sss->output_binds[i].type = SQLITE_TYPE_INT64;
                     break;
                 case 's':
                     sss->output_binds[i].type = SQLITE_TYPE_STRING;
@@ -235,9 +252,11 @@ static void _statement_model_set_output_bind(sqlite_statement_t *stmt, model_t m
                         break;
                     case MODEL_TYPE_INT:
                     case MODEL_TYPE_ENUM:
+                        *((int *) (ptr + f->offset)) = sqlite3_column_int(stmt->prepared, i);
+                        break;
                     case MODEL_TYPE_DATE:
                     case MODEL_TYPE_DATETIME:
-                        *((int64_t *) (ptr + f->offset)) = sqlite3_column_int64(stmt->prepared, i);
+                        *((time_t *) (ptr + f->offset)) = sqlite3_column_int64(stmt->prepared, i);
                         break;
                     case MODEL_TYPE_STRING:
                     {
@@ -457,7 +476,7 @@ void statement_bind(sqlite_statement_t *stmt, const bool *nulls, ...)
                 va_arg(ap, void *);
                 sqlite3_bind_null(stmt->prepared, p - stmt->inbinds + 1);
                 break;
-            case 'd':
+            case 'r':
             {
                 double v;
 
@@ -477,11 +496,23 @@ void statement_bind(sqlite_statement_t *stmt, const bool *nulls, ...)
                 }
                 break;
             }
+            case 'e':
             case 'i':
             {
-                int64_t v;
+                int v;
 
-                v = va_arg(ap, int64_t);
+                v = va_arg(ap, int);
+                if (dobind) {
+                    sqlite3_bind_int(stmt->prepared, p - stmt->inbinds + 1, v);
+                }
+                break;
+            }
+            case 'd':
+            case 't':
+            {
+                time_t v;
+
+                v = va_arg(ap, time_t);
                 if (dobind) {
                     sqlite3_bind_int64(stmt->prepared, p - stmt->inbinds + 1, v);
                 }
@@ -547,9 +578,11 @@ void statement_bind_from_model(sqlite_statement_t *stmt, model_t model, const bo
                         break;
                     case MODEL_TYPE_INT:
                     case MODEL_TYPE_ENUM:
+                        sqlite3_bind_int(stmt->prepared, paramno, *((int *) (ptr + f->offset)));
+                        break;
                     case MODEL_TYPE_DATE:
                     case MODEL_TYPE_DATETIME:
-                        sqlite3_bind_int64(stmt->prepared, paramno, *((int64_t *) (ptr + f->offset)));
+                        sqlite3_bind_int64(stmt->prepared, paramno, *((time_t *) (ptr + f->offset)));
                         break;
                     case MODEL_TYPE_STRING:
                         sqlite3_bind_text(stmt->prepared, paramno, *((char **) (ptr + f->offset)), -1, SQLITE_TRANSIENT);
@@ -599,11 +632,21 @@ bool statement_fetch(sqlite_statement_t *stmt, error_t **error, ...)
                         *v = /*!!*/sqlite3_column_int(stmt->prepared, p - stmt->outbinds);
                         break;
                     }
+                    case 'e':
                     case 'i':
                     {
-                        int64_t *v;
+                        int *v;
 
-                        v = va_arg(ap, int64_t *);
+                        v = va_arg(ap, int *);
+                        *v = sqlite3_column_int(stmt->prepared, p - stmt->outbinds);
+                        break;
+                    }
+                    case 'd':
+                    case 't':
+                    {
+                        time_t *v;
+
+                        v = va_arg(ap, time_t *);
                         *v = sqlite3_column_int64(stmt->prepared, p - stmt->outbinds);
                         break;
                     }

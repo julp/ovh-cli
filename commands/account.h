@@ -3,19 +3,19 @@
 # define ACCOUNT_H
 
 typedef struct {
-    int64_t id;
+    int id;
     bool isdefault;
     char *name;
     char *password;
     time_t expires_at;
     const char *consumer_key;
-    int64_t endpoint_id;
+    int endpoint_id;
 } account_t;
 
 typedef struct {
     char *key;
     char *secret;
-    int64_t endpoint_id;
+    int endpoint_id;
 } application_t;
 
 const account_t *current_account;
