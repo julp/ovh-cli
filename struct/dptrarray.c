@@ -163,7 +163,7 @@ void dptrarray_remove_range(DPtrArray *this, size_t from, size_t to) /* NONNULL(
             this->dtor_func(this->data[i]);
         }
     }
-    memmove(this->data + to + 1, this->data + from, (this->length - diff) * sizeof(*this->data));
+    memmove(this->data + from, this->data + to + 1, (this->length - diff) * sizeof(*this->data));
     this->length -= diff;
 }
 
