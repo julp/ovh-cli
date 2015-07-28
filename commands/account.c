@@ -677,23 +677,23 @@ static command_status_t export(COMMAND_ARGS)
 
 static void account_regcomm(graph_t *g)
 {
-    graph_create_full_path(g, argument_create_literal("export", export), NULL);
+    graph_create_full_path(g, argument_create_literal("export", export, _("export OVH accounts and applications in ovh-cli commands format")), NULL);
     // account ...
     {
         argument_t *arg_expires_in_at;
         argument_t *arg_account, *arg_password, *arg_consumer_key, *arg_expiration, *arg_endpoint;
         argument_t *lit_account, *lit_list, *lit_delete, *lit_add, *lit_update, *lit_switch, *lit_default, *lit_expires, *lit_password, *lit_key, *lit_endpoint;
 
-        lit_account = argument_create_literal("account", NULL);
-        lit_list = argument_create_literal("list", account_list);
-        lit_add = argument_create_literal("add", account_add);
-        lit_delete = argument_create_literal("delete", account_delete);
-        lit_default = argument_create_literal("default", account_default_set);
-        lit_switch = argument_create_literal("switch", account_switch);
-        lit_expires = argument_create_literal("expires", NULL);
-        lit_update = argument_create_literal("update", account_update);
-        lit_key = argument_create_literal("key", NULL);
-        lit_password = argument_create_literal("password", NULL);
+        lit_account = argument_create_literal("account", NULL, NULL);
+        lit_list = argument_create_literal("list", account_list, _("list registered accounts"));
+        lit_add = argument_create_literal("add", account_add, _("register a new OVH account"));
+        lit_delete = argument_create_literal("delete", account_delete, _("remove an OVH account"));
+        lit_default = argument_create_literal("default", account_default_set, _("set the default account"));
+        lit_switch = argument_create_literal("switch", account_switch, _("switch to another OVH account"));
+        lit_expires = argument_create_literal("expires", NULL, NULL);
+        lit_update = argument_create_literal("update", account_update, _("modify a previously registered OVH account"));
+        lit_key = argument_create_literal("key", NULL, NULL);
+        lit_password = argument_create_literal("password", NULL, NULL);
         lit_endpoint = argument_create_relevant_literal(offsetof(account_argument_t, endpoint_present), "endpoint", NULL);
 
         arg_password = argument_create_string(offsetof(account_argument_t, password), "<password>", NULL, NULL);
@@ -718,10 +718,10 @@ static void account_regcomm(graph_t *g)
         argument_t *arg_app_key, *arg_app_secret, *arg_endpoint;
         argument_t *lit_application, *lit_add, *lit_list, *lit_delete;
 
-        lit_application = argument_create_literal("application", NULL);
-        lit_add = argument_create_literal("add", application_add);
-        lit_list = argument_create_literal("list", application_list);
-        lit_delete = argument_create_literal("delete", application_delete);
+        lit_application = argument_create_literal("application", NULL, NULL);
+        lit_add = argument_create_literal("add", application_add, _("register a new OVH application"));
+        lit_list = argument_create_literal("list", application_list, _("list registered applications"));
+        lit_delete = argument_create_literal("delete", application_delete, _("remove an application"));
 
         arg_endpoint = argument_create_choices(offsetof(application_t, endpoint_id), "<endpoint>", endpoint_names);
         arg_app_key = argument_create_string(offsetof(application_t, key), "<key>", NULL, NULL);

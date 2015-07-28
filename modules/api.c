@@ -716,7 +716,7 @@ void api_regcomm(graph_t *g)
 {
     argument_t *lit_log, *arg_log_on_off;
 
-    lit_log = argument_create_literal("log", NULL);
+    lit_log = argument_create_literal("log", NULL, _("enable/disable logging of HTTP requests and responses to OVH API"));
     arg_log_on_off = argument_create_choices_off_on(offsetof(api_argument_t, on_off), log_on_off);
 
     graph_create_full_path(g, lit_log, arg_log_on_off, NULL);

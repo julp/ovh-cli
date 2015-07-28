@@ -26,14 +26,15 @@ typedef enum {
 // méthode toString pour intégrer un élément quelconque (record_t *, server_t *, ...) à la ligne de commande (ie le résultat de la complétion) ?
 // méthode toString pour représenter un élément quelconque (record_t *, server_t *, ...) parmi les propositions à faire à l'utilisateur ?
 struct argument_t {
-    size_t offset;         // result of offsetof, address to copy value of argument
-    argument_type_t type;  // one of the ARG_TYPE_* constant
-    complete_t complete;   // ARG_TYPE_STRING and ARG_TYPE_CHOICES specific
-    const char *string;    // a (short) string to represent the argument in help, eg: "help" (literal), "<on/off>" (limited choices), "<endpoint>" (string)
-    handle_t handle;       // the function to run
-    DPtrArray *children;   // dynamic array of possible children (arguments we can find next)
-    void *command_data;    // user data to run command
-    void *completion_data; // user data for completion
+    size_t offset;           // result of offsetof, address to copy value of argument
+    argument_type_t type;    // one of the ARG_TYPE_* constant
+    complete_t complete;     // ARG_TYPE_STRING and ARG_TYPE_CHOICES specific
+    const char *string;      // a (short) string to represent the argument in help, eg: "help" (literal), "<on/off>" (limited choices), "<endpoint>" (string)
+    handle_t handle;         // the function to run
+    DPtrArray *children;     // dynamic array of possible children (arguments we can find next)
+    void *command_data;      // user data to run command
+    void *completion_data;   // user data for completion
+    const char *description; // short description of command (only for ARG_TYPE_STRING)
 //     graph_t *owner;
 };
 
@@ -42,6 +43,17 @@ struct graph_t {
     HashTable *nodes;
     graph_node_t *end;
     completer_t *possibilities;
+};
+
+static model_t argument_model = { /* dummy model */
+    0/*sizeof(argument_t)*/,
+#if 0
+    (const model_field_t []) {
+        MODEL_FIELD_SENTINEL
+    }
+#else
+    NULL
+#endif
 };
 
 /**
@@ -89,6 +101,11 @@ void completer_push(completer_t *c, const char *string, bool UNUSED(delegate))
     dptrarray_push(c->ary, (void *) string);
 }
 
+void completer_push_modelized(completer_t *c, model_t model, void *ptr)
+{
+    // TODO
+}
+
 static int strcmpp(const void *p1, const void *p2, void *UNUSED(arg))
 {
     return strcmp(*(char * const *) p1, *(char * const *) p2);
@@ -131,6 +148,7 @@ static const char *completer_at(completer_t *c, size_t offset)
         node->offset = (size_t) -1; \
         node->string = string_or_hint; \
         node->children = NULL; \
+        node->description = NULL; \
     } while (0);
 
 static void graph_node_destroy(void *data)
@@ -176,7 +194,7 @@ argument_t *argument_create_uint(size_t offset, const char *string)
     return node;
 }
 
-argument_t *argument_create_literal(const char *string, handle_t handle)
+argument_t *argument_create_literal(const char *string, handle_t handle, const char *description)
 {
     argument_t *node;
 
@@ -184,6 +202,7 @@ argument_t *argument_create_literal(const char *string, handle_t handle)
     node->handle = handle;
     node->completion_data = (void *) string;
     node->complete = complete_literal;
+    node->description = description;
 
     return node;
 }
@@ -192,7 +211,7 @@ argument_t *argument_create_relevant_literal(size_t offset, const char *string, 
 {
     argument_t *node;
 
-    node = argument_create_literal(string, handle);
+    node = argument_create_literal(string, handle, NULL);
     node->offset = offset;
 
     return node;
@@ -533,7 +552,7 @@ void graph_create_all_path(graph_t *g, graph_node_t *start, graph_node_t *end, .
     free(subpaths);
 }
 
-static void traverse_graph_node_ex(graph_node_t *node, HashTable *visited, int depth, bool indent)
+static void traverse_graph_node_ex(graph_node_t *node, HashTable *visited, int depth, bool indent, const char *description)
 {
     size_t i, l;
     bool has_end;
@@ -555,13 +574,25 @@ static void traverse_graph_node_ex(graph_node_t *node, HashTable *visited, int d
     }
     putchar(' ');
     fputs(node->string, stdout);
+    if (has_end) {
+        if (NULL != node->description) {
+            description = node->description;
+        }
+        if (NULL != description) {
+            fputs(" => ", stdout);
+            fputs(description, stdout);
+        }
+        description = NULL;
+    } else {
+        description = node->description;
+    }
     if (children_count > 1 || has_end) {
         putchar('\n');
     }
     for (i = 0/*, l = dptrarray_length(node->children)*/; i < l; i++) {
         current = dptrarray_at_unsafe(node->children, i, graph_node_t);
         if (ARG_TYPE_END != current->type) {
-            traverse_graph_node_ex(current, visited, 1 == children_count ? depth : depth + 1, 1 != children_count);
+            traverse_graph_node_ex(current, visited, 1 == children_count ? depth : depth + 1, 1 != children_count, description);
         }
     }
 }
@@ -666,9 +697,21 @@ static bool argument_choices_match(argument_t *arg, const char *value)
     return FALSE;
 }
 
+static bool argument_number_match(argument_t *arg, const char *value)
+{
+    bool match;
+
+    // ARG_TYPE_NUMBER acts as ^\d+$
+    for (match = '\0' != *value; match && '\0' != *value; value++) {
+        match &= *value >= '0' && *value <= '9';
+    }
+
+    return match;
+}
+
 static bool argument_string_match(argument_t *UNUSED(arg), const char *UNUSED(value))
 {
-    return TRUE; // ARG_TYPE_STRING match everything
+    return TRUE; // ARG_TYPE_STRING match everything (acts as .*)
 }
 
 static bool argument_end_match(argument_t *UNUSED(arg), const char *UNUSED(value))
@@ -678,7 +721,7 @@ static bool argument_end_match(argument_t *UNUSED(arg), const char *UNUSED(value
 
 static argument_description_t descriptions[] = {
     [ ARG_TYPE_END ]     = { "",              argument_end_match },
-    [ ARG_TYPE_NUMBER ]  = { "number",        NULL },
+    [ ARG_TYPE_NUMBER ]  = { "number",        argument_number_match },
     [ ARG_TYPE_LITERAL ] = { "literal",       argument_literal_match },
     [ ARG_TYPE_CHOICES ] = { "choices",       argument_choices_match },
     [ ARG_TYPE_STRING ]  = { "a free string", argument_string_match }
@@ -1103,7 +1146,7 @@ void graph_display(graph_t *g)
         argument_t *arg;
 
         arg = iterator_current(&it, NULL);
-        traverse_graph_node_ex(arg, visited, 0, TRUE);
+        traverse_graph_node_ex(arg, visited, 0, TRUE, arg->description);
     }
     iterator_close(&it);
     hashtable_destroy(visited);

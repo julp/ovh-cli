@@ -46,8 +46,8 @@ static void vps_regcomm(graph_t *g)
 {
     argument_t *lit_vps, *lit_vps_list;
 
-    lit_vps = argument_create_literal("vps", NULL);
-    lit_vps_list = argument_create_literal("list", vps_list);
+    lit_vps = argument_create_literal("vps", NULL, NULL);
+    lit_vps_list = argument_create_literal("list", vps_list, _("list your VPS"));
 
     graph_create_full_path(g, lit_vps, lit_vps_list, NULL);
 }

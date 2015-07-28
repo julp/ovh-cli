@@ -299,11 +299,11 @@ static void key_regcomm(graph_t *g)
     argument_t *arg_name, *arg_value, *arg_on_off;
     argument_t *lit_key, *lit_key_add, *lit_key_list, *lit_key_delete, *lit_key_default;
 
-    lit_key = argument_create_literal("key", NULL);
-    lit_key_add = argument_create_literal("add", key_add);
-    lit_key_list = argument_create_literal("list", key_list);
-    lit_key_delete = argument_create_literal("delete", key_delete);
-    lit_key_default = argument_create_literal("default", NULL);
+    lit_key = argument_create_literal("key", NULL, NULL);
+    lit_key_add = argument_create_literal("add", key_add, _("upload a new global SSH key to OVH"));
+    lit_key_list = argument_create_literal("list", key_list, _("list global SSH keys"));
+    lit_key_delete = argument_create_literal("delete", key_delete, _("delete a global SSH key"));
+    lit_key_default = argument_create_literal("default", NULL, _("(un)define the global SSH key used in rescue mode"));
 
     arg_value = argument_create_string(offsetof(key_argument_t, value), "<value>", NULL, NULL);
     arg_name = argument_create_string(offsetof(key_argument_t, name), "<name>", complete_key_name, NULL);

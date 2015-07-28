@@ -339,10 +339,10 @@ static void me_regcomm(graph_t *g)
     argument_t *lit_me;
     argument_t *lit_crendentials, *lit_cred_list, *lit_cred_flush;
 
-    lit_me = argument_create_literal("me", me);
-    lit_crendentials = argument_create_literal("credentials", NULL);
-    lit_cred_list = argument_create_literal("list", me_credential_list);
-    lit_cred_flush = argument_create_literal("flush", me_credential_flush);
+    lit_me = argument_create_literal("me", me, _("display your personal informations"));
+    lit_crendentials = argument_create_literal("credentials", NULL, NULL);
+    lit_cred_list = argument_create_literal("list", me_credential_list, _("list all credentials"));
+    lit_cred_flush = argument_create_literal("flush", me_credential_flush, _("revoke all credentials"));
 
     graph_create_full_path(g, lit_me, NULL);
     graph_create_full_path(g, lit_crendentials, lit_cred_list, NULL);

@@ -342,8 +342,8 @@ static void cloud_regcomm(graph_t *g)
     argument_t *arg_project;
     argument_t *lit_cloud, *lit_list;
 
-    lit_cloud = argument_create_literal("cloud", NULL);
-    lit_list = argument_create_literal("list", cloud_list);
+    lit_cloud = argument_create_literal("cloud", NULL, NULL);
+    lit_list = argument_create_literal("list", cloud_list, _("display projects list"));
 
     arg_project = argument_create_string(offsetof(project_argument_t, name), "<project>", complete_projects, NULL);
 
@@ -353,8 +353,8 @@ static void cloud_regcomm(graph_t *g)
     {
         argument_t *lit_instance, *lit_list;
 
-        lit_instance = argument_create_literal("instance", NULL);
-        lit_list = argument_create_literal("list", instance_list);
+        lit_instance = argument_create_literal("instance", NULL, NULL);
+        lit_list = argument_create_literal("list", instance_list, _("list active instances"));
 
         graph_create_full_path(g, lit_cloud, arg_project, lit_instance, lit_list, NULL);
     }
@@ -362,8 +362,8 @@ static void cloud_regcomm(graph_t *g)
     {
         argument_t *lit_image, *lit_list;
 
-        lit_image = argument_create_literal("image", NULL);
-        lit_list = argument_create_literal("list", image_list);
+        lit_image = argument_create_literal("image", NULL, NULL);
+        lit_list = argument_create_literal("list", image_list, _("list available images"));
 
         graph_create_full_path(g, lit_cloud, arg_project, lit_image, lit_list, NULL);
     }

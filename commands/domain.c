@@ -893,17 +893,17 @@ static void domain_regcomm(graph_t *g)
     argument_t *lit_domain;
     argument_t *arg_domain;
 
-    lit_domain = argument_create_literal("domain", NULL);
+    lit_domain = argument_create_literal("domain", NULL, NULL);
     arg_domain = argument_create_string(offsetof(domain_record_argument_t, domain), "<domain>", complete_domains, NULL);
 
     // domain ...
     {
         argument_t *lit_list, *lit_check, *lit_refresh, *lit_export, *lit_nocache;
 
-        lit_list = argument_create_literal("list", domain_list);
-        lit_check = argument_create_literal("check", domain_check);
-        lit_export = argument_create_literal("export", domain_export);
-        lit_refresh = argument_create_literal("refresh", domain_refresh);
+        lit_list = argument_create_literal("list", domain_list, _("list your domains"));
+        lit_check = argument_create_literal("check", domain_check, _("display domains about to expire"));
+        lit_export = argument_create_literal("export", domain_export, _("export zone in DNS format"));
+        lit_refresh = argument_create_literal("refresh", domain_refresh, _("generate a new serial to reflect any change on a DNS zone"));
         lit_nocache = argument_create_relevant_literal(offsetof(domain_record_argument_t, nocache), "nocache", NULL);
 
         graph_create_full_path(g, lit_domain, lit_list, NULL);
@@ -917,9 +917,10 @@ static void domain_regcomm(graph_t *g)
         argument_t *arg_dnssec_on_off;
         argument_t *lit_dnssec, *lit_status;
 
-        lit_dnssec = argument_create_literal("dnssec", NULL);
-        lit_status = argument_create_literal("status", dnssec_status);
+        lit_dnssec = argument_create_literal("dnssec", NULL, NULL);
+        lit_status = argument_create_literal("status", dnssec_status, _("show DNSSEC status (enabled or disabled)"));
 
+        // TODO: arg_dnssec_on_off would need a description
         arg_dnssec_on_off = argument_create_choices_disable_enable(offsetof(domain_record_argument_t, on_off), dnssec_enable_disable);
 
         graph_create_full_path(g, lit_domain, arg_domain, lit_dnssec, lit_status, NULL);
@@ -938,17 +939,17 @@ static void domain_regcomm(graph_t *g)
         argument_t *lit_record, *lit_list, *lit_add, *lit_delete, *lit_update, /**lit_type, */*lit_nocache;
         argument_t *lit_list_type, *lit_add_type;
 
-        lit_ttl = argument_create_literal("ttl", NULL);
-        lit_name = argument_create_literal("name", NULL);
-        lit_target = argument_create_literal("target", NULL);
-        lit_record = argument_create_literal("record", NULL);
-        lit_list = argument_create_literal("list", record_list);
-        lit_add = argument_create_literal("add", record_add);
-        lit_delete = argument_create_literal("delete", record_delete);
-        lit_update = argument_create_literal("update", record_update);
+        lit_ttl = argument_create_literal("ttl", NULL, NULL);
+        lit_name = argument_create_literal("name", NULL, NULL);
+        lit_target = argument_create_literal("target", NULL, NULL);
+        lit_record = argument_create_literal("record", NULL, NULL);
+        lit_list = argument_create_literal("list", record_list, _("display DNS records of *domain*"));
+        lit_add = argument_create_literal("add", record_add, _("create a DNS record"));
+        lit_delete = argument_create_literal("delete", record_delete, _("delete a DNS record"));
+        lit_update = argument_create_literal("update", record_update, _("alter a DNS record"));
 //         lit_type = argument_create_literal("type", NULL);
-        lit_add_type = argument_create_literal("type", NULL);
-        lit_list_type = argument_create_literal("type", NULL);
+        lit_add_type = argument_create_literal("type", NULL, NULL);
+        lit_list_type = argument_create_literal("type", NULL, NULL);
         lit_nocache = argument_create_relevant_literal(offsetof(domain_record_argument_t, nocache), "nocache", NULL);
 
         arg_ttl = argument_create_uint(offsetof(domain_record_argument_t, ttl), "<ttl>");

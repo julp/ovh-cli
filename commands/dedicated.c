@@ -867,7 +867,7 @@ static void dedicated_regcomm(graph_t *g)
     argument_t *arg_server;
     argument_t *lit_dedicated;
 
-    lit_dedicated = argument_create_literal("dedicated", NULL);
+    lit_dedicated = argument_create_literal("dedicated", NULL, NULL);
     arg_server = argument_create_string(offsetof(dedicated_argument_t, server_name), "<server>", complete_servers, NULL);
 
     // dedicated ...
@@ -875,10 +875,10 @@ static void dedicated_regcomm(graph_t *g)
         argument_t *arg_period, *arg_type;
         argument_t *lit_reboot, *lit_list, *lit_check, *lit_mrtg, *lit_nocache;
 
-        lit_mrtg = argument_create_literal("mrtg", dedicated_mrtg);
-        lit_list = argument_create_literal("list", dedicated_list);
-        lit_check = argument_create_literal("check", dedicated_check);
-        lit_reboot = argument_create_literal("reboot", dedicated_reboot);
+        lit_mrtg = argument_create_literal("mrtg", dedicated_mrtg, NULL);
+        lit_list = argument_create_literal("list", dedicated_list, _("list your dedicated servers"));
+        lit_check = argument_create_literal("check", dedicated_check, _("display servers about to expire"));
+        lit_reboot = argument_create_literal("reboot", dedicated_reboot, _("hard reboot"));
         lit_nocache = argument_create_relevant_literal(offsetof(dedicated_argument_t, nocache), "nocache", NULL);
 
         arg_type = argument_create_choices(offsetof(dedicated_argument_t, mrtg_type), "<types>",  mrtg_types);
@@ -895,9 +895,9 @@ static void dedicated_regcomm(graph_t *g)
         argument_t *arg_boot;
         argument_t *lit_boot, *lit_list, *lit_show;
 
-        lit_boot = argument_create_literal("boot", /*NULL*/dedicated_boot_set);
-        lit_show = argument_create_literal("show", dedicated_boot_get);
-        lit_list = argument_create_literal("list", dedicated_boot_list);
+        lit_boot = argument_create_literal("boot", /*NULL*/dedicated_boot_set, _("set active boot"));
+        lit_show = argument_create_literal("show", dedicated_boot_get, _("display active boot"));
+        lit_list = argument_create_literal("list", dedicated_boot_list, _("list available boots"));
 
         arg_boot = argument_create_string(offsetof(dedicated_argument_t, boot_name), "<boot>", complete_boots, NULL);
 
@@ -910,9 +910,9 @@ static void dedicated_regcomm(graph_t *g)
         argument_t *arg_reverse;
         argument_t *lit_reverse, *lit_set, *lit_delete;
 
-        lit_reverse = argument_create_literal("reverse", NULL);
-        lit_set = argument_create_literal("set", dedicated_reverse_set);
-        lit_delete = argument_create_literal("delete", dedicated_reverse_delete);
+        lit_reverse = argument_create_literal("reverse", NULL, NULL);
+        lit_set = argument_create_literal("set", dedicated_reverse_set, _("define reverse DNS"));
+        lit_delete = argument_create_literal("delete", dedicated_reverse_delete, _("remove reverse DNS"));
 
         arg_reverse = argument_create_string(offsetof(dedicated_argument_t, reverse), "<reverse>", NULL, NULL);
 

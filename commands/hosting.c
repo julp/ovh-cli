@@ -897,25 +897,25 @@ static void hosting_regcomm(graph_t *g)
     argument_t *lit_domain_list, *lit_domain_add, *lit_domain_delete;
     argument_t *arg_hosting, *arg_domain_name, *arg_domain_path, *arg_database_date, *arg_database_name, *arg_user_name;
 
-    lit_hosting = argument_create_literal("hosting", NULL);
-    lit_host_list = argument_create_literal("list", hosting_list);
+    lit_hosting = argument_create_literal("hosting", NULL, NULL);
+    lit_host_list = argument_create_literal("list", hosting_list, _("list hosted website"));
 
-    lit_domain = argument_create_literal("domain", NULL);
-    lit_domain_list = argument_create_literal("list", hosting_domain_list);
-    lit_domain_add = argument_create_literal("add", hosting_domain_create);
-    lit_domain_delete = argument_create_literal("delete", hosting_domain_delete);
+    lit_domain = argument_create_literal("domain", NULL, NULL);
+    lit_domain_list = argument_create_literal("list", hosting_domain_list, _("list domains associated to *hosting*"));
+    lit_domain_add = argument_create_literal("add", hosting_domain_create, _("link domain to *hosting* through *path*"));
+    lit_domain_delete = argument_create_literal("delete", hosting_domain_delete, _("unlink domain to hosting"));
 
-    lit_db = argument_create_literal("database", NULL);
-    lit_db_list = argument_create_literal("list", hosting_database_list);
-    lit_db_dump = argument_create_literal("dump", hosting_database_dump);
-    lit_db_delete = argument_create_literal("delete", hosting_database_delete);
+    lit_db = argument_create_literal("database", NULL, NULL);
+    lit_db_list = argument_create_literal("list", hosting_database_list, _("list databases associated to *hosting*"));
+    lit_db_dump = argument_create_literal("dump", hosting_database_dump, _("dump a database"));
+    lit_db_delete = argument_create_literal("delete", hosting_database_delete, _("drop database associated to *hosting*"));
 
-    lit_user = argument_create_literal("user", NULL);
-    lit_user_list = argument_create_literal("list", hosting_user_list);
-    lit_user_delete = argument_create_literal("delete", hosting_user_delete);
+    lit_user = argument_create_literal("user", NULL, NULL);
+    lit_user_list = argument_create_literal("list", hosting_user_list, _("list (FTP & SSH) users of *hosting*"));
+    lit_user_delete = argument_create_literal("delete", hosting_user_delete, _("delete a user from *hosting*"));
 
-    lit_cron = argument_create_literal("cron", NULL);
-    lit_cron_list = argument_create_literal("list", hosting_cron_list);
+    lit_cron = argument_create_literal("cron", NULL, NULL);
+    lit_cron_list = argument_create_literal("list", hosting_cron_list, _("list cron jobs for hosting"));
 
     arg_user_name = argument_create_string(offsetof(hosting_argument_t, user_name), "<user>", NULL, NULL);
     arg_domain_path = argument_create_string(offsetof(hosting_argument_t, domain_path), "<path>", NULL, NULL);

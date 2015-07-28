@@ -70,9 +70,9 @@ static void base_regcomm(graph_t *g)
 {
     argument_t *lit_help, *lit_quit, *lit_complete;
 
-    lit_help = argument_create_literal("help", help);
-    lit_quit = argument_create_literal("quit", quit);
-    lit_complete = argument_create_literal("complete", complete);
+    lit_help = argument_create_literal("help", help, _("show help"));
+    lit_quit = argument_create_literal("quit", quit, _("exit this program"));
+    lit_complete = argument_create_literal("complete", complete, _("show completion command(s) for current shell"));
 
     graph_create_full_path(g, lit_help, NULL);
     graph_create_full_path(g, lit_quit, NULL);

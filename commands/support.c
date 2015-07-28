@@ -247,13 +247,13 @@ static void support_regcomm(graph_t *g)
     argument_t *arg_id, *arg_subject;
     argument_t *lit_tickets, *lit_list, *lit_create, *lit_close, *lit_read, *lit_reply, *lit_reopen;
 
-    lit_tickets = argument_create_literal("tickets", NULL);
-    lit_read = argument_create_literal("read", support_tickets_read);
-    lit_list = argument_create_literal("list", support_tickets_list);
-    lit_close = argument_create_literal("close", support_tickets_close);
-    lit_reply = argument_create_literal("reply", support_tickets_reply);
-    lit_reopen = argument_create_literal("reopen", support_tickets_reopen);
-    lit_create = argument_create_literal("create", support_tickets_create);
+    lit_tickets = argument_create_literal("tickets", NULL, NULL);
+    lit_read = argument_create_literal("read", support_tickets_read, _("display an entire support ticket"));
+    lit_list = argument_create_literal("list", support_tickets_list, _("list support ticket"));
+    lit_close = argument_create_literal("close", support_tickets_close, _("close a support ticket"));
+    lit_reply = argument_create_literal("reply", support_tickets_reply, _("reply to a support ticket"));
+    lit_reopen = argument_create_literal("reopen", support_tickets_reopen, _("reopen a support ticket"));
+    lit_create = argument_create_literal("create", support_tickets_create, _("open a new support ticket"));
 
     arg_id = argument_create_string(offsetof(support_argument_t, id), "<ticket id>", NULL, NULL);
     arg_subject = argument_create_string(offsetof(support_argument_t, subject), "<subject>", NULL, NULL);
