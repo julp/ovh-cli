@@ -155,7 +155,7 @@ static const char * const boot_types[] = {
     NULL
 };
 
-static const char * const supportLevels[] = {
+static const char * const support_levels[] = {
     "critical",
     "fastpath",
     "gs",
@@ -197,7 +197,7 @@ static model_t server_model = {
         { "name",            MODEL_TYPE_STRING, offsetof(server_t, name),            0, NULL },
         { "datacenter",      MODEL_TYPE_ENUM,   offsetof(server_t, datacenter),      0, datacenters },
         { "professionalUse", MODEL_TYPE_BOOL,   offsetof(server_t, professionalUse), 0, NULL },
-        { "supportLevel",    MODEL_TYPE_ENUM,   offsetof(server_t, supportLevel),    0, supportLevels },
+        { "supportLevel",    MODEL_TYPE_ENUM,   offsetof(server_t, supportLevel),    0, support_levels },
         { "commercialRange", MODEL_TYPE_STRING, offsetof(server_t, commercialRange), 0, NULL },
         { "ip",              MODEL_TYPE_STRING, offsetof(server_t, ip),              0, NULL },
         { "os",              MODEL_TYPE_STRING, offsetof(server_t, os),              0, NULL },
@@ -410,7 +410,7 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
             s.datacenter = json_get_enum(propvalue, datacenters, -1);
             JSON_GET_PROP_BOOL(root, "professionalUse", s.professionalUse);
             json_object_get_property(root, "supportLevel", &propvalue);
-            s.supportLevel = json_get_enum(propvalue, supportLevels, -1);
+            s.supportLevel = json_get_enum(propvalue, support_levels, -1);
             JSON_GET_PROP_STRING_EX(root, "ip", s.ip, FALSE);
             JSON_GET_PROP_STRING_EX(root, "name", s.name, FALSE);
             JSON_GET_PROP_STRING_EX(root, "commercialRange", s.commercialRange, FALSE);
@@ -548,7 +548,7 @@ static command_status_t dedicated_list(COMMAND_ARGS)
         _("boot"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
         _("datacenter"), TABLE_TYPE_ENUM, datacenters,
         _("professionalUse"), TABLE_TYPE_BOOLEAN,
-        _("supportLevel"), TABLE_TYPE_ENUM, supportLevels,
+        _("supportLevel"), TABLE_TYPE_ENUM, support_levels,
         _("commercialRange"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
         _("state"), TABLE_TYPE_ENUM, states,
         _("monitoring"), TABLE_TYPE_BOOLEAN,
