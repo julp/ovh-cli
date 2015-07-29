@@ -173,11 +173,11 @@ static bool account_set_current(const char *name, error_t **error)
             stmt = STMT_ACCOUNT_LOAD;
             statement_bind(&statements[stmt], NULL, name);
         }
-//         statement_bind_from_model(&statements[stmt], account_model, NULL, (char *) &acd.current_account);
-        if (statement_fetch_to_model(&statements[stmt], account_model, (char *) &acd.current_account, error)) {
-//             statement_bind_from_model(&statements[STMT_APPLICATION_LOAD], application_model, NULL, (char *) &acd.current_application);
+//         statement_bind_from_model(&statements[stmt], &account_model, NULL, (char *) &acd.current_account);
+        if (statement_fetch_to_model(&statements[stmt], &account_model, (char *) &acd.current_account, error)) {
+//             statement_bind_from_model(&statements[STMT_APPLICATION_LOAD], &application_model, NULL, (char *) &acd.current_application);
             statement_bind(&statements[STMT_APPLICATION_LOAD], NULL, acd.current_account.endpoint_id);
-            if (!statement_fetch_to_model(&statements[STMT_APPLICATION_LOAD], application_model, (char *) &acd.current_application, error)) {
+            if (!statement_fetch_to_model(&statements[STMT_APPLICATION_LOAD], &application_model, (char *) &acd.current_application, error)) {
                 return FALSE;
             }
         } else {
@@ -254,7 +254,7 @@ bool check_current_application_and_account(bool skip_CK_check, error_t **error)
     if (NULL_OR_EMPTY(acd.current_account.consumer_key) || (0 != acd.current_account.expires_at && acd.current_account.expires_at < time(NULL))) {
         // if we successfully had a CK, save it
         if (NULL != (acd.current_account.consumer_key = request_consumer_key(&acd.current_account.expires_at, error))) {
-            statement_bind_from_model(&statements[STMT_ACCOUNT_UPDATE_KEY], account_model, NULL, (char *) &acd.current_account);
+            statement_bind_from_model(&statements[STMT_ACCOUNT_UPDATE_KEY], &account_model, NULL, (char *) &acd.current_account);
             statement_fetch(&statements[STMT_ACCOUNT_UPDATE_KEY], error);
         }
     }
@@ -476,7 +476,7 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
     if (!update) {
         HashTable *ht;
 
-        statement_bind_from_model(&statements[STMT_ACCOUNT_INSERT], account_model, NULL, (char *) &account);
+        statement_bind_from_model(&statements[STMT_ACCOUNT_INSERT], &account_model, NULL, (char *) &account);
         statement_fetch(&statements[STMT_ACCOUNT_INSERT], error);
         account.id = sqlite_last_insert_id();
 
@@ -504,7 +504,7 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
         nulls[1] = NULL == args->consumer_key;
         nulls[2] = NULL == args->consumer_key;
         nulls[3] = !args->endpoint_present;
-        statement_bind_from_model(&statements[STMT_ACCOUNT_UPDATE], account_model, nulls, (char *) &account);
+        statement_bind_from_model(&statements[STMT_ACCOUNT_UPDATE], &account_model, nulls, (char *) &account);
         statement_fetch(&statements[STMT_ACCOUNT_UPDATE], error);
     }
 
@@ -602,7 +602,7 @@ static command_status_t application_add(COMMAND_ARGS)
     application = (application_t *) arg;
     assert(NULL != application->key);
     assert(NULL != application->secret);
-    statement_bind_from_model(&statements[STMT_APPLICATION_INSERT], application_model, NULL, (char *)  application);
+    statement_bind_from_model(&statements[STMT_APPLICATION_INSERT], &application_model, NULL, (char *)  application);
     statement_fetch(&statements[STMT_APPLICATION_INSERT], error);
     // TODO: if !update (0 == sqlite_affected_rows), duplicate?
 
@@ -640,7 +640,7 @@ static command_status_t export(COMMAND_ARGS)
     USED(mainopts);
     buffer = string_new();
     // accounts
-    statement_model_to_iterator(&it, &statements[STMT_ACCOUNT_LIST], account_model, (char *) &account);
+    statement_model_to_iterator(&it, &statements[STMT_ACCOUNT_LIST], &account_model, (char *) &account);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         string_append_formatted(buffer, "account %s add password \"%s\" endpoint %s", account.name, account.password, endpoint_names[account.endpoint_id]);
@@ -661,7 +661,7 @@ static command_status_t export(COMMAND_ARGS)
     }
     iterator_close(&it);
     // applications
-    statement_model_to_iterator(&it, &statements[STMT_APPLICATION_LIST], application_model, (char *) &application);
+    statement_model_to_iterator(&it, &statements[STMT_APPLICATION_LIST], &application_model, (char *) &application);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         string_append_formatted(buffer, "application %s add \"%s\" \"%s\"\n", endpoint_names[application.endpoint_id], application.key, application.secret);

@@ -43,7 +43,7 @@ typedef struct {
         };
         struct {
             char *ptr;
-            model_t model;
+            const model_t *model;
         };
     };
 } sqlite_statement_state_t;
@@ -237,7 +237,7 @@ void statement_to_iterator(Iterator *it, sqlite_statement_t *stmt, ...)
     );
 }
 
-static void _statement_model_set_output_bind(sqlite_statement_t *stmt, model_t model, char *ptr)
+static void _statement_model_set_output_bind(sqlite_statement_t *stmt, const model_t *model, char *ptr)
 {
     int i, l;
 
@@ -248,7 +248,7 @@ static void _statement_model_set_output_bind(sqlite_statement_t *stmt, model_t m
         const char *column_name;
 
         column_name = sqlite3_column_name(stmt->prepared, i);
-        for (match = FALSE, f = model.fields; !match && NULL != f->column_name; f++) {
+        for (match = FALSE, f = model->fields; !match && NULL != f->column_name; f++) {
             if (0 == strcmp(f->column_name, column_name)) {
                 switch (f->type) {
                     case MODEL_TYPE_BOOL:
@@ -304,7 +304,7 @@ static void statement_model_iterator_current(const void *collection, void **stat
     _statement_model_set_output_bind(stmt, sss->model, sss->ptr);
 }
 
-void statement_model_to_iterator(Iterator *it, sqlite_statement_t *stmt, model_t model, char *ptr)
+void statement_model_to_iterator(Iterator *it, sqlite_statement_t *stmt, const model_t *model, char *ptr)
 {
     sqlite_statement_state_t *sss;
 
@@ -548,7 +548,7 @@ void statement_bind(sqlite_statement_t *stmt, const bool *nulls, ...)
  * @param nulls
  * @param ptr
  */
-void statement_bind_from_model(sqlite_statement_t *stmt, model_t model, const bool *nulls, char *ptr/*, ...*/)
+void statement_bind_from_model(sqlite_statement_t *stmt, const model_t *model, const bool *nulls, char *ptr/*, ...*/)
 {
     char placeholder[512];
     const model_field_t *f;
@@ -565,7 +565,7 @@ void statement_bind_from_model(sqlite_statement_t *stmt, model_t model, const bo
     sqlite3_clear_bindings(stmt->prepared);
 #endif
     placeholder[0] = ':';
-    for (f = model.fields; NULL != f->column_name; f++) {
+    for (f = model->fields; NULL != f->column_name; f++) {
         int paramno;
 
         strlcpy(placeholder + 1, f->column_name, ARRAY_SIZE(placeholder) - 1);
@@ -702,7 +702,7 @@ bool statement_fetch(sqlite_statement_t *stmt, error_t **error, ...)
  *
  * @return
  */
-bool statement_fetch_to_model(sqlite_statement_t *stmt, model_t model, char *ptr, error_t **error)
+bool statement_fetch_to_model(sqlite_statement_t *stmt, const model_t *model, char *ptr, error_t **error)
 {
     bool ret;
 
@@ -736,7 +736,7 @@ command_status_t statement_to_table(const model_t *model, sqlite_statement_t *st
     ret = COMMAND_SUCCESS;
     bzero(buffer, ARRAY_SIZE(buffer));
     t = table_new_from_model(model, TABLE_FLAG_DELEGATE);
-    statement_model_to_iterator(&it, stmt, *model, buffer);
+    statement_model_to_iterator(&it, stmt, model, buffer);
     iterator_first(&it);
     if (iterator_is_valid(&it)) {
         do {
@@ -792,7 +792,6 @@ static bool sqlite_early_ctor(error_t **error)
 static bool sqlite_late_ctor(error_t **error)
 {
     if (OVH_CLI_VERSION_NUMBER > user_version) {
-//         statement_bind(statements[STMT_SET_USER_VERSION], "i", OVH_CLI_VERSION_NUMBER); // PRAGMA doesn't handle parameter
         statement_bind(&statements[STMT_SET_USER_VERSION], NULL);
         statement_fetch(&statements[STMT_SET_USER_VERSION], error);
     }

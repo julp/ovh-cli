@@ -74,38 +74,38 @@ CREATE TABLE boots(
 CREATE TABLE dedicated(
     account_id INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,
     -- From GET /dedicated/server/{serviceName}
-    id INTEGER NOT NULL PRIMARY KEY, -- OVH ID (serverId)
+    serverId INTEGER NOT NULL PRIMARY KEY, -- OVH ID (serverId)
     name TEXT NOT NULL UNIQUE,
     datacenter INT NOT NULL, -- enum
-    professional_use INT NOT NULL, -- bool
-    support_level INT NOT NULL, -- enum
-    commercial_range TEXT, -- nullable
+    professionalUse INT NOT NULL, -- bool
+    supportLevel INT NOT NULL, -- enum
+    commercialRange TEXT, -- nullable
     ip TEXT NOT NULL, -- unique ?
     os TEXT NOT NULL,
     state INT NOT NULL, -- enum
     reverse TEXT, -- nullable
     monitoring INT NOT NULL, -- bool
     rack TEXT NOT NULL,
-    root_device TEXT, -- nullable
-    link_speed INT, -- nullable
-    boot_id INT REFERENCES boots(bootId) ON UPDATE CASCADE ON DELETE CASCADE, -- nullable
+    rootDevice TEXT, -- nullable
+    linkSpeed INT, -- nullable
+    bootId INT REFERENCES boots(bootId) ON UPDATE CASCADE ON DELETE CASCADE, -- nullable
     -- From GET /dedicated/server/{serviceName}/serviceInfos
     -- status INT NOT NULL, -- enum
-    engaged_up_to INT, -- date, nullable
+    engagedUpTo INT, -- date, nullable
     -- possibleRenewPeriod: array of int (JSON response)
-    contact_billing TEXT NOT NULL,
+    contactBilling TEXT NOT NULL,
     -- renew: subobject (JSON response)
     -- domain TEXT NOT NULL, -- same as name?
     expiration INT NOT NULL, -- date
-    contact_tech TEXT NOT NULL,
-    contact_admin TEXT NOT NULL,
+    contactTech TEXT NOT NULL,
+    contactAdmin TEXT NOT NULL,
     creation INT NOT NULL -- date
 );
 
 CREATE TABLE boots_dedicated(
-    dedicated_id INT NOT NULL REFERENCES dedicated(id) ON UPDATE CASCADE ON DELETE CASCADE,
-    boot_id INT NOT NULL REFERENCES boots(bootId) ON UPDATE CASCADE ON DELETE CASCADE,
-    PRIMARY KEY (dedicated_id, boot_id)
+    serverId INT NOT NULL REFERENCES dedicated(serverId) ON UPDATE CASCADE ON DELETE CASCADE,
+    bootId INT NOT NULL REFERENCES boots(bootId) ON UPDATE CASCADE ON DELETE CASCADE,
+    PRIMARY KEY (serverId, bootId)
 );
 
 CREATE TABLE fetches(

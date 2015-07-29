@@ -33,6 +33,8 @@ argument_t *argument_create_choices_off_on(size_t, handle_t);
 argument_t *argument_create_choices_disable_enable(size_t, handle_t);
 
 void completer_push(completer_t *, const char *, bool);
+void completer_push_modelized(completer_t *, const model_t *, void *);
+
 bool complete_from_statement(void *, const char *, size_t, completer_t *, void *);
 bool complete_from_hashtable_keys(void *, const char *, size_t, completer_t *, void *);
 

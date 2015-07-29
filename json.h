@@ -104,6 +104,6 @@ void json_object_to_iterator(Iterator *, json_value_t);
 json_value_t json_string(const char *) WARN_UNUSED_RESULT;
 
 # include "model.h"
-void json_object_to_modelized(json_value_t, model_t, bool, void *);
+void json_object_to_modelized(json_value_t, const model_t *, bool, void *, bool *);
 
 #endif /* !JSON_H */

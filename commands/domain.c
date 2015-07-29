@@ -308,7 +308,7 @@ static bool fetch_domain(domain_t *d, const char * const domain_name, bool force
             success &= request_execute(req, RESPONSE_JSON, (void **) &docs[i], error);
             request_destroy(req);
             if (success) {
-                json_object_to_modelized(json_document_get_root(docs[i]), domain_model, FALSE, d);
+                json_object_to_modelized(json_document_get_root(docs[i]), &domain_model, FALSE, d, NULL);
             }
         }
         if (success) {

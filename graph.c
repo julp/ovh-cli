@@ -72,7 +72,7 @@ static const char *argument_to_name(void *ptr)
 }
 
 static model_t argument_model = { /* dummy model */
-    0/*sizeof(argument_t)*/, argument_to_s, argument_to_name,
+    0/*sizeof(argument_t)*/, argument_to_name, argument_to_s,
 #if 0
     (const model_field_t []) {
         MODEL_FIELD_SENTINEL
@@ -106,6 +106,9 @@ static void possibility_destroy(void *data)
     p = (possibility_t *) data;
     if (p->delegated) {
         free((void *) p->name);
+    }
+    if (NULL != p->model) {
+        modelized_destroy(p->model, p->data);
     }
     free(p);
 }
