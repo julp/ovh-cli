@@ -49,7 +49,7 @@ CREATE TABLE applications(
 CREATE TABLE boots(
     bootId INTEGER NOT NULL PRIMARY KEY, -- OVH ID (bootId)
     bootType INT NOT NULL, -- enum
-    kernel TEXT NOT NULL,
+    kernel TEXT NOT NULL UNIQUE,
     description TEXT NOT NULL
 );
 

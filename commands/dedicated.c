@@ -251,7 +251,7 @@ static bool dedicated_ctor(error_t **error)
     if (!create_or_migrate("boots", "CREATE TABLE boots(\n\
         bootId INTEGER NOT NULL PRIMARY KEY, -- OVH ID (bootId)\n\
         bootType INT NOT NULL, -- enum\n\
-        kernel TEXT NOT NULL,\n\
+        kernel TEXT NOT NULL UNIQUE,\n\
         description TEXT NOT NULL\n\
     )", NULL, 0, error)) {
         return FALSE;
