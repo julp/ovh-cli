@@ -108,7 +108,7 @@ CREATE TABLE boots_dedicated(
     PRIMARY KEY (dedicated_id, boot_id)
 );
 
-CREATE TABLE fetchs(
+CREATE TABLE fetches(
     account_id INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,
     module_name TEXT NOT NULL,
     updated_at INT NOT NULL,

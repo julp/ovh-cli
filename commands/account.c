@@ -375,7 +375,7 @@ static bool account_early_ctor(error_t **error)
     )", NULL, 0, error)) {
         return FALSE;
     }
-    if (!create_or_migrate("fetchs", "CREATE TABLE fetchs(\n\
+    if (!create_or_migrate("fetches", "CREATE TABLE fetches(\n\
         account_id INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,\n\
         module_name TEXT NOT NULL,\n\
         updated_at INT NOT NULL,\n\
