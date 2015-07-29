@@ -107,7 +107,7 @@ typedef struct {
 // describe a boot
 typedef struct {
     int type;
-    int id;
+    int bootId;
     const char *kernel;
     const char *description;
 } boot_t;
@@ -221,7 +221,7 @@ static model_t server_model = {
 static model_t boot_model = {
     sizeof(boot_t), NULL, NULL,
     (const model_field_t []) {
-        { "id",          MODEL_TYPE_INT,    offsetof(boot_t, id),          0, NULL },
+        { "bootId",      MODEL_TYPE_INT,    offsetof(boot_t, bootId),      0, NULL },
         { "bootType",    MODEL_TYPE_ENUM,   offsetof(boot_t, type),        0, boot_types },
         { "kernel",      MODEL_TYPE_STRING, offsetof(boot_t, kernel),      0, NULL },
         { "description", MODEL_TYPE_STRING, offsetof(boot_t, description), 0, NULL },
@@ -251,7 +251,7 @@ static bool dedicated_ctor(error_t **error)
     if (!create_or_migrate("boots", "CREATE TABLE boots(\n\
         bootId INTEGER NOT NULL PRIMARY KEY, -- OVH ID (bootId)\n\
         bootType INT NOT NULL, -- enum\n\
-        kernel TEXT NOT NULL UNIQUE,\n\
+        kernel TEXT NOT NULL,\n\
         description TEXT NOT NULL\n\
     )", NULL, 0, error)) {
         return FALSE;
@@ -331,7 +331,7 @@ static bool parse_boot(server_t *s, json_document_t *doc, error_t **error)
     statement_bind_from_model(&statements[STMT_BOOT_UPSERT], boot_model, NULL, (char *) &boot);
     statement_fetch(&statements[STMT_BOOT_UPSERT], error);
     assert(1 == sqlite_affected_rows());
-    statement_bind(&statements[STMT_B_D_LINK], NULL, boot.id, s->serverId);
+    statement_bind(&statements[STMT_B_D_LINK], NULL, boot.bootId, s->serverId);
     statement_fetch(&statements[STMT_B_D_LINK], error);
 
     json_document_destroy(doc);
