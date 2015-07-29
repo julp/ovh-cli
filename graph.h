@@ -20,7 +20,7 @@ argument_t *argument_create_relevant_literal(size_t, const char *, handle_t);
 argument_t *argument_create_choices(size_t, const char *, const char * const *);
 argument_t *argument_create_string(size_t, const char *, complete_t, void *);
 
-void graph_create_full_path(graph_t *, graph_node_t *, ...) SENTINEL;
+void graph_create_full_path(graph_t *, ...) SENTINEL;
 void graph_create_path(graph_t *, graph_node_t *, graph_node_t *, ...) SENTINEL;
 void graph_create_all_path(graph_t *, graph_node_t *, graph_node_t *, ...);
 void graph_destroy(graph_t *);

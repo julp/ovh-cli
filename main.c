@@ -5,17 +5,12 @@
 #include "common.h"
 #include "command.h"
 #include "endpoints.h"
-#include <histedit.h>
+#include "graph_main.h"
 #include "modules/api.h"
 #include "modules/conv.h"
 #include "modules/home.h"
 #include "commands/account.h"
 #include "struct/dptrarray.h"
-
-typedef struct {
-    graph_t *graph;
-    Tokenizer *tokenizer;
-} editline_data_t;
 
 extern module_t home_module;
 extern module_t sqlite_module;
@@ -448,8 +443,6 @@ static const char *prompt(EditLine *UNUSED(e))
 
     return prompt;
 }
-
-extern unsigned char graph_complete(EditLine *, int);
 
 // LANG="fr_FR.ISO-8859-1" ./ovh domain $'\xE9' record list
 int main(int argc, char **argv)
