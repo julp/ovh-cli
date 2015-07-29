@@ -875,12 +875,15 @@ static bool complete_servers(void *UNUSED(parsed_arguments), const char *current
 bool complete_from_modelized(const model_t *model, sqlite_statement_t *stmt, completer_t *possibilities)
 {
     Iterator it;
-    void *object;
+    char buffer[8192];
 
-    object = malloc(model->size);
-    statement_model_to_iterator(&it, stmt, model, object);
+    statement_model_to_iterator(&it, stmt, model, &buffer); // TODO: make iterator_current allocate and return a new "object"?
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        void *object;
+
         iterator_current(&it, NULL);
+        object = malloc(model->size);
+        memcpy(object, buffer, model->size);
         completer_push_modelized(possibilities, model, object);
     }
     iterator_close(&it);
