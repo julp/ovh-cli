@@ -7,6 +7,10 @@
 #include "command.h"
 #include "modules/home.h"
 
+#ifdef HAVE_LIBBSD_STRLCPY
+# include <bsd/string.h>
+#endif /* HAVE_LIBBSD_STRLCPY */
+
 static char home[MAXPATHLEN];
 
 bool build_path_from_home(const char *basename, char *buffer, size_t buffer_size)

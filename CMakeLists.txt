@@ -13,6 +13,9 @@ add_definitions(-D_GNU_SOURCE)
 
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 
+set(MISC_SOURCES )
+set(LIBRARIES )
+
 find_package(CURL REQUIRED)
 find_package(LibXml2 REQUIRED)
 find_package(OpenSSL REQUIRED)
@@ -62,18 +65,18 @@ check_function_exists("strcasecmp" HAVE_STRCASECMP)
 check_function_exists("strncasecmp" HAVE_STRNCASECMP)
 check_function_exists("strtod_l" HAVE_STRTOD_L)
 check_library_exists("iconv" "iconvctl" ${ICONV_LIBRARIES} HAVE_ICONVCTL)
+check_function_exists("strlcpy" HAVE_STRLCPY)
+if(NOT HAVE_STRLCPY)
+    check_library_exists("bsd" "strlcpy" "lib" HAVE_LIBBSD_STRLCPY)
+    if(HAVE_LIBBSD_STRLCPY)
+        list(APPEND LIBRARIES "bsd")
+#     else(HAVE_LIBBSD_STRLCPY)
+#         list(APPEND SOURCES "../missing/strlcpy.c")
+    endif(HAVE_LIBBSD_STRLCPY)
+endif(NOT HAVE_STRLCPY)
 
 option(DEBUG "Enable/disable debugging" OFF)
 option(PRINT_OVH_ID "Enable/disable display of internal OVH identifiers" OFF)
-
-# option(WITH_CLOUD_MODULE "Build cloud module" ON)
-# option(WITH_DEDICATED_MODULE "Build cloud module" ON)
-# option(WITH_DOMAIN_MODULE "Build cloud module" ON)
-# option(WITH_HOSTING_MODULE "Build hosting module" ON)
-# option(WITH_KEY_MODULE "Build key module to manage global SSH keys" ON)
-# option(WITH_ME_MODULE "Build me module" ON)
-# option(WITH_SUPPORT_MODULE "Build support module" ON)
-# option(WITH_VPS_MODULE "Build vps module" ON)
 
 include(FeatureSummary)
 
@@ -115,8 +118,6 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-set(MISC_SOURCES )
-
 if(INTL_FOUND)
     set(WITH_NLS true)
     set(LOCALEDIR "${CMAKE_INSTALL_PREFIX}/share/locale/")
@@ -150,6 +151,6 @@ add_executable(ovh main.c graph.c json.c error.c util.c date.c graphic.c
     struct/iterator.c struct/hashtable.c struct/dptrarray.c struct/xtring.c
     ${BUILTIN_MODULES} ${EXTRA_MODULES_ENABLED} ${MISC_SOURCES}
 )
-target_link_libraries(ovh ${Intl_LIBRARIES} ${CURL_LIBRARIES} ${ICONV_LIBRARIES} ${LIBXML2_LIBRARIES} ${OPENSSL_LIBRARIES} ${SQLITE3_LIBRARIES} ${EDITLINE_LIBRARIES})
+target_link_libraries(ovh ${LIBRARIES} ${Intl_LIBRARIES} ${CURL_LIBRARIES} ${ICONV_LIBRARIES} ${LIBXML2_LIBRARIES} ${OPENSSL_LIBRARIES} ${SQLITE3_LIBRARIES} ${EDITLINE_LIBRARIES})
 
 install(TARGETS ovh DESTINATION bin)

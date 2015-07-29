@@ -738,7 +738,7 @@ void table_display(table_t *t, uint32_t flags)
         int height;
 
         height = console_height();
-        if (height > 0 && dptrarray_length(t->rows) + 4 > height) { // TODO: prepare line breaking in a first step to known exactely how many lines will be displayed
+        if (height > 0 && dptrarray_length(t->rows) + 4 > (size_t) height) { // TODO: prepare line breaking in a first step to known exactely how many lines will be displayed
             const char *pager;
 
             if (NULL == (pager = getenv("PAGER"))) {

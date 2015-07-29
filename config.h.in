@@ -7,6 +7,7 @@
 #cmakedefine DEBUG
 #cmakedefine PRINT_OVH_ID
 #cmakedefine HAVE_STRTOD_L
+#cmakedefine HAVE_LIBBSD_STRLCPY
 #cmakedefine WITH_NLS
 #cmakedefine WITH_EDITLINE
 

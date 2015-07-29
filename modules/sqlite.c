@@ -7,6 +7,10 @@
 #include "modules/table.h"
 #include "modules/sqlite.h"
 
+#ifdef HAVE_LIBBSD_STRLCPY
+# include <bsd/string.h>
+#endif /* HAVE_LIBBSD_STRLCPY */
+
 typedef enum {
     SQLITE_TYPE_BOOL,
     SQLITE_TYPE_BOOLEAN = SQLITE_TYPE_BOOL,
