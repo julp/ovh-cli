@@ -1021,7 +1021,7 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
                     prefix_len = longest_prefix(p->name, prefix);
                 }
                 fputs(p->name, stdout);
-                if (NULL != p->model) {
+                if (NULL != p->model && NULL != p->model->to_s) {
                     const char *longdesc;
 
                     longdesc = p->model->to_s(p->data);
