@@ -763,6 +763,44 @@ command_status_t statement_to_table(const model_t *model, sqlite_statement_t *st
     return ret;
 }
 
+bool complete_from_modelized(const model_t *model, sqlite_statement_t *stmt, completer_t *possibilities)
+{
+    Iterator it;
+    char buffer[8192];
+
+    modelized_init(model, (modelized_t *) &buffer);
+    statement_model_to_iterator(&it, stmt, model, &buffer); // TODO: make iterator_current allocate and return a new "object"?
+    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        void *object;
+
+        iterator_current(&it, NULL);
+        object = malloc(model->size);
+        modelized_init(model, object);
+        memcpy(object, buffer, model->size);
+        completer_push_modelized(possibilities, object);
+    }
+    iterator_close(&it);
+
+    return TRUE;
+}
+
+static void sqlite_startswith(sqlite3_context *context, int argc, sqlite3_value **argv)
+{
+    size_t string_len, prefix_len;
+    const unsigned char *string, *prefix;
+
+    assert(2 == argc);
+    string = sqlite3_value_text(argv[0]);
+    prefix = sqlite3_value_text(argv[1]);
+    string_len = strlen((const char *) string);
+    prefix_len = strlen((const char *) prefix);
+    if (prefix_len > string_len) {
+        sqlite3_result_int(context, 0);
+    } else {
+        sqlite3_result_int(context, 0 == strncmp((const char *) string, (const char *) prefix, prefix_len));
+    }
+}
+
 static bool sqlite_early_ctor(error_t **error)
 {
     int ret;
@@ -795,6 +833,8 @@ static bool sqlite_early_ctor(error_t **error)
     }
     sqlite3_reset(statements[STMT_GET_USER_VERSION].prepared);
     user_version = sqlite3_column_int(statements[STMT_GET_USER_VERSION].prepared, 0);
+
+    sqlite3_create_function_v2(db, "startswith", 2, SQLITE_UTF8/* | SQLITE_DETERMINISTIC*/, NULL, sqlite_startswith, NULL, NULL, NULL);
 
     return TRUE;
 }

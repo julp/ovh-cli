@@ -465,7 +465,7 @@ static bool fetch_servers(bool force, error_t **error)
                 json_value_t v;
 
                 v = (json_value_t) iterator_current(&it, NULL);
-                success &= fetch_server(json_get_string(v), force, error);
+                success = fetch_server(json_get_string(v), force, error);
             }
             iterator_close(&it);
             json_document_destroy(doc);
@@ -749,27 +749,6 @@ static bool complete_servers(void *UNUSED(parsed_arguments), const char *current
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         iterator_current(&it, NULL);
         completer_push(possibilities, v, TRUE);
-    }
-    iterator_close(&it);
-
-    return TRUE;
-}
-
-bool complete_from_modelized(const model_t *model, sqlite_statement_t *stmt, completer_t *possibilities)
-{
-    Iterator it;
-    char buffer[8192];
-
-    modelized_init(model, (modelized_t *) &buffer);
-    statement_model_to_iterator(&it, stmt, model, &buffer); // TODO: make iterator_current allocate and return a new "object"?
-    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        void *object;
-
-        iterator_current(&it, NULL);
-        object = malloc(model->size);
-        modelized_init(model, object);
-        memcpy(object, buffer, model->size);
-        completer_push_modelized(possibilities, object);
     }
     iterator_close(&it);
 
