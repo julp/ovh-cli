@@ -533,14 +533,14 @@ table_t *table_new_from_model(const model_t *model, uint32_t flags)
     t->strings = NULL;
     t->columns_count = 0;
     for (f = model->fields; NULL != f->column_name; f++) {
-        if (TRUE/*!f->hidden*/) {
+        if (!HAS_FLAG(f->flags, MODEL_FLAG_INTERNAL)) {
             ++t->columns_count;
         }
     }
     t->columns = mem_new_n(*t->columns, t->columns_count);
     t->rows = dptrarray_new(NULL, row_destroy, NULL);
     for (i = 0, f = t->model->fields; NULL != f->column_name; f++) {
-        if (TRUE/*!f->hidden*/) {
+        if (!HAS_FLAG(f->flags, MODEL_FLAG_INTERNAL)) {
             t->columns[i].title = gettext(f->column_name);
             t->columns[i].type = f->type;
             cplen(t->columns[i].title, &t->columns[i].title_len, NULL);
@@ -640,7 +640,7 @@ void table_store_modelized(table_t *t, void *ptr)
     r = mem_new(*r);
     r->values = mem_new_n(*r->values, t->columns_count);
     for (f = t->model->fields, i = 0; NULL != f->column_name; f++) {
-        if (TRUE/*!f->hidden*/) {
+        if (!HAS_FLAG(f->flags, MODEL_FLAG_INTERNAL)) {
             assert(t->columns[i].type <= _TABLE_TYPE_LAST);
             assert(NULL != type_handlers[t->columns[i].type].store_modelized);
 

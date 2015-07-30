@@ -455,11 +455,11 @@ bool json_object_get_property(json_value_t object, const char *key, json_value_t
     return hashtable_get((HashTable *) node->value, key, value);
 }
 
-void json_object_to_modelized(json_value_t object, const model_t *model, bool copy, void *ptr, bool *nulls)
+void json_object_to_modelized(json_value_t object, modelized_t *ptr, bool copy, bool *nulls)
 {
     const model_field_t *f;
 
-    for (f = model->fields; NULL != f->column_name; f++) {
+    for (f = ptr->model->fields; NULL != f->column_name; f++) {
         json_value_t propvalue;
 
         if (json_object_get_property(object, f->column_name, &propvalue)) {
@@ -467,7 +467,7 @@ void json_object_to_modelized(json_value_t object, const model_t *model, bool co
 
             isnull = json_null == propvalue;
             if (NULL != nulls) {
-                nulls[f - model->fields] = isnull;
+                nulls[f - ptr->model->fields] = isnull;
             }
             switch (f->type) {
                 case MODEL_TYPE_BOOL:

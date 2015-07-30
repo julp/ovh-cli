@@ -154,3 +154,12 @@ ovh application <endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runab
 * quit
 
 For partial bash completion (in current shell), run: `source <(ovh complete)`
+
+## Examples
+
+Hard reboot a dedicated server in rescue mode:
+```
+ovh dedicated <server name> boot <name of rescue boot>
+ovh dedicated <server name> reboot
+```
+(press tab for list and/or completion of server and boot names)

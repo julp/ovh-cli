@@ -105,25 +105,25 @@ static sqlite_statement_t statements[STMT_COUNT] = {
 };
 
 static model_t account_model = {
-    sizeof(account_t), NULL, NULL,
+    sizeof(account_t), "accounts", NULL, NULL,
     (const model_field_t []) {
-        { "id",           MODEL_TYPE_INT,      offsetof(account_t, id),           0, NULL },
-        { "is_default",   MODEL_TYPE_BOOL,     offsetof(account_t, isdefault),    0, NULL },
-        { "name",         MODEL_TYPE_STRING,   offsetof(account_t, name),         0, NULL },
-        { "password",     MODEL_TYPE_STRING,   offsetof(account_t, password),     0, NULL },
-        { "expires_at",   MODEL_TYPE_DATETIME, offsetof(account_t, expires_at),   0, NULL },
-        { "consumer_key", MODEL_TYPE_STRING,   offsetof(account_t, consumer_key), 0, NULL },
-        { "endpoint_id",  MODEL_TYPE_ENUM,     offsetof(account_t, endpoint_id),  0, endpoint_names },
+        { "id",           MODEL_TYPE_INT,      offsetof(account_t, id),           0, NULL,           MODEL_FLAG_PRIMARY | MODEL_FLAG_INTERNAL },
+        { "is_default",   MODEL_TYPE_BOOL,     offsetof(account_t, isdefault),    0, NULL,           0 },
+        { "name",         MODEL_TYPE_STRING,   offsetof(account_t, name),         0, NULL,           MODEL_FLAG_UNIQUE },
+        { "password",     MODEL_TYPE_STRING,   offsetof(account_t, password),     0, NULL,           MODEL_FLAG_NULLABLE },
+        { "expires_at",   MODEL_TYPE_DATETIME, offsetof(account_t, expires_at),   0, NULL,           0 },
+        { "consumer_key", MODEL_TYPE_STRING,   offsetof(account_t, consumer_key), 0, NULL,           MODEL_FLAG_NULLABLE },
+        { "endpoint_id",  MODEL_TYPE_ENUM,     offsetof(account_t, endpoint_id),  0, endpoint_names, 0 },
         MODEL_FIELD_SENTINEL
     }
 };
 
 static model_t application_model = {
-    sizeof(application_t), NULL, NULL,
+    sizeof(application_t), "applications", NULL, NULL,
     (const model_field_t []) {
-        { "app_key",     MODEL_TYPE_STRING, offsetof(application_t, key),         0, NULL },
-        { "secret",      MODEL_TYPE_STRING, offsetof(application_t, secret),      0, NULL },
-        { "endpoint_id", MODEL_TYPE_ENUM,   offsetof(application_t, endpoint_id), 0, endpoint_names },
+        { "app_key",     MODEL_TYPE_STRING, offsetof(application_t, key),         0, NULL,           0 },
+        { "secret",      MODEL_TYPE_STRING, offsetof(application_t, secret),      0, NULL,           0 },
+        { "endpoint_id", MODEL_TYPE_ENUM,   offsetof(application_t, endpoint_id), 0, endpoint_names, MODEL_FLAG_UNIQUE },
         MODEL_FIELD_SENTINEL
     }
 };
@@ -141,20 +141,20 @@ static const char * const expires_in_at[] = {
 
 static void account_flush(void)
 {
-//     acd.current_account.id = 0;
+    acd.current_account.id = 0;
     free(acd.current_account.name);
-//     acd.current_account.name = NULL;
+    acd.current_account.name = NULL;
     free(acd.current_account.password);
-//     acd.current_account.password = NULL;
+    acd.current_account.password = NULL;
     free((void *) acd.current_account.consumer_key);
-//     acd.current_account.consumer_key = NULL;
-    bzero(&acd.current_account, sizeof(acd.current_account));
+    acd.current_account.consumer_key = NULL;
+//     bzero(&acd.current_account, sizeof(acd.current_account));
 
     free(acd.current_application.key);
-//     acd.current_application.key = NULL;
+    acd.current_application.key = NULL;
     free(acd.current_application.secret);
-//     acd.current_application.secret = NULL;
-    bzero(&acd.current_application, sizeof(acd.current_application));
+    acd.current_application.secret = NULL;
+//     bzero(&acd.current_application, sizeof(acd.current_application));
 }
 
 static bool account_set_current(const char *name, error_t **error)
@@ -174,10 +174,10 @@ static bool account_set_current(const char *name, error_t **error)
             statement_bind(&statements[stmt], NULL, name);
         }
 //         statement_bind_from_model(&statements[stmt], &account_model, NULL, (char *) &acd.current_account);
-        if (statement_fetch_to_model(&statements[stmt], &account_model, (char *) &acd.current_account, error)) {
+        if (statement_fetch_to_model(&statements[stmt], (modelized_t *) &acd.current_account, error)) {
 //             statement_bind_from_model(&statements[STMT_APPLICATION_LOAD], &application_model, NULL, (char *) &acd.current_application);
             statement_bind(&statements[STMT_APPLICATION_LOAD], NULL, acd.current_account.endpoint_id);
-            if (!statement_fetch_to_model(&statements[STMT_APPLICATION_LOAD], &application_model, (char *) &acd.current_application, error)) {
+            if (!statement_fetch_to_model(&statements[STMT_APPLICATION_LOAD], (modelized_t *) &acd.current_application, error)) {
                 return FALSE;
             }
         } else {
@@ -254,7 +254,7 @@ bool check_current_application_and_account(bool skip_CK_check, error_t **error)
     if (NULL_OR_EMPTY(acd.current_account.consumer_key) || (0 != acd.current_account.expires_at && acd.current_account.expires_at < time(NULL))) {
         // if we successfully had a CK, save it
         if (NULL != (acd.current_account.consumer_key = request_consumer_key(&acd.current_account.expires_at, error))) {
-            statement_bind_from_model(&statements[STMT_ACCOUNT_UPDATE_KEY], &account_model, NULL, (char *) &acd.current_account);
+            statement_bind_from_model(&statements[STMT_ACCOUNT_UPDATE_KEY], NULL, (modelized_t *) &acd.current_account);
             statement_fetch(&statements[STMT_ACCOUNT_UPDATE_KEY], error);
         }
     }
@@ -314,6 +314,7 @@ void account_register_module_callbacks(const char *name, DtorFunc dtor, void (*o
     }
 }
 
+// a hashtable (const char *module name => void *) is associated to each account
 static void account_data_dtor(void *data)
 {
     HashTable *ht;
@@ -388,6 +389,8 @@ static bool account_early_ctor(error_t **error)
         return FALSE;
     }
 
+    modelized_init(&account_model, (modelized_t *) &acd.current_account.data.model);
+    modelized_init(&application_model, (modelized_t *) &acd.current_application.data.model);
     current_account = &acd.current_account;
     current_application = &acd.current_application;
     acd.modules_data = hashtable_new(value_hash, value_equal, NULL, NULL, account_data_dtor);
@@ -426,7 +429,7 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
 {
     time_t expires_at;
     account_argument_t *args;
-    account_t account = { 0 };
+    account_t account;
 
     USED(mainopts);
     expires_at = (time_t) 0;
@@ -459,6 +462,7 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
         error_set(error, WARN, _("no endpoint specified"));
         return COMMAND_USAGE;
     }
+    modelized_init(&account_model, (modelized_t *) &account);
     account.password = NULL;
     account.endpoint_id = 0;
     account.consumer_key = NULL;
@@ -476,7 +480,7 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
     if (!update) {
         HashTable *ht;
 
-        statement_bind_from_model(&statements[STMT_ACCOUNT_INSERT], &account_model, NULL, (char *) &account);
+        statement_bind_from_model(&statements[STMT_ACCOUNT_INSERT], NULL, (modelized_t *) &account);
         statement_fetch(&statements[STMT_ACCOUNT_INSERT], error);
         account.id = sqlite_last_insert_id();
 
@@ -504,7 +508,7 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
         nulls[1] = NULL == args->consumer_key;
         nulls[2] = NULL == args->consumer_key;
         nulls[3] = !args->endpoint_present;
-        statement_bind_from_model(&statements[STMT_ACCOUNT_UPDATE], &account_model, nulls, (char *) &account);
+        statement_bind_from_model(&statements[STMT_ACCOUNT_UPDATE], nulls, (modelized_t *) &account);
         statement_fetch(&statements[STMT_ACCOUNT_UPDATE], error);
     }
 
@@ -602,7 +606,8 @@ static command_status_t application_add(COMMAND_ARGS)
     application = (application_t *) arg;
     assert(NULL != application->key);
     assert(NULL != application->secret);
-    statement_bind_from_model(&statements[STMT_APPLICATION_INSERT], &application_model, NULL, (char *)  application);
+    modelized_init(&application_model, (modelized_t *) &application);
+    statement_bind_from_model(&statements[STMT_APPLICATION_INSERT], NULL, (modelized_t *) application);
     statement_fetch(&statements[STMT_APPLICATION_INSERT], error);
     // TODO: if !update (0 == sqlite_affected_rows), duplicate?
 

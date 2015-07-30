@@ -31,6 +31,7 @@ typedef enum {
 // méthode toString pour intégrer un élément quelconque (record_t *, server_t *, ...) à la ligne de commande (ie le résultat de la complétion) ?
 // méthode toString pour représenter un élément quelconque (record_t *, server_t *, ...) parmi les propositions à faire à l'utilisateur ?
 struct argument_t {
+    modelized_t data;
     size_t offset;           // result of offsetof, address to copy value of argument
     argument_type_t type;    // one of the ARG_TYPE_* constant
     complete_t complete;     // ARG_TYPE_STRING and ARG_TYPE_CHOICES specific
@@ -72,7 +73,7 @@ static const char *argument_to_name(void *ptr)
 }
 
 static model_t argument_model = { /* dummy model */
-    0/*sizeof(argument_t)*/, argument_to_name, argument_to_s,
+    0, "arguments", argument_to_name, argument_to_s,
 #if 0
     (const model_field_t []) {
         MODEL_FIELD_SENTINEL
@@ -92,10 +93,9 @@ struct completer_t {
 };
 
 typedef struct {
-    void *data;
     bool delegated;
     const char *name;
-    const model_t *model;
+    modelized_t *ptr;
 } possibility_t;
 
 static void possibility_destroy(void *data)
@@ -107,8 +107,8 @@ static void possibility_destroy(void *data)
     if (p->delegated) {
         free((void *) p->name);
     }
-    if (NULL != p->model) {
-        modelized_destroy(p->model, p->data);
+    if (NULL != p->ptr) {
+        modelized_destroy(p->ptr);
     }
     free(p);
 }
@@ -134,22 +134,20 @@ void completer_push(completer_t *c, const char *string, bool delegate)
     possibility_t *p;
 
     p = mem_new(*p);
-    p->data = NULL;
-    p->model = NULL;
+    p->ptr = NULL;
     p->delegated = delegate;
     p->name = string;
     dptrarray_push(c->ary, (void *) p);
 }
 
-void completer_push_modelized(completer_t *c, const model_t *model, void *ptr)
+void completer_push_modelized(completer_t *c, modelized_t *ptr)
 {
     possibility_t *p;
 
     p = mem_new(*p);
-    p->data = ptr;
-    p->model = model;
+    p->ptr = ptr;
     p->delegated = TRUE;
-    p->name = model->to_name(ptr);
+    p->name = ptr->model->to_name(ptr);
     dptrarray_push(c->ary, (void *) p);
 }
 
@@ -201,6 +199,7 @@ static const possibility_t *completer_at(completer_t *c, size_t offset)
         node->string = string_or_hint; \
         node->children = NULL; \
         node->description = NULL; \
+        modelized_init(&argument_model, (modelized_t *) node); \
     } while (0);
 
 static void graph_node_destroy(void *data)
@@ -235,7 +234,7 @@ static bool complete_literal(void *UNUSED(parsed_arguments), const char *current
 
     arg = (argument_t *) data;
     if (0 == strncmp(current_argument, arg->string, current_argument_len)) {
-        completer_push_modelized(possibilities, &argument_model, arg);
+        completer_push_modelized(possibilities, (modelized_t *) arg);
     }
 
     return TRUE;
@@ -353,9 +352,9 @@ void graph_destroy(graph_t *g)
 {
     assert(NULL != g);
 
-    hashtable_destroy(g->nodes);
     dptrarray_destroy(g->compargs);
     completer_destroy(g->possibilities);
+    hashtable_destroy(g->nodes); // have to be last
     free(g);
 }
 
@@ -1024,10 +1023,10 @@ unsigned char graph_complete(EditLine *el, int UNUSED(ch))
                     prefix_len = longest_prefix(p->name, prefix);
                 }
                 fputs(p->name, stdout);
-                if (NULL != p->model && NULL != p->model->to_s) {
+                if (NULL != p->ptr && NULL != p->ptr->model->to_s) {
                     const char *longdesc;
 
-                    longdesc = p->model->to_s(p->data);
+                    longdesc = p->ptr->model->to_s(p->ptr);
                     if (NULL != longdesc) {
                         fputs(" - ", stdout);
                         fputs(longdesc, stdout);

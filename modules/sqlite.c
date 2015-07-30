@@ -237,7 +237,7 @@ void statement_to_iterator(Iterator *it, sqlite_statement_t *stmt, ...)
     );
 }
 
-static void _statement_model_set_output_bind(sqlite_statement_t *stmt, const model_t *model, char *ptr)
+static void _statement_model_set_output_bind(sqlite_statement_t *stmt, const model_t *model, modelized_t *ptr)
 {
     int i, l;
 
@@ -252,15 +252,15 @@ static void _statement_model_set_output_bind(sqlite_statement_t *stmt, const mod
             if (0 == strcmp(f->column_name, column_name)) {
                 switch (f->type) {
                     case MODEL_TYPE_BOOL:
-                        *((bool *) (ptr + f->offset)) = /*!!*/sqlite3_column_int(stmt->prepared, i);
+                        *((bool *) (((char *) ptr) + f->offset)) = /*!!*/sqlite3_column_int(stmt->prepared, i);
                         break;
                     case MODEL_TYPE_INT:
                     case MODEL_TYPE_ENUM:
-                        *((int *) (ptr + f->offset)) = sqlite3_column_int(stmt->prepared, i);
+                        *((int *) (((char *) ptr) + f->offset)) = sqlite3_column_int(stmt->prepared, i);
                         break;
                     case MODEL_TYPE_DATE:
                     case MODEL_TYPE_DATETIME:
-                        *((time_t *) (ptr + f->offset)) = sqlite3_column_int64(stmt->prepared, i);
+                        *((time_t *) (((char *) ptr) + f->offset)) = sqlite3_column_int64(stmt->prepared, i);
                         break;
                     case MODEL_TYPE_STRING:
                     {
@@ -273,7 +273,7 @@ static void _statement_model_set_output_bind(sqlite_statement_t *stmt, const mod
                         } else {
                             uv = strdup((char *) sv);
                         }
-                        *((char **) (ptr + f->offset)) = uv;
+                        *((char **) (((char *) ptr) + f->offset)) = uv;
                         break;
                     }
                     default:
@@ -301,7 +301,7 @@ static void statement_model_iterator_current(const void *collection, void **stat
 
     stmt = (sqlite_statement_t *) collection;
     sss = *(sqlite_statement_state_t **) state;
-    _statement_model_set_output_bind(stmt, sss->model, sss->ptr);
+    _statement_model_set_output_bind(stmt, sss->model, (modelized_t *) sss->ptr);
 }
 
 void statement_model_to_iterator(Iterator *it, sqlite_statement_t *stmt, const model_t *model, char *ptr)
@@ -544,11 +544,10 @@ void statement_bind(sqlite_statement_t *stmt, const bool *nulls, ...)
  * TODO
  *
  * @param stmt
- * @param model
  * @param nulls
  * @param ptr
  */
-void statement_bind_from_model(sqlite_statement_t *stmt, const model_t *model, const bool *nulls, char *ptr/*, ...*/)
+void statement_bind_from_model(sqlite_statement_t *stmt, const bool *nulls, modelized_t *ptr)
 {
     char placeholder[512];
     const model_field_t *f;
@@ -565,7 +564,7 @@ void statement_bind_from_model(sqlite_statement_t *stmt, const model_t *model, c
     sqlite3_clear_bindings(stmt->prepared);
 #endif
     placeholder[0] = ':';
-    for (f = model->fields; NULL != f->column_name; f++) {
+    for (f = ptr->model->fields; NULL != f->column_name; f++) {
         int paramno;
 
         strlcpy(placeholder + 1, f->column_name, ARRAY_SIZE(placeholder) - 1);
@@ -574,22 +573,22 @@ void statement_bind_from_model(sqlite_statement_t *stmt, const model_t *model, c
                 switch (f->type) {
 #if 0
                     case SQLITE_TYPE_DOUBLE:
-                        sqlite3_bind_double(stmt->prepared, paramno, *((double *) (ptr + f->offset)));
+                        sqlite3_bind_double(stmt->prepared, paramno, *((double *) (((char *) ptr) + f->offset)));
                         break;
 #endif
                     case MODEL_TYPE_BOOL:
-                        sqlite3_bind_int(stmt->prepared, paramno, *((bool *) (ptr + f->offset)));
+                        sqlite3_bind_int(stmt->prepared, paramno, *((bool *) (((char *) ptr) + f->offset)));
                         break;
                     case MODEL_TYPE_INT:
                     case MODEL_TYPE_ENUM:
-                        sqlite3_bind_int(stmt->prepared, paramno, *((int *) (ptr + f->offset)));
+                        sqlite3_bind_int(stmt->prepared, paramno, *((int *) (((char *) ptr) + f->offset)));
                         break;
                     case MODEL_TYPE_DATE:
                     case MODEL_TYPE_DATETIME:
-                        sqlite3_bind_int64(stmt->prepared, paramno, *((time_t *) (ptr + f->offset)));
+                        sqlite3_bind_int64(stmt->prepared, paramno, *((time_t *) (((char *) ptr) + f->offset)));
                         break;
                     case MODEL_TYPE_STRING:
-                        sqlite3_bind_text(stmt->prepared, paramno, *((char **) (ptr + f->offset)), -1, SQLITE_TRANSIENT);
+                        sqlite3_bind_text(stmt->prepared, paramno, *((char **) (((char *) ptr) + f->offset)), -1, SQLITE_TRANSIENT);
                         break;
                     default:
                         assert(FALSE);
@@ -611,7 +610,7 @@ void statement_bind_from_model(sqlite_statement_t *stmt, const model_t *model, c
  *
  * @return TRUE if a line was read ; FALSE on error (error is set with it) or
  * if there was no remaining lines to read (caller can test if NULL == *error
- * to ditinguish both cases)
+ * to distinguish both cases)
  */
 bool statement_fetch(sqlite_statement_t *stmt, error_t **error, ...)
 {
@@ -696,13 +695,12 @@ bool statement_fetch(sqlite_statement_t *stmt, error_t **error, ...)
  * TODO
  *
  * @param stmt
- * @param model
  * @param ptr
  * @param error
  *
  * @return
  */
-bool statement_fetch_to_model(sqlite_statement_t *stmt, const model_t *model, char *ptr, error_t **error)
+bool statement_fetch_to_model(sqlite_statement_t *stmt, modelized_t *ptr, error_t **error)
 {
     bool ret;
 
@@ -710,7 +708,7 @@ bool statement_fetch_to_model(sqlite_statement_t *stmt, const model_t *model, ch
     switch (sqlite3_step(stmt->prepared)) {
         case SQLITE_ROW:
         {
-            _statement_model_set_output_bind(stmt, model, ptr);
+            _statement_model_set_output_bind(stmt, ptr->model, ptr);
             ret = TRUE;
             break;
         }
@@ -725,6 +723,14 @@ bool statement_fetch_to_model(sqlite_statement_t *stmt, const model_t *model, ch
     return ret;
 }
 
+/**
+ * TODO
+ *
+ * @param model
+ * @param stmt
+ *
+ * @return
+ */
 command_status_t statement_to_table(const model_t *model, sqlite_statement_t *stmt)
 {
     table_t *t;

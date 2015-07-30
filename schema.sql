@@ -1,8 +1,8 @@
 CREATE TABLE accounts(
     id INTEGER NOT NULL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
-    password TEXT,
-    consumer_key TEXT,
+    password TEXT, -- nullable
+    consumer_key TEXT, -- nullable
     endpoint_id INTEGER NOT NULL,
     is_default INTEGER NOT NULL,
     expires_at INTEGER NOT NULL
@@ -74,7 +74,7 @@ CREATE TABLE boots(
 CREATE TABLE dedicated(
     account_id INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,
     -- From GET /dedicated/server/{serviceName}
-    serverId INTEGER NOT NULL PRIMARY KEY, -- OVH ID (serverId)
+    serverId INTEGER NOT NULL PRIMARY KEY, -- OVH ID
     name TEXT NOT NULL UNIQUE,
     datacenter INT NOT NULL, -- enum
     professionalUse INT NOT NULL, -- bool
@@ -133,7 +133,7 @@ CREATE TABLE fetches(
 
 CREATE TABLE domains(
     account_id INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,
-    name TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
     -- From GET /domain/zone/{serviceName}
     --lastUpdate INT NOT NULL, -- datetime
     hasDnsAnycast INT NOT NULL, -- boolean
@@ -156,13 +156,24 @@ CREATE TABLE domains(
     expiration INT NOT NULL, -- date
     contactTech TEXT NOT NULL,
     contactAdmin TEXT NOT NULL,
-    creation INT NOT NULL -- date
+    creation INT NOT NULL, -- date
+    PRIMARY KEY (name)
+);
+
+CREATE TABLE records(
+    target TEXT NOT NULL,
+    ttl INT, -- nullable
+    zone TEXT NOT NULL REFERENCES domains(name) ON UPDATE CASCADE ON DELETE CASCADE,
+    fieldType INT NOT NULL, -- enum
+    id INT NOT NULL, -- OVH ID (why did't they call it recordId?)
+    subDomain TEXT, -- nullable
+    PRIMARY KEY (id)
 );
 
 CREATE TABLE nameservers(
-    ?
+    -- ?
 );
 
 CREATE TABLE domains_nameservers(
-    ?
+    -- ?
 );

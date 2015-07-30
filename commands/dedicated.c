@@ -81,6 +81,7 @@ static sqlite_statement_t statements[STMT_COUNT] = {
 
 // describe a dedicated server
 typedef struct {
+    modelized_t data;
     int datacenter;
     bool professionalUse;
     int supportLevel;
@@ -106,6 +107,7 @@ typedef struct {
 
 // describe a boot
 typedef struct {
+    modelized_t data;
     int type;
     int bootId;
     const char *kernel;
@@ -191,29 +193,29 @@ static const char *mrtg_types[] = {
 };
 
 static model_t server_model = {
-    sizeof(server_t), NULL, NULL,
+    sizeof(server_t), "servers", NULL, NULL,
     (const model_field_t []) {
-        { "serverId",        MODEL_TYPE_INT,    offsetof(server_t, serverId),        0, NULL },
-        { "name",            MODEL_TYPE_STRING, offsetof(server_t, name),            0, NULL },
-        { "datacenter",      MODEL_TYPE_ENUM,   offsetof(server_t, datacenter),      0, datacenters },
-        { "professionalUse", MODEL_TYPE_BOOL,   offsetof(server_t, professionalUse), 0, NULL },
-        { "supportLevel",    MODEL_TYPE_ENUM,   offsetof(server_t, supportLevel),    0, support_levels },
-        { "commercialRange", MODEL_TYPE_STRING, offsetof(server_t, commercialRange), 0, NULL },
-        { "ip",              MODEL_TYPE_STRING, offsetof(server_t, ip),              0, NULL },
-        { "os",              MODEL_TYPE_STRING, offsetof(server_t, os),              0, NULL },
-        { "state",           MODEL_TYPE_ENUM,   offsetof(server_t, state),           0, states },
-        { "reverse",         MODEL_TYPE_STRING, offsetof(server_t, reverse),         0, NULL },
-        { "monitoring",      MODEL_TYPE_BOOL,   offsetof(server_t, monitoring),      0, NULL },
-        { "rack",            MODEL_TYPE_STRING, offsetof(server_t, rack),            0, NULL },
-        { "rootDevice",      MODEL_TYPE_STRING, offsetof(server_t, rootDevice),      0, NULL },
-        { "linkSpeed",       MODEL_TYPE_INT,    offsetof(server_t, linkSpeed),       0, NULL },
-        { "bootId",          MODEL_TYPE_INT,    offsetof(server_t, bootId),          0, NULL },
-        { "engagedUpTo",     MODEL_TYPE_DATE,   offsetof(server_t, engagedUpTo),     0, NULL },
-        { "contactBilling",  MODEL_TYPE_STRING, offsetof(server_t, contactBilling),  0, NULL },
-        { "expiration",      MODEL_TYPE_DATE,   offsetof(server_t, expiration),      0, NULL },
-        { "contactTech",     MODEL_TYPE_STRING, offsetof(server_t, contactTech),     0, NULL },
-        { "contactAdmin",    MODEL_TYPE_STRING, offsetof(server_t, contactAdmin),    0, NULL },
-        { "creation",        MODEL_TYPE_DATE,   offsetof(server_t, creation),        0, NULL },
+        { "serverId",        MODEL_TYPE_INT,    offsetof(server_t, serverId),        0, NULL,           MODEL_FLAG_PRIMARY | MODEL_FLAG_INTERNAL },
+        { "name",            MODEL_TYPE_STRING, offsetof(server_t, name),            0, NULL,           MODEL_FLAG_UNIQUE },
+        { "datacenter",      MODEL_TYPE_ENUM,   offsetof(server_t, datacenter),      0, datacenters,    0 },
+        { "professionalUse", MODEL_TYPE_BOOL,   offsetof(server_t, professionalUse), 0, NULL,           0 },
+        { "supportLevel",    MODEL_TYPE_ENUM,   offsetof(server_t, supportLevel),    0, support_levels, 0 },
+        { "commercialRange", MODEL_TYPE_STRING, offsetof(server_t, commercialRange), 0, NULL,           MODEL_FLAG_NULLABLE },
+        { "ip",              MODEL_TYPE_STRING, offsetof(server_t, ip),              0, NULL,           0 },
+        { "os",              MODEL_TYPE_STRING, offsetof(server_t, os),              0, NULL,           0 },
+        { "state",           MODEL_TYPE_ENUM,   offsetof(server_t, state),           0, states,         0 },
+        { "reverse",         MODEL_TYPE_STRING, offsetof(server_t, reverse),         0, NULL,           MODEL_FLAG_NULLABLE },
+        { "monitoring",      MODEL_TYPE_BOOL,   offsetof(server_t, monitoring),      0, NULL,           0 },
+        { "rack",            MODEL_TYPE_STRING, offsetof(server_t, rack),            0, NULL,           0 },
+        { "rootDevice",      MODEL_TYPE_STRING, offsetof(server_t, rootDevice),      0, NULL,           MODEL_FLAG_NULLABLE },
+        { "linkSpeed",       MODEL_TYPE_INT,    offsetof(server_t, linkSpeed),       0, NULL,           MODEL_FLAG_NULLABLE },
+        { "bootId",          MODEL_TYPE_INT,    offsetof(server_t, bootId),          0, NULL,           MODEL_FLAG_NULLABLE },
+        { "engagedUpTo",     MODEL_TYPE_DATE,   offsetof(server_t, engagedUpTo),     0, NULL,           MODEL_FLAG_NULLABLE },
+        { "contactBilling",  MODEL_TYPE_STRING, offsetof(server_t, contactBilling),  0, NULL,           0 },
+        { "expiration",      MODEL_TYPE_DATE,   offsetof(server_t, expiration),      0, NULL,           0 },
+        { "contactTech",     MODEL_TYPE_STRING, offsetof(server_t, contactTech),     0, NULL,           0 },
+        { "contactAdmin",    MODEL_TYPE_STRING, offsetof(server_t, contactAdmin),    0, NULL,           0 },
+        { "creation",        MODEL_TYPE_DATE,   offsetof(server_t, creation),        0, NULL,           0 },
         MODEL_FIELD_SENTINEL
     }
 };
@@ -229,32 +231,15 @@ static const char *boot_to_s(void *ptr)
 }
 
 static model_t boot_model = {
-    sizeof(boot_t), boot_to_name, boot_to_s,
+    sizeof(boot_t), "boots", boot_to_name, boot_to_s,
     (const model_field_t []) {
-        { "bootId",      MODEL_TYPE_INT,    offsetof(boot_t, bootId),      0, NULL },
-        { "bootType",    MODEL_TYPE_ENUM,   offsetof(boot_t, type),        0, boot_types },
-        { "kernel",      MODEL_TYPE_STRING, offsetof(boot_t, kernel),      0, NULL },
-        { "description", MODEL_TYPE_STRING, offsetof(boot_t, description), 0, NULL },
+        { "bootId",      MODEL_TYPE_INT,    offsetof(boot_t, bootId),      0, NULL,       MODEL_FLAG_PRIMARY | MODEL_FLAG_INTERNAL },
+        { "bootType",    MODEL_TYPE_ENUM,   offsetof(boot_t, type),        0, boot_types, 0 },
+        { "kernel",      MODEL_TYPE_STRING, offsetof(boot_t, kernel),      0, NULL,       0 },
+        { "description", MODEL_TYPE_STRING, offsetof(boot_t, description), 0, NULL,       0 },
         MODEL_FIELD_SENTINEL
     }
 };
-
-static void server_init(server_t *s)
-{
-    INIT(s, ip);
-    INIT(s, name);
-    INIT(s, commercialRange);
-    INIT(s, os);
-    INIT(s, reverse);
-    INIT(s, rack);
-    INIT(s, rootDevice);
-    INIT(s, contactBilling);
-    INIT(s, contactAdmin);
-    INIT(s, contactTech);
-    s->engagedUpTo = (time_t) 0;
-    s->bootId = s->linkSpeed = 0;
-    s->state = s->supportLevel = s->datacenter = 0;
-}
 
 static bool dedicated_ctor(error_t **error)
 {
@@ -323,30 +308,26 @@ static bool parse_boot(server_t *s, json_document_t *doc, error_t **error)
     boot_t boot;
 #if 0
     json_value_t root, v;
-#else
-    json_value_t root;
-#endif
 
     root = json_document_get_root(doc);
-#if 0
     JSON_GET_PROP_INT(root, "bootId", boot.id);
     JSON_GET_PROP_STRING_EX(root, "kernel", boot.kernel, FALSE);
     JSON_GET_PROP_STRING_EX(root, "description", boot.description, FALSE);
     json_object_get_property(root, "bootType", &v);
     boot.type = json_get_enum(v, boot_types, -1);
 #else
-    json_object_to_modelized(root, &boot_model, FALSE, &boot, NULL);
+    modelized_init(&boot_model, (modelized_t *) &boot);
+    json_object_to_modelized(json_document_get_root(doc), (modelized_t *) &boot, FALSE, NULL);
 #endif
-
-    statement_bind_from_model(&statements[STMT_BOOT_UPSERT], &boot_model, NULL, (char *) &boot);
+    statement_bind_from_model(&statements[STMT_BOOT_UPSERT], NULL, (modelized_t *) &boot);
     statement_fetch(&statements[STMT_BOOT_UPSERT], error);
-    assert(1 == sqlite_affected_rows());
-    statement_bind(&statements[STMT_B_D_LINK], NULL, boot.bootId, s->serverId);
-    statement_fetch(&statements[STMT_B_D_LINK], error);
-
+    if (statement_fetch(&statements[STMT_BOOT_UPSERT], error) || NULL == *error) {
+        statement_bind(&statements[STMT_B_D_LINK], NULL, boot.bootId, s->serverId);
+        statement_fetch(&statements[STMT_B_D_LINK], error);
+    }
     json_document_destroy(doc);
 
-    return TRUE;
+    return NULL == *error;
 }
 
 static bool fetch_server_boots(const char *server_name, server_t *s, error_t **error)
@@ -393,7 +374,7 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
         request_t *req;
         json_document_t *doc;
 
-        server_init(&s);
+        modelized_init(&server_model, (modelized_t *) &s);
         req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/dedicated/server/%s", server_name);
         success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
@@ -403,7 +384,7 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
 #endif
             bool nulls[22] = { FALSE };
 
-            assert(ARRAY_SIZE(nulls) == ((size_t) sqlite3_bind_parameter_count(statements[STMT_DEDICATED_UPSERT].prepared)));
+            CHECK_NULLS_LENGTH(nulls, statements[STMT_DEDICATED_UPSERT]);
 #if 0
             root = json_document_get_root(doc);
             json_object_get_property(root, "datacenter", &propvalue);
@@ -438,7 +419,7 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
                 s.bootId = json_get_integer(propvalue);
             }
 #else
-            json_object_to_modelized(json_document_get_root(doc), &server_model, FALSE, &s, nulls);
+            json_object_to_modelized(json_document_get_root(doc), (modelized_t *) &s, FALSE, nulls);
 #endif
             {
                 request_t *req;
@@ -464,7 +445,7 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
                     json_object_get_property(root, "creation", &propvalue);
                     date_parse_to_timestamp(json_get_string(propvalue), "%F", &s.creation);
 #else
-                    json_object_to_modelized(json_document_get_root(doc), &server_model, FALSE, &s, nulls);
+                    json_object_to_modelized(json_document_get_root(doc), (modelized_t *) &s, FALSE, nulls);
 #endif
                     statement_bind( /* e = enum (int), d = date (int), |n = or NULL */
                         &statements[STMT_DEDICATED_UPSERT], nulls /* "isibisssisbssii" "isissi" "i" */,
@@ -681,8 +662,9 @@ static command_status_t dedicated_boot_get(COMMAND_ARGS)
     USED(mainopts);
     args = (dedicated_argument_t *) arg;
     assert(NULL != args->server_name);
+    modelized_init(&boot_model, (modelized_t *) &boot);
     statement_bind(&statements[STMT_DEDICATED_CURRENT_BOOT], NULL, current_account->id, args->server_name);
-    success = statement_fetch_to_model(&statements[STMT_DEDICATED_CURRENT_BOOT], &boot_model, (char *) &boot, error);
+    success = statement_fetch_to_model(&statements[STMT_DEDICATED_CURRENT_BOOT], (modelized_t *) &boot, error);
     if (success) {
         printf(_("Current boot for %s is:  %s (%s): %s\n"), args->server_name, boot.kernel, boot_types[boot.type], boot.description);
     }
@@ -877,14 +859,16 @@ bool complete_from_modelized(const model_t *model, sqlite_statement_t *stmt, com
     Iterator it;
     char buffer[8192];
 
+    modelized_init(model, (modelized_t *) &buffer);
     statement_model_to_iterator(&it, stmt, model, &buffer); // TODO: make iterator_current allocate and return a new "object"?
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         void *object;
 
         iterator_current(&it, NULL);
         object = malloc(model->size);
+        modelized_init(model, object);
         memcpy(object, buffer, model->size);
-        completer_push_modelized(possibilities, model, object);
+        completer_push_modelized(possibilities, object);
     }
     iterator_close(&it);
 

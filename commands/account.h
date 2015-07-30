@@ -3,6 +3,7 @@
 # define ACCOUNT_H
 
 typedef struct {
+    modelized_t data;
     int id;
     bool isdefault;
     char *name;
@@ -13,6 +14,7 @@ typedef struct {
 } account_t;
 
 typedef struct {
+    modelized_t data;
     char *key;
     char *secret;
     int endpoint_id;

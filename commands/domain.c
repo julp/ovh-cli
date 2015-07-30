@@ -72,6 +72,7 @@ typedef struct {
 
 // describe a domain
 typedef struct {
+    modelized_t data;
     bool uptodate;
     HashTable *records;
     char *name;
@@ -93,8 +94,8 @@ typedef struct {
 typedef struct {
     uint32_t id;
     uint32_t ttl; // in minutes
-    const char *name;
-    record_type_t type;
+    const char *subDomain;
+    record_type_t fieldType;
     const char *target;
 } record_t;
 
@@ -104,9 +105,9 @@ typedef struct {
     uint32_t ttl; // in minutes
     char *domain;
     char *record; // also called subdomain (current value)
-    char *name; // new subdomain name
+    char *subDomain; // new subdomain name
     char *value; // also called target
-    record_type_t type;
+    record_type_t fieldType;
 } domain_record_argument_t;
 
 static const char * const transfer_lock_status[] = {
@@ -132,21 +133,33 @@ static const char * const name_server_types[] = {
 };
 
 static model_t domain_model = {
-    sizeof(domain_t), NULL, NULL,
+    sizeof(domain_t), "domains", NULL, NULL,
     (const model_field_t []) {
-        { "name",               MODEL_TYPE_STRING, offsetof(domain_t, name),               0, NULL },
-        { "hasDnsAnycast",      MODEL_TYPE_BOOL,   offsetof(domain_t, hasDnsAnycast),      0, NULL },
-        { "dnssecSupported",    MODEL_TYPE_BOOL,   offsetof(domain_t, dnssecSupported),    0, NULL },
-        { "owoSupported",       MODEL_TYPE_BOOL,   offsetof(domain_t, owoSupported),       0, NULL },
-        { "transferLockStatus", MODEL_TYPE_ENUM,   offsetof(domain_t, transferLockStatus), 0, transfer_lock_status },
-        { "offer",              MODEL_TYPE_ENUM,   offsetof(domain_t, offer),              0, offers },
-        { "nameServerType",     MODEL_TYPE_ENUM,   offsetof(domain_t, nameServerType),     0, name_server_types },
-        { "engagedUpTo",        MODEL_TYPE_DATE,   offsetof(domain_t, engagedUpTo),        0, NULL },
-        { "contactBilling",     MODEL_TYPE_STRING, offsetof(domain_t, contactBilling),     0, NULL },
-        { "expiration",         MODEL_TYPE_DATE,   offsetof(domain_t, expiration),         0, NULL },
-        { "contactTech",        MODEL_TYPE_STRING, offsetof(domain_t, contactTech),        0, NULL },
-        { "contactAdmin",       MODEL_TYPE_STRING, offsetof(domain_t, contactAdmin),       0, NULL },
-        { "creation",           MODEL_TYPE_DATE,   offsetof(domain_t, creation),           0, NULL },
+        { "name",               MODEL_TYPE_STRING, offsetof(domain_t, name),               0, NULL,                 MODEL_FLAG_PRIMARY },
+        { "hasDnsAnycast",      MODEL_TYPE_BOOL,   offsetof(domain_t, hasDnsAnycast),      0, NULL,                 0 },
+        { "dnssecSupported",    MODEL_TYPE_BOOL,   offsetof(domain_t, dnssecSupported),    0, NULL,                 0 },
+        { "owoSupported",       MODEL_TYPE_BOOL,   offsetof(domain_t, owoSupported),       0, NULL,                 0 },
+        { "transferLockStatus", MODEL_TYPE_ENUM,   offsetof(domain_t, transferLockStatus), 0, transfer_lock_status, 0 },
+        { "offer",              MODEL_TYPE_ENUM,   offsetof(domain_t, offer),              0, offers,               0 },
+        { "nameServerType",     MODEL_TYPE_ENUM,   offsetof(domain_t, nameServerType),     0, name_server_types,    0 },
+        { "engagedUpTo",        MODEL_TYPE_DATE,   offsetof(domain_t, engagedUpTo),        0, NULL,                 MODEL_FLAG_NULLABLE },
+        { "contactBilling",     MODEL_TYPE_STRING, offsetof(domain_t, contactBilling),     0, NULL,                 0 },
+        { "expiration",         MODEL_TYPE_DATE,   offsetof(domain_t, expiration),         0, NULL,                 0 },
+        { "contactTech",        MODEL_TYPE_STRING, offsetof(domain_t, contactTech),        0, NULL,                 0 },
+        { "contactAdmin",       MODEL_TYPE_STRING, offsetof(domain_t, contactAdmin),       0, NULL,                 0 },
+        { "creation",           MODEL_TYPE_DATE,   offsetof(domain_t, creation),           0, NULL,                 0 },
+        MODEL_FIELD_SENTINEL
+    }
+};
+
+static model_t record_model = {
+    sizeof(record_t), "records", NULL, NULL,
+    (const model_field_t []) {
+        { "id",        MODEL_TYPE_INT,    offsetof(record_t, id),        0, NULL,                MODEL_FLAG_PRIMARY | MODEL_FLAG_INTERNAL },
+        { "ttl",       MODEL_TYPE_INT,    offsetof(record_t, ttl),       0, NULL,                0 }, // in minutes
+        { "subDomain", MODEL_TYPE_STRING, offsetof(record_t, subDomain), 0, NULL,                0 }, // record name
+        { "fieldType", MODEL_TYPE_ENUM,   offsetof(record_t, fieldType), 0, domain_record_types, 0 },
+        { "target",    MODEL_TYPE_STRING, offsetof(record_t, target),    0, NULL,                0 }, // record value
         MODEL_FIELD_SENTINEL
     }
 };
@@ -169,7 +182,7 @@ static void record_destroy(void *data)
     assert(NULL != data);
 
     r = (record_t *) data;
-    FREE(r, name);
+    FREE(r, subDomain);
     FREE(r, target);
     free(r);
 }
@@ -219,7 +232,7 @@ static bool domain_ctor(error_t **error)
 
     if (!create_or_migrate("domains", "CREATE TABLE domains(\n\
         account_id INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,\n\
-        name TEXT NOT NULL UNIQUE,\n\
+        name TEXT NOT NULL,\n\
         -- From GET /domain/zone/{serviceName}\n\
         --lastUpdate INT NOT NULL, -- datetime\n\
         hasDnsAnycast INT NOT NULL, -- boolean\n\
@@ -242,7 +255,19 @@ static bool domain_ctor(error_t **error)
         expiration INT NOT NULL, -- date\n\
         contactTech TEXT NOT NULL,\n\
         contactAdmin TEXT NOT NULL,\n\
-        creation INT NOT NULL -- date\n\
+        creation INT NOT NULL, -- date\n\
+        PRIMARY KEY (name)\n\
+    )", NULL, 0, error)) {
+        return FALSE;
+    }
+    if (!create_or_migrate("records", "CREATE TABLE records(\n\
+        target TEXT NOT NULL,\n\
+        ttl INT, -- nullable\n\
+        zone TEXT NOT NULL REFERENCES domains(name) ON UPDATE CASCADE ON DELETE CASCADE,\n\
+        fieldType INT NOT NULL, -- enum\n\
+        id INT NOT NULL, -- OVH ID (why don't they call it recordId?)\n\
+        subDomain TEXT, -- nullable\n\
+        PRIMARY KEY (id)\n\
     )", NULL, 0, error)) {
         return FALSE;
     }
@@ -259,7 +284,6 @@ static void domain_dtor(void)
     statement_batched_finalize(statements, STMT_COUNT);
 }
 
-// TODO: should be run after any change on a domain?
 static command_status_t domain_refresh(COMMAND_ARGS);
 
 static void ask_for_refresh(COMMAND_ARGS)
@@ -282,9 +306,9 @@ static int parse_record(HashTable *records, json_document_t *doc)
     JSON_GET_PROP_INT(root, "id", r->id);
     JSON_GET_PROP_INT(root, "ttl", r->ttl);
     JSON_GET_PROP_STRING(root, "target", r->target);
-    JSON_GET_PROP_STRING(root, "subDomain", r->name);
+    JSON_GET_PROP_STRING(root, "subDomain", r->subDomain);
     json_object_get_property(root, "fieldType", &v);
-    r->type = json_get_enum(v, domain_record_types, RECORD_TYPE_ANY);
+    r->fieldType = json_get_enum(v, domain_record_types, RECORD_TYPE_ANY);
     hashtable_quick_put(records, 0, r->id, NULL, r, NULL);
     json_document_destroy(doc);
 
@@ -308,7 +332,7 @@ static bool fetch_domain(domain_t *d, const char * const domain_name, bool force
             success &= request_execute(req, RESPONSE_JSON, (void **) &docs[i], error);
             request_destroy(req);
             if (success) {
-                json_object_to_modelized(json_document_get_root(docs[i]), &domain_model, FALSE, d, NULL);
+                json_object_to_modelized(json_document_get_root(docs[i]), (modelized_t *) d, FALSE, NULL);
             }
         }
         if (success) {
@@ -356,7 +380,8 @@ static bool fetch_domains(domain_set_t *ds, bool force, error_t **error)
                 domain_t *d;
                 json_value_t v;
 
-                d = domain_new();
+                d = (domain_t *) modelized_new(&domain_model);
+                d->records = hashtable_new(NULL, value_equal, NULL, NULL, record_destroy); // TODO: COMPAT
                 v = (json_value_t) iterator_current(&it, NULL);
                 hashtable_put(ds->domains, 0, json_get_string(v), d, NULL); // ds->domains has strdup as key_duper, don't need to strdup it ourself
                 success &= fetch_domain(d, json_get_string(v), force, error);
@@ -568,12 +593,12 @@ static command_status_t record_list(COMMAND_ARGS)
             record_t *r;
 
             r = iterator_current(&it, NULL);
-            if (0 == args->type || r->type == args->type) {
+            if (0 == args->fieldType || r->fieldType == args->fieldType) {
                 table_store(t,
 #ifdef PRINT_OVH_ID
                     r->id,
 #endif /* PRINT_OVH_ID */
-                    r->name, r->type, r->ttl, r->target
+                    r->subDomain, r->fieldType, r->ttl, r->target
                 );
             }
         }
@@ -607,7 +632,7 @@ static command_status_t record_add(COMMAND_ARGS)
             reqdoc = json_document_new();
             root = json_object();
             json_object_set_property(root, "target", json_string(args->value));
-            json_object_set_property(root, "fieldType", json_string(domain_record_types[args->type]));
+            json_object_set_property(root, "fieldType", json_string(domain_record_types[args->fieldType]));
 //             if ('\0' != *subdomain)
                 json_object_set_property(root, "subDomain", json_string(args->record));
             json_document_set_root(reqdoc, root);
@@ -644,7 +669,7 @@ static command_status_t record_add(COMMAND_ARGS)
     return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static size_t find_record(HashTable *records, const char *name, record_t **match)
+static size_t find_record(HashTable *records, const char *subDomain, record_t **match)
 {
     Iterator it;
     size_t matches;
@@ -655,7 +680,7 @@ static size_t find_record(HashTable *records, const char *name, record_t **match
         record_t *r;
 
         r = iterator_current(&it, NULL);
-        if (r->name[0] == name[0] && 0 == strcmp(r->name, name)) { // TODO: strcmp_l? type?
+        if (r->subDomain[0] == subDomain[0] && 0 == strcmp(r->subDomain, subDomain)) { // TODO: strcmp_l? type?
             ++matches;
             *match = r;
         }
@@ -690,7 +715,7 @@ static command_status_t record_delete(COMMAND_ARGS)
             switch (matches) {
                 case 1:
                 {
-                    if (!confirm(mainopts, _("Confirm deletion of '%s.%s'"), match->name, args->domain)) {
+                    if (!confirm(mainopts, _("Confirm deletion of '%s.%s'"), match->subDomain, args->domain)) {
                         return COMMAND_SUCCESS; // yeah, success because user canceled it
                     }
                     break;
@@ -761,8 +786,8 @@ static command_status_t record_update(COMMAND_ARGS)
             if (NULL != args->value) {
                 json_object_set_property(root, "target", json_string(args->value));
             }
-            if (NULL != args->name) {
-                json_object_set_property(root, "subDomain", json_string(args->name));
+            if (NULL != args->subDomain) {
+                json_object_set_property(root, "subDomain", json_string(args->subDomain));
             }
             json_object_set_property(root, "ttl", json_integer(args->ttl));
             json_document_set_root(reqdoc, root);
@@ -781,15 +806,15 @@ static command_status_t record_update(COMMAND_ARGS)
                 FREE(r, target);
                 r->target = strdup(args->value);
             }
-            if (NULL != args->name) {
-                FREE(r, name);
-                r->name = strdup(args->name);
+            if (NULL != args->subDomain) {
+                FREE(r, subDomain);
+                r->subDomain = strdup(args->subDomain);
             }
             r->ttl = args->ttl;
             ask_for_refresh(RELAY_COMMAND_ARGS);
         }
     }
-//     debug("request update of %s.%s to %s.%s with TTL = %" PRIu32 " and value = '%s'", args->record, args->domain, args->name, args->domain, args->ttl, args->value);
+//     debug("request update of %s.%s to %s.%s with TTL = %" PRIu32 " and value = '%s'", args->record, args->domain, args->subDomain, args->domain, args->ttl, args->value);
 
     return COMMAND_SUCCESS;
 }
@@ -878,8 +903,8 @@ static bool complete_records(void *parsed_arguments, const char *current_argumen
             record_t *r;
 
             r = iterator_current(&it, NULL);
-            if (0 == strncmp(r->name, current_argument, current_argument_len)) {
-                completer_push(possibilities, r->name, FALSE);
+            if (0 == strncmp(r->subDomain, current_argument, current_argument_len)) {
+                completer_push(possibilities, r->subDomain, FALSE);
             }
         }
         iterator_close(&it);
@@ -954,8 +979,8 @@ static void domain_regcomm(graph_t *g)
 
         arg_ttl = argument_create_uint(offsetof(domain_record_argument_t, ttl), "<ttl>");
         arg_record = argument_create_string(offsetof(domain_record_argument_t, record), "<record>", complete_records, NULL);
-        arg_type = argument_create_choices(offsetof(domain_record_argument_t, type), "<type>",  domain_record_types);
-        arg_name = argument_create_string(offsetof(domain_record_argument_t, name), "<name>", NULL, NULL);
+        arg_type = argument_create_choices(offsetof(domain_record_argument_t, fieldType), "<type>",  domain_record_types);
+        arg_name = argument_create_string(offsetof(domain_record_argument_t, subDomain), "<name>", NULL, NULL);
         arg_value = argument_create_string(offsetof(domain_record_argument_t, value), "<value>", NULL, NULL);
 
         graph_create_full_path(g, lit_domain, arg_domain, lit_record, lit_list, NULL);
