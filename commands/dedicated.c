@@ -53,21 +53,21 @@ enum {
 
 static sqlite_statement_t statements[STMT_COUNT] = {
 #if !MODELIZED
-    [ STMT_DEDICATED_LIST ]            = DECL_STMT("SELECT name, ip, os, reverse, kernel, datacenter, professionalUse, supportLevel, commercialRange, state, monitoring, rack, rootDevice, linkSpeed, engagedUpTo, contactBilling, expiration, contactTech, contactAdmin, creation FROM dedicated JOIN boots ON dedicated.bootId = boots.bootId WHERE account_id = ?", "i", "sssssibisibssi" "isissi"),
+    [ STMT_DEDICATED_LIST ]            = DECL_STMT("SELECT name, ip, os, reverse, kernel, datacenter, professionalUse, supportLevel, commercialRange, state, monitoring, rack, rootDevice, linkSpeed, engagedUpTo, contactBilling, expiration, contactTech, contactAdmin, creation FROM dedicated JOIN boots ON dedicated.bootId = boots.bootId WHERE accountId = ?", "i", "sssssibisibssi" "isissi"),
 #else
-    [ STMT_DEDICATED_LIST ]            = DECL_STMT("SELECT * FROM dedicated WHERE account_id = ?", "i", ""),
+    [ STMT_DEDICATED_LIST ]            = DECL_STMT("SELECT * FROM dedicated WHERE accountId = ?", "i", ""),
 #endif
-    [ STMT_DEDICATED_UPSERT ]          = DECL_STMT("INSERT OR REPLACE INTO dedicated(serverId, name, datacenter, professionalUse, supportLevel, commercialRange, ip, os, state, reverse, monitoring, rack, rootDevice, linkSpeed, bootId, engagedUpTo, contactBilling, expiration, contactTech, contactAdmin, creation, account_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", "isibisssisbssii" "isissi" "i", ""),
-    [ STMT_DEDICATED_GET_IP ]          = DECL_STMT("SELECT ip FROM dedicated WHERE account_id = ? AND name = ?", "is", "s"),
-    [ STMT_DEDICATED_NEAR_EXPIRATION ] = DECL_STMT("SELECT julianday(datetime(expiration, 'unixepoch', 'localtime')) - julianday('now') AS days, name FROM dedicated WHERE account_id = ? AND days < 120", "i", "is"),
-    [ STMT_DEDICATED_SET_REVERSE ]     = DECL_STMT("UPDATE dedicated SET reverse = ? WHERE account_id = ? AND name = ?", "sis", ""),
-    [ STMT_DEDICATED_COMPLETION ]      = DECL_STMT("SELECT name FROM dedicated WHERE account_id = ? AND name LIKE ? || '%'", "is", "s"),
-    [ STMT_DEDICATED_CURRENT_BOOT ]    = DECL_STMT("SELECT boots.* FROM boots JOIN dedicated ON boots.bootId = dedicated.bootId WHERE account_id = ? AND name = ?", "is", BOOT_OUTPUT_BINDS),
-    [ STMT_BOOT_LIST ]                 = DECL_STMT("SELECT boots.* FROM boots JOIN boots_dedicated ON boots_dedicated.bootId = boots.bootId JOIN dedicated ON boots_dedicated.serverId = dedicated.serverId WHERE account_id = ? AND name = ?", "is", BOOT_OUTPUT_BINDS),
+    [ STMT_DEDICATED_UPSERT ]          = DECL_STMT("INSERT OR REPLACE INTO dedicated(serverId, name, datacenter, professionalUse, supportLevel, commercialRange, ip, os, state, reverse, monitoring, rack, rootDevice, linkSpeed, bootId, engagedUpTo, contactBilling, expiration, contactTech, contactAdmin, creation, accountId) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", "isibisssisbssii" "isissi" "i", ""),
+    [ STMT_DEDICATED_GET_IP ]          = DECL_STMT("SELECT ip FROM dedicated WHERE accountId = ? AND name = ?", "is", "s"),
+    [ STMT_DEDICATED_NEAR_EXPIRATION ] = DECL_STMT("SELECT julianday(datetime(expiration, 'unixepoch', 'localtime')) - julianday('now') AS days, name FROM dedicated WHERE accountId = ? AND days < 120", "i", "is"),
+    [ STMT_DEDICATED_SET_REVERSE ]     = DECL_STMT("UPDATE dedicated SET reverse = ? WHERE accountId = ? AND name = ?", "sis", ""),
+    [ STMT_DEDICATED_COMPLETION ]      = DECL_STMT("SELECT name FROM dedicated WHERE accountId = ? AND name LIKE ? || '%'", "is", "s"),
+    [ STMT_DEDICATED_CURRENT_BOOT ]    = DECL_STMT("SELECT boots.* FROM boots JOIN dedicated ON boots.bootId = dedicated.bootId WHERE accountId = ? AND name = ?", "is", BOOT_OUTPUT_BINDS),
+    [ STMT_BOOT_LIST ]                 = DECL_STMT("SELECT boots.* FROM boots JOIN boots_dedicated ON boots_dedicated.bootId = boots.bootId JOIN dedicated ON boots_dedicated.serverId = dedicated.serverId WHERE accountId = ? AND name = ?", "is", BOOT_OUTPUT_BINDS),
     [ STMT_BOOT_UPSERT ]               = DECL_STMT("INSERT OR REPLACE INTO boots(bootId, bootType, kernel, description) VALUES(:bootId, :bootType, :kernel, :description)", "iiss", ""),
-    [ STMT_BOOT_COMPLETION ]           = DECL_STMT("SELECT boots.*/*kernel*/ FROM boots JOIN boots_dedicated ON boots_dedicated.bootId = boots.bootId JOIN dedicated ON boots_dedicated.serverId = dedicated.serverId WHERE account_id = ? AND name = ? AND kernel LIKE ? || '%'", "iss", "s"),
+    [ STMT_BOOT_COMPLETION ]           = DECL_STMT("SELECT boots.*/*kernel*/ FROM boots JOIN boots_dedicated ON boots_dedicated.bootId = boots.bootId JOIN dedicated ON boots_dedicated.serverId = dedicated.serverId WHERE accountId = ? AND name = ? AND kernel LIKE ? || '%'", "iss", "s"),
     [ STMT_B_D_LINK ]                  = DECL_STMT("INSERT OR IGNORE INTO boots_dedicated(bootId, serverId) VALUES(?, ?)", "ii", ""),
-    [ STMT_B_D_FIND_BY_NAME ]          = DECL_STMT("SELECT boots.bootId FROM boots JOIN boots_dedicated ON boots_dedicated.bootId = boots.bootId JOIN dedicated ON boots_dedicated.serverId = dedicated.serverId WHERE account_id = ? AND name = ? AND kernel = ?", "iss", "i"),
+    [ STMT_B_D_FIND_BY_NAME ]          = DECL_STMT("SELECT boots.bootId FROM boots JOIN boots_dedicated ON boots_dedicated.bootId = boots.bootId JOIN dedicated ON boots_dedicated.serverId = dedicated.serverId WHERE accountId = ? AND name = ? AND kernel = ?", "iss", "i"),
 };
 
 #define FETCH_SERVERS_IF_NEEDED \
@@ -241,6 +241,50 @@ static model_t boot_model = {
     }
 };
 
+sqlite_migration_t dedicated_migrations[] = {
+    {
+        1,
+        "PRAGMA foreign_keys = off;\
+        BEGIN TRANSACTION;\
+        CREATE TABLE dedicated_tmp(\n\
+            accountId INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,\n\
+            -- From GET /dedicated/server/{serviceName}\n\
+            serverId INTEGER NOT NULL PRIMARY KEY, -- OVH ID\n\
+            name TEXT NOT NULL UNIQUE,\n\
+            datacenter INT NOT NULL, -- enum\n\
+            professionalUse INT NOT NULL, -- bool\n\
+            supportLevel INT NOT NULL, -- enum\n\
+            commercialRange TEXT, -- nullable\n\
+            ip TEXT NOT NULL, -- unique ?\n\
+            os TEXT NOT NULL,\n\
+            state INT NOT NULL, -- enum\n\
+            reverse TEXT, -- nullable\n\
+            monitoring INT NOT NULL, -- bool\n\
+            rack TEXT NOT NULL,\n\
+            rootDevice TEXT, -- nullable\n\
+            linkSpeed INT, -- nullable\n\
+            bootId INT REFERENCES boots(bootId) ON UPDATE CASCADE ON DELETE CASCADE,\n\
+            -- From GET /dedicated/server/{serviceName}/serviceInfos\n\
+            -- status INT NOT NULL, -- enum\n\
+            engagedUpTo INT, -- data, nullable\n\
+            -- possibleRenewPeriod: array of int (JSON response)\n\
+            contactBilling TEXT NOT NULL,\n\
+            -- renew: subobkect (JSON response)\n\
+            -- domain TEXT NOT NULL, -- same as name?\n\
+            expiration INT NOT NULL, -- date\n\
+            contactTech TEXT NOT NULL,\n\
+            contactAdmin TEXT NOT NULL,\n\
+            creation INT NOT NULL -- date\n\
+        );\
+        INSERT INTO dedicated_tmp SELECT * FROM dedicated;\
+        DROP TABLE dedicated;\
+        ALTER TABLE dedicated_tmp RENAME TO dedicated;\
+        PRAGMA foreign_key_check;\
+        COMMIT TRANSACTION;\
+        PRAGMA foreign_keys = on;"
+    }
+};
+
 static bool dedicated_ctor(error_t **error)
 {
     if (!create_or_migrate("boots", "CREATE TABLE boots(\n\
@@ -252,7 +296,7 @@ static bool dedicated_ctor(error_t **error)
         return FALSE;
     }
     if (!create_or_migrate("dedicated", "CREATE TABLE dedicated(\n\
-        account_id INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,\n\
+        accountId INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,\n\
         -- From GET /dedicated/server/{serviceName}\n\
         serverId INTEGER NOT NULL PRIMARY KEY, -- OVH ID\n\
         name TEXT NOT NULL UNIQUE,\n\
@@ -280,7 +324,7 @@ static bool dedicated_ctor(error_t **error)
         contactTech TEXT NOT NULL,\n\
         contactAdmin TEXT NOT NULL,\n\
         creation INT NOT NULL -- date\n\
-    )", NULL, 0, error)) {
+    )", dedicated_migrations, ARRAY_SIZE(dedicated_migrations), error)) {
         return FALSE;
     }
     if (!create_or_migrate("boots_dedicated", "CREATE TABLE boots_dedicated(\n\
@@ -453,7 +497,7 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
                         s.serverId, s.name, s.datacenter, s.professionalUse, s.supportLevel, s.commercialRange, s.ip, s.os, s.state, s.reverse, s.monitoring, s.rack, s.rootDevice, s.linkSpeed, s.bootId,
                         // engagedUpTo (d|n), contactBilling (s), expiration (d), contactTech (s), contactAdmin (s), creation (d)
                         s.engagedUpTo, s.contactBilling, s.expiration, s.contactTech, s.contactAdmin, s.creation,
-                        // account_id (i)
+                        // accountId (i)
                         current_account->id
                     );
                     statement_fetch(&statements[STMT_DEDICATED_UPSERT], error);

@@ -419,14 +419,19 @@ bool create_or_migrate(const char *table_name, const char *create_stmt, sqlite_m
         return FALSE;
     }
     if (SQLITE_OK == (ret = sqlite3_prepare_v2(db, buffer, -1, &stmt, NULL))) {
-        switch (sqlite3_step(stmt)) {
+        int step;
+
+        step = sqlite3_step(stmt);
+        sqlite3_reset(stmt);
+        sqlite3_finalize(stmt);
+        switch (step) {
             case SQLITE_DONE:
                 ret = sqlite3_exec(db, create_stmt, NULL, NULL, &errmsg);
                 break;
             case SQLITE_ROW:
                 for (i = 0; SQLITE_OK == ret && i < migrations_count; i++) {
-                    if (OVH_CLI_VERSION_NUMBER > migrations[i].version) {
-                        ret = sqlite3_exec(db, create_stmt, NULL, NULL, &errmsg);
+                    if (migrations[i].version > user_version) {
+                        ret = sqlite3_exec(db, migrations[i].statement, NULL, NULL, &errmsg);
                     }
                 }
                 break;
@@ -434,8 +439,6 @@ bool create_or_migrate(const char *table_name, const char *create_stmt, sqlite_m
                 // NOP: error is handled below
                 break;
         }
-        sqlite3_reset(stmt);
-        sqlite3_finalize(stmt);
     }
     if (SQLITE_OK != ret) {
         error_set(error, FATAL, "%s", errmsg);
@@ -790,6 +793,7 @@ static bool sqlite_early_ctor(error_t **error)
         error_set(error, FATAL, _("can't retrieve database version: %s"), sqlite3_errmsg(db));
         return FALSE;
     }
+    sqlite3_reset(statements[STMT_GET_USER_VERSION].prepared);
     user_version = sqlite3_column_int(statements[STMT_GET_USER_VERSION].prepared, 0);
 
     return TRUE;
