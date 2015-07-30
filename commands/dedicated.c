@@ -52,11 +52,7 @@ enum {
 #define BOOT_OUTPUT_BINDS "iss"
 
 static sqlite_statement_t statements[STMT_COUNT] = {
-#if !MODELIZED
-    [ STMT_DEDICATED_LIST ]            = DECL_STMT("SELECT name, ip, os, reverse, kernel, datacenter, professionalUse, supportLevel, commercialRange, state, monitoring, rack, rootDevice, linkSpeed, engagedUpTo, contactBilling, expiration, contactTech, contactAdmin, creation FROM dedicated JOIN boots ON dedicated.bootId = boots.bootId WHERE accountId = ?", "i", "sssssibisibssi" "isissi"),
-#else
     [ STMT_DEDICATED_LIST ]            = DECL_STMT("SELECT * FROM dedicated WHERE accountId = ?", "i", ""),
-#endif
     [ STMT_DEDICATED_UPSERT ]          = DECL_STMT("INSERT OR REPLACE INTO dedicated(serverId, name, datacenter, professionalUse, supportLevel, commercialRange, ip, os, state, reverse, monitoring, rack, rootDevice, linkSpeed, bootId, engagedUpTo, contactBilling, expiration, contactTech, contactAdmin, creation, accountId) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", "isibisssisbssii" "isissi" "i", ""),
     [ STMT_DEDICATED_GET_IP ]          = DECL_STMT("SELECT ip FROM dedicated WHERE accountId = ? AND name = ?", "is", "s"),
     [ STMT_DEDICATED_NEAR_EXPIRATION ] = DECL_STMT("SELECT julianday(datetime(expiration, 'unixepoch', 'localtime')) - julianday('now') AS days, name FROM dedicated WHERE accountId = ? AND days < 120", "i", "is"),
@@ -350,19 +346,9 @@ static void dedicated_dtor(void)
 static bool parse_boot(server_t *s, json_document_t *doc, error_t **error)
 {
     boot_t boot;
-#if 0
-    json_value_t root, v;
 
-    root = json_document_get_root(doc);
-    JSON_GET_PROP_INT(root, "bootId", boot.id);
-    JSON_GET_PROP_STRING_EX(root, "kernel", boot.kernel, FALSE);
-    JSON_GET_PROP_STRING_EX(root, "description", boot.description, FALSE);
-    json_object_get_property(root, "bootType", &v);
-    boot.type = json_get_enum(v, boot_types, -1);
-#else
     modelized_init(&boot_model, (modelized_t *) &boot);
     json_object_to_modelized(json_document_get_root(doc), (modelized_t *) &boot, FALSE, NULL);
-#endif
     statement_bind_from_model(&statements[STMT_BOOT_UPSERT], NULL, (modelized_t *) &boot);
     statement_fetch(&statements[STMT_BOOT_UPSERT], error);
     if (statement_fetch(&statements[STMT_BOOT_UPSERT], error) || NULL == *error) {
@@ -423,48 +409,10 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
         success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (success) {
-#if 0
-            json_value_t root, propvalue;
-#endif
             bool nulls[22] = { FALSE };
 
             CHECK_NULLS_LENGTH(nulls, statements[STMT_DEDICATED_UPSERT]);
-#if 0
-            root = json_document_get_root(doc);
-            json_object_get_property(root, "datacenter", &propvalue);
-            s.datacenter = json_get_enum(propvalue, datacenters, -1);
-            JSON_GET_PROP_BOOL(root, "professionalUse", s.professionalUse);
-            json_object_get_property(root, "supportLevel", &propvalue);
-            s.supportLevel = json_get_enum(propvalue, support_levels, -1);
-            JSON_GET_PROP_STRING_EX(root, "ip", s.ip, FALSE);
-            JSON_GET_PROP_STRING_EX(root, "name", s.name, FALSE);
-            JSON_GET_PROP_STRING_EX(root, "commercialRange", s.commercialRange, FALSE);
-            nulls[6] = NULL == s.commercialRange;
-            JSON_GET_PROP_STRING_EX(root, "os", s.os, FALSE);
-            json_object_get_property(root, "state", &propvalue);
-            s.state = json_get_enum(propvalue, states, -1);
-            JSON_GET_PROP_STRING_EX(root, "reverse", s.reverse, FALSE);
-            nulls[10] = NULL == s.reverse;
-            JSON_GET_PROP_INT(root, "serverId", s.serverId);
-            JSON_GET_PROP_BOOL(root, "monitoring", s.monitoring);
-            JSON_GET_PROP_STRING_EX(root, "rack", s.rack, FALSE);
-            JSON_GET_PROP_STRING_EX(root, "rootDevice", s.rootDevice, FALSE);
-            nulls[13] = NULL == s.rootDevice;
-            json_object_get_property(root, "linkSpeed", &propvalue);
-            if (json_null == propvalue) {
-                nulls[14] = TRUE;
-            } else {
-                s.linkSpeed = json_get_integer(propvalue);
-            }
-            json_object_get_property(root, "bootId", &propvalue);
-            if (json_null == propvalue) {
-                nulls[15] = TRUE;
-            } else {
-                s.bootId = json_get_integer(propvalue);
-            }
-#else
             json_object_to_modelized(json_document_get_root(doc), (modelized_t *) &s, FALSE, nulls);
-#endif
             {
                 request_t *req;
                 json_document_t *doc;
@@ -473,24 +421,7 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
                 success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
                 request_destroy(req);
                 if (success) {
-#if 0
-                    json_value_t root, propvalue;
-
-                    root = json_document_get_root(doc);
-                    JSON_GET_PROP_STRING_EX(root, "contactAdmin", s.contactAdmin, FALSE);
-                    JSON_GET_PROP_STRING_EX(root, "contactBilling", s.contactBilling, FALSE);
-                    JSON_GET_PROP_STRING_EX(root, "contactTech", s.contactTech, FALSE);
-                    json_object_get_property(root, "engagedUpTo", &propvalue);
-                    if (json_null != propvalue) {
-                        date_parse_to_timestamp(json_get_string(propvalue), "%F", &s.engagedUpTo);
-                    }
-                    json_object_get_property(root, "expiration", &propvalue);
-                    date_parse_to_timestamp(json_get_string(propvalue), "%F", &s.expiration);
-                    json_object_get_property(root, "creation", &propvalue);
-                    date_parse_to_timestamp(json_get_string(propvalue), "%F", &s.creation);
-#else
                     json_object_to_modelized(json_document_get_root(doc), (modelized_t *) &s, FALSE, nulls);
-#endif
                     statement_bind( /* e = enum (int), d = date (int), |n = or NULL */
                         &statements[STMT_DEDICATED_UPSERT], nulls /* "isibisssisbssii" "isissi" "i" */,
                         // id (i), name (s), datacenter (e), professionalUse (b), supportLevel (e), commercialRange (s|n), ip (s), os (s), state (e), reverse (s|n), monitoring (b), rack (s), rootDevice (s|n), linkSpeed (i|n), bootId (i|n)
@@ -549,12 +480,6 @@ static bool fetch_servers(bool force, error_t **error)
 
 static command_status_t dedicated_list(COMMAND_ARGS)
 {
-#if !MODELIZED
-    table_t *t;
-    Iterator it;
-    server_t server;
-    const char *boot;
-#endif
     dedicated_argument_t *args;
 
     USED(arg);
@@ -563,52 +488,9 @@ static command_status_t dedicated_list(COMMAND_ARGS)
     // populate
     FETCH_SERVERS_IF_NEEDED;
     // display
-#if !MODELIZED
-    t = table_new(
-        20,
-        _("name"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
-        _("ip"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
-        _("os"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
-        _("reverse"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
-        _("boot"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
-        _("datacenter"), TABLE_TYPE_ENUM, datacenters,
-        _("professionalUse"), TABLE_TYPE_BOOLEAN,
-        _("supportLevel"), TABLE_TYPE_ENUM, support_levels,
-        _("commercialRange"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
-        _("state"), TABLE_TYPE_ENUM, states,
-        _("monitoring"), TABLE_TYPE_BOOLEAN,
-        _("rack"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
-        _("rootDevice"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
-        _("linkSpeed"), TABLE_TYPE_INT,
-        _("engagedUpTo"), TABLE_TYPE_DATE,
-        _("contactBilling"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
-        _("expiration"), TABLE_TYPE_DATE,
-        _("contactTech"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
-        _("contactAdmin"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
-        _("creation"), TABLE_TYPE_DATE
-    );
-    statement_bind(&statements[STMT_DEDICATED_LIST], NULL, current_account->id);
-    statement_to_iterator(&it, &statements[STMT_DEDICATED_LIST],
-        &server.name, &server.ip, &server.os, &server.reverse, &boot, &server.datacenter, &server.professionalUse, &server.supportLevel, &server.commercialRange, &server.state, &server.monitoring, &server.rack, &server.rootDevice, &server.linkSpeed,
-        &server.engagedUpTo, &server.contactBilling, &server.expiration, &server.contactTech, &server.contactAdmin, &server.creation
-    );
-    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        iterator_current(&it, NULL);
-        table_store(t,
-            server.name, server.ip, server.os, server.reverse, boot, server.datacenter, server.professionalUse, server.supportLevel, server.commercialRange, server.state, server.monitoring, server.rack, server.rootDevice, server.linkSpeed,
-            server.engagedUpTo, server.contactBilling, server.expiration, server.contactTech, server.contactAdmin, server.creation
-        );
-    }
-    iterator_close(&it);
-    table_display(t, TABLE_FLAG_NONE);
-    table_destroy(t);
-
-    return COMMAND_SUCCESS /* TODO: | CMD_FLAG_NO_DATA */;
-#else
     statement_bind(&statements[STMT_DEDICATED_LIST], NULL, current_account->id);
 
     return statement_to_table(&server_model, &statements[STMT_DEDICATED_LIST]);
-#endif
 }
 
 static command_status_t dedicated_check(COMMAND_ARGS)
@@ -660,11 +542,6 @@ static command_status_t dedicated_reboot(COMMAND_ARGS)
 
 static command_status_t dedicated_boot_list(COMMAND_ARGS)
 {
-#if !MODELIZED
-    table_t *t;
-    boot_t boot;
-    Iterator it;
-#endif
     dedicated_argument_t *args;
 
     USED(mainopts);
@@ -672,29 +549,9 @@ static command_status_t dedicated_boot_list(COMMAND_ARGS)
     assert(NULL != args->server_name);
     FETCH_SERVERS_IF_NEEDED;
     printf(_("Available boots for '%s':\n"), args->server_name);
-#if !MODELIZED
-    t = table_new(
-        3,
-        _("bootType"), TABLE_TYPE_ENUM, boot_types,
-        _("kernel"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE,
-        _("description"), TABLE_TYPE_STRING | TABLE_TYPE_DELEGATE
-    );
-#endif
     statement_bind(&statements[STMT_BOOT_LIST], NULL, current_account->id, args->server_name);
-#if !MODELIZED
-    statement_model_to_iterator(&it, &statements[STMT_BOOT_LIST], &boot_model, (char *) &boot);
-    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        iterator_current(&it, NULL);
-        table_store(t, boot.type, boot.kernel, boot.description);
-    }
-    iterator_close(&it);
-    table_display(t, TABLE_FLAG_NONE);
-    table_destroy(t);
 
-    return COMMAND_SUCCESS;
-#else
     return statement_to_table(&boot_model, &statements[STMT_BOOT_LIST]);
-#endif
 }
 
 static command_status_t dedicated_boot_get(COMMAND_ARGS)
@@ -921,27 +778,13 @@ bool complete_from_modelized(const model_t *model, sqlite_statement_t *stmt, com
 
 static bool complete_boots(void *parsed_arguments, const char *current_argument, size_t current_argument_len, completer_t *possibilities, void *UNUSED(data))
 {
-#if UNTEST
-    char *v;
-    Iterator it;
-#endif
     dedicated_argument_t *args;
 
     args = (dedicated_argument_t *) parsed_arguments;
     assert(NULL != args->server_name);
     statement_bind(&statements[STMT_BOOT_COMPLETION], NULL, current_account->id, args->server_name, current_argument);
-#if UNTEST
-    statement_to_iterator(&it, &statements[STMT_BOOT_COMPLETION], &v); // TODO: bind only current_argument_len first characters of current_argument?
-    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        iterator_current(&it, NULL);
-        completer_push(possibilities, v, TRUE);
-    }
-    iterator_close(&it);
 
-    return TRUE;
-#else
     return complete_from_modelized(&boot_model, &statements[STMT_BOOT_COMPLETION], possibilities);
-#endif
 }
 
 static void dedicated_regcomm(graph_t *g)
