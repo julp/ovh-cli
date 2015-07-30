@@ -72,7 +72,7 @@ CREATE TABLE boots(
 -- "unPaid"
 
 CREATE TABLE dedicated(
-    account_id INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    accountId INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,
     -- From GET /dedicated/server/{serviceName}
     serverId INTEGER NOT NULL PRIMARY KEY, -- OVH ID
     name TEXT NOT NULL UNIQUE,
@@ -109,7 +109,7 @@ CREATE TABLE boots_dedicated(
 );
 
 CREATE TABLE fetches(
-    account_id INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    accountId INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,
     module_name TEXT NOT NULL,
     updated_at INT NOT NULL,
     PRIMARY KEY (account_id, module_name)
@@ -132,7 +132,7 @@ CREATE TABLE fetches(
 -- "hosted"
 
 CREATE TABLE domains(
-    account_id INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    accountId INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,
     name TEXT NOT NULL,
     -- From GET /domain/zone/{serviceName}
     --lastUpdate INT NOT NULL, -- datetime

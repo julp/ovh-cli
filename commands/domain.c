@@ -59,9 +59,9 @@ enum {
 };
 
 static sqlite_statement_t statements[STMT_COUNT] = {
-    [ STMT_DOMAIN_LIST ]       = DECL_STMT("SELECT * FROM domains WHERE account_id = ?", "i", ""),
-    [ STMT_DOMAIN_UPSERT ]     = DECL_STMT("INSERT OR REPLACE INTO domains(account_id, name, hasDnsAnycast, dnssecSupported, owoSupported, transferLockStatus, offer, nameServerType, engagedUpTo, contactBilling, expiration, contactTech, contactAdmin, creation) VALUES(:account_id, :name, :hasDnsAnycast, :dnssecSupported, :owoSupported, :transferLockStatus, :offer, :nameServerType, :engagedUpTo, :contactBilling, :expiration, :contactTech, :contactAdmin, :creation)", "is" "bb" "biii" "isissi", ""),
-    [ STMT_DOMAIN_COMPLETION ] = DECL_STMT("SELECT name FROM domains WHERE account_id = ? AND name LIKE ? || '%'", "is", "s"),
+    [ STMT_DOMAIN_LIST ]       = DECL_STMT("SELECT * FROM domains WHERE accountId = ?", "i", ""),
+    [ STMT_DOMAIN_UPSERT ]     = DECL_STMT("INSERT OR REPLACE INTO domains(accountId, name, hasDnsAnycast, dnssecSupported, owoSupported, transferLockStatus, offer, nameServerType, engagedUpTo, contactBilling, expiration, contactTech, contactAdmin, creation) VALUES(:accountId, :name, :hasDnsAnycast, :dnssecSupported, :owoSupported, :transferLockStatus, :offer, :nameServerType, :engagedUpTo, :contactBilling, :expiration, :contactTech, :contactAdmin, :creation)", "is" "bb" "biii" "isissi", ""),
+    [ STMT_DOMAIN_COMPLETION ] = DECL_STMT("SELECT name FROM domains WHERE accountId = ? AND name LIKE ? || '%'", "is", "s"),
 };
 
 // describe all domains owned by a given account
@@ -231,7 +231,7 @@ static bool domain_ctor(error_t **error)
     account_register_module_callbacks(MODULE_NAME, domain_set_destroy, domain_on_set_account);
 
     if (!create_or_migrate("domains", "CREATE TABLE domains(\n\
-        account_id INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,\n\
+        accountId INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,\n\
         name TEXT NOT NULL,\n\
         -- From GET /domain/zone/{serviceName}\n\
         --lastUpdate INT NOT NULL, -- datetime\n\
@@ -338,7 +338,7 @@ static bool fetch_domain(domain_t *d, const char * const domain_name, bool force
         if (success) {
             statement_bind( /* e = enum (int), d = date (int), |n = or NULL */
                 &statements[STMT_DOMAIN_UPSERT], NULL /*"is" "bb" "biii" "isissi"*/,
-                // account_id (i), name (s)
+                // accountId (i), name (s)
                 current_account->id, d->name,
                 // hasDnsAnycast (b), dnssecSupported (b)
                 d->hasDnsAnycast, d->dnssecSupported,
