@@ -51,16 +51,18 @@ static model_t application_model = {
     }
 };
 
+static HashTable *applications;
+
 static bool me_ctor(error_t **UNUSED(error))
 {
-    // NOP (for now)
+    applications = hashtable_ascii_cs_new(NULL, NULL, (DtorFunc) modelized_destroy);
 
     return TRUE;
 }
 
 static void me_dtor(void)
 {
-    // NOP (for now)
+    hashtable_destroy(applications);
 }
 
 #if 0
@@ -356,47 +358,72 @@ static command_status_t credentials_flush(COMMAND_ARGS)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
+static bool fetch_applications(error_t **error)
+{
+    bool success;
+
+    success = TRUE;
+    if (0 == hashtable_size(applications)) { // if you haven't any applications, you couldn't use ovh-cli
+        request_t *req;
+        json_document_t *doc;
+
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me/api/application");
+        success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+        request_destroy(req);
+        if (success) {
+            Iterator it;
+
+            json_array_to_iterator(&it, json_document_get_root(doc));
+            for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
+                json_value_t v;
+                json_document_t *doc;
+                int64_t applicationId;
+
+                v = (json_value_t) iterator_current(&it, NULL);
+                applicationId = json_get_integer(v);
+                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me/api/application/%" PRIu32, applicationId);
+                success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+                request_destroy(req);
+                if (success) {
+                    application_t *application;
+
+                    application = (application_t *) modelized_new(&application_model);
+                    json_object_to_modelized(json_document_get_root(doc), (modelized_t *) application, TRUE, NULL);
+                    hashtable_put(applications, 0, application->name, application, NULL);
+                    json_document_destroy(doc);
+                }
+            }
+            iterator_close(&it);
+            json_document_destroy(doc);
+        }
+    }
+
+    return success;
+}
+
 static command_status_t application_list(COMMAND_ARGS)
 {
-    table_t *t;
     bool success;
-    request_t *req;
-    json_document_t *doc;
 
     USED(arg);
     USED(mainopts);
-    t = table_new_from_model(&application_model, TABLE_FLAG_DELEGATE);
-    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me/api/application");
-    success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
-    request_destroy(req);
+    success = fetch_applications(error);
     if (success) {
+        table_t *t;
         Iterator it;
 
-        json_array_to_iterator(&it, json_document_get_root(doc));
+        t = table_new_from_model(&application_model, 0);
+        hashtable_to_iterator(&it, applications);
         for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
-            json_value_t v;
-            json_document_t *doc;
-            int64_t applicationId;
+            modelized_t *application;
 
-            v = (json_value_t) iterator_current(&it, NULL);
-            applicationId = json_get_integer(v);
-            req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me/api/application/%" PRIu32, applicationId);
-            success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
-            request_destroy(req);
-            if (success) {
-                application_t application;
-
-                modelized_init(&application_model, (modelized_t *) &application);
-                json_object_to_modelized(json_document_get_root(doc), (modelized_t *) &application, TRUE, NULL);
-                json_document_destroy(doc);
-                table_store_modelized(t, (modelized_t *) &application);
-            }
+            application = /*(modelized_t *)*/iterator_current(&it, NULL);
+            table_store_modelized(t, application);
         }
         iterator_close(&it);
-        json_document_destroy(doc);
+        table_display(t, TABLE_FLAG_NONE);
+        table_destroy(t);
     }
-    table_display(t, TABLE_FLAG_NONE);
-    table_destroy(t);
 
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
@@ -404,25 +431,39 @@ static command_status_t application_list(COMMAND_ARGS)
 static command_status_t application_delete(COMMAND_ARGS)
 {
     bool success;
-    // TODO: get ID from name (args->application)
-#if 0
     request_t *req;
-    int applicationId;
     me_argument_t *args;
 
     USED(mainopts);
     args = (me_argument_t *) arg;
-    req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, error, API_BASE_URL "/me/api/application/%" PRIu32, applicationId);
-    success = request_execute(req, RESPONSE_IGNORE, NULL, error);
-    request_destroy(req);
-#else
-    success = TRUE;
-    USED(arg);
-    USED(error);
-    USED(mainopts);
-#endif
+    success = fetch_applications(error);
+    if (success) {
+        ht_hash_t h;
+        application_t *application;
+
+        h = hashtable_hash(applications, args->application);
+        if (hashtable_quick_get(applications, h, args->application, &application)) {
+            req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, error, API_BASE_URL "/me/api/application/%" PRIu32, application->applicationId);
+            success = request_execute(req, RESPONSE_IGNORE, NULL, error);
+            request_destroy(req);
+            if (success) {
+                hashtable_quick_delete(applications, h, args->application, TRUE);
+            }
+        } else {
+            error_set(error, NOTICE, _("no such application named %s"), args->application);
+        }
+    }
 
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
+static bool complete_application_name(void *parsed_arguments, const char *current_argument, size_t current_argument_len, completer_t *possibilities, void *UNUSED(data))
+{
+    if (!fetch_applications(NULL)) {
+        return FALSE;
+    }
+
+    return complete_from_hashtable_keys(parsed_arguments, current_argument, current_argument_len, possibilities, applications);
 }
 
 static void me_regcomm(graph_t *g)
@@ -449,10 +490,10 @@ static void me_regcomm(graph_t *g)
         argument_t *lit_application, *lit_list, *lit_delete;
 
         lit_application = argument_create_literal("application", NULL, NULL);
-        lit_list = argument_create_literal("list", application_list, NULL);
-        lit_delete = argument_create_literal("delete", application_delete, NULL);
+        lit_list = argument_create_literal("list", application_list, _("list applications you have created"));
+        lit_delete = argument_create_literal("delete", application_delete, _("delete one of your own applications"));
 
-        arg_application = argument_create_string(offsetof(me_argument_t, application), "<application>", NULL, NULL);
+        arg_application = argument_create_string(offsetof(me_argument_t, application), "<application>", complete_application_name, NULL);
 
         graph_create_full_path(g, lit_me, lit_application, lit_list, NULL);
         graph_create_full_path(g, lit_me, lit_application, arg_application, lit_delete, NULL);
