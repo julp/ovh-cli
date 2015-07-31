@@ -3,6 +3,7 @@
 #include <string.h>
 #include "common.h"
 #include "command.h"
+#include "struct/xtring.h"
 #include "modules/home.h"
 #include "modules/table.h"
 #include "modules/sqlite.h"
@@ -738,19 +739,19 @@ command_status_t statement_to_table(const model_t *model, sqlite_statement_t *st
 {
     table_t *t;
     Iterator it;
-    char buffer[512];
+    char buffer[8192];
     command_status_t ret;
 
     assert(ARRAY_SIZE(buffer) >= model->size);
     ret = COMMAND_SUCCESS;
-    bzero(buffer, ARRAY_SIZE(buffer));
+    modelized_init(model, (modelized_t *) buffer);
     t = table_new_from_model(model, TABLE_FLAG_DELEGATE);
     statement_model_to_iterator(&it, stmt, model, buffer);
     iterator_first(&it);
     if (iterator_is_valid(&it)) {
         do {
             iterator_current(&it, NULL);
-            table_store_modelized(t, buffer);
+            table_store_modelized(t, (modelized_t *) buffer);
             iterator_next(&it);
         } while (iterator_is_valid(&it));
     } else {
@@ -768,8 +769,8 @@ bool complete_from_modelized(const model_t *model, sqlite_statement_t *stmt, com
     Iterator it;
     char buffer[8192];
 
-    modelized_init(model, (modelized_t *) &buffer);
-    statement_model_to_iterator(&it, stmt, model, &buffer); // TODO: make iterator_current allocate and return a new "object"?
+    modelized_init(model, (modelized_t *) buffer);
+    statement_model_to_iterator(&it, stmt, model, buffer); // TODO: make iterator_current allocate and return a new "object"?
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
         void *object;
 
@@ -782,6 +783,61 @@ bool complete_from_modelized(const model_t *model, sqlite_statement_t *stmt, com
     iterator_close(&it);
 
     return TRUE;
+}
+
+char *model_to_sql(const model_t *model)
+{
+    String *buffer;
+    size_t primaries_length;
+    const model_field_t *f, *primaries[12];
+
+    primaries_length = 0;
+    buffer = string_new();
+    STRING_APPEND_STRING(buffer, "CREATE TABLE ");
+    string_append_string(buffer, model->name);
+    STRING_APPEND_STRING(buffer, "(\n");
+    for (f = model->fields; NULL != f->column_name; f++) {
+        switch (f->type) {
+            case MODEL_TYPE_INT:
+            case MODEL_TYPE_BOOL:
+            case MODEL_TYPE_ENUM:
+            case MODEL_TYPE_DATE:
+            case MODEL_TYPE_DATETIME:
+                STRING_APPEND_STRING(buffer, "\tINT ");
+                break;
+            case MODEL_TYPE_STRING:
+                STRING_APPEND_STRING(buffer, "\tTEXT ");
+                break;
+            default:
+                assert(FALSE);
+                break;
+        }
+        if (HAS_FLAG(f->flags, MODEL_FLAG_PRIMARY)) {
+            primaries[primaries_length++] = f;
+        }
+        string_append_string(buffer, f->column_name);
+        if (!HAS_FLAG(f->flags, MODEL_FLAG_NULLABLE)) {
+            STRING_APPEND_STRING(buffer, "NOT NULL ");
+        }
+        if (HAS_FLAG(f->flags, MODEL_FLAG_UNIQUE)) {
+            STRING_APPEND_STRING(buffer, "UNIQUE ");
+        }
+        STRING_APPEND_STRING(buffer, ",\n");
+    }
+    if (0 != primaries_length) {
+        STRING_APPEND_STRING(buffer, "PRIMARY(");
+        while (0 != --primaries_length) {
+            string_append_string(buffer, primaries[primaries_length]->column_name);
+            STRING_APPEND_STRING(buffer, ", ");
+        }
+        // remove ', '?
+        STRING_APPEND_STRING(buffer, ")\n");
+    } else {
+        // remove ',\n'?
+    }
+    STRING_APPEND_STRING(buffer, ");");
+
+    return string_orphan(buffer);
 }
 
 static void sqlite_startswith(sqlite3_context *context, int argc, sqlite3_value **argv)

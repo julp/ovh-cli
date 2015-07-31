@@ -16,6 +16,7 @@ typedef bool (*EqualFunc)(ht_key_t, ht_key_t);
 /*# define HT_PUT_ON_DUP_KEY_NO_DTOR  (1<<2)*/
 
 bool _hashtable_contains(HashTable *, ht_key_t);
+HashTable *hashtable_copy(HashTable *, DupFunc, DupFunc);
 bool _hashtable_delete(HashTable *, ht_key_t, bool);
 bool _hashtable_get(HashTable *, ht_key_t, void **);
 ht_hash_t _hashtable_hash(HashTable *, ht_key_t);
@@ -37,6 +38,7 @@ bool _hashtable_direct_delete(HashTable *, ht_hash_t, bool);
 bool _hashtable_direct_get(HashTable *, ht_hash_t, void **);
 bool _hashtable_direct_put(HashTable *, uint32_t, ht_hash_t, void *, void **);
 HashTable *hashtable_new(HashFunc, EqualFunc, DupFunc, DtorFunc, DtorFunc);
+HashTable *hashtable_sized_new(size_t, HashFunc, EqualFunc, DupFunc, DtorFunc, DtorFunc);
 size_t hashtable_size(HashTable *);
 bool value_equal(ht_key_t, ht_key_t);
 ht_hash_t value_hash(ht_key_t);

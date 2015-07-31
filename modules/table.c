@@ -628,13 +628,17 @@ static bool camel_to_snake_case(const char *camel, char *snake, size_t snake_siz
 }
 #endif
 
-void table_store_modelized(table_t *t, void *ptr)
+void table_store_modelized(table_t *t, modelized_t *ptr)
 {
 //     bool ok;
     size_t i;
     row_t *r;
 //     char *buffer[512];
     const model_field_t *f;
+
+    assert(NULL != t);
+    assert(NULL != ptr);
+    assert(t->model == ptr->model);
 
     i = 0;
     r = mem_new(*r);

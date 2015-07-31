@@ -14,11 +14,6 @@
 # include <bsd/string.h>
 #endif /* HAVE_LIBBSD_STRLCPY */
 
-#define STRING_APPEND_STRING(dest, suffix) \
-    do { \
-        string_append_string_len(dest, suffix, STR_LEN(suffix)); \
-    } while (0);
-
 typedef enum {
     ARG_TYPE_END, // dummy
     ARG_TYPE_ROOT, // dummy

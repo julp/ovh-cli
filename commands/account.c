@@ -9,6 +9,7 @@
 #include "modules/table.h"
 #include "modules/sqlite.h"
 #include "commands/account.h"
+#include "struct/hashtable.h"
 #include "account_api.h"
 
 enum {
@@ -606,12 +607,12 @@ static command_status_t application_add(COMMAND_ARGS)
     application = (application_t *) arg;
     assert(NULL != application->key);
     assert(NULL != application->secret);
-    modelized_init(&application_model, (modelized_t *) &application);
+    application->data.model = &application_model; // graph_command_dispatch doesn't set model
     statement_bind_from_model(&statements[STMT_APPLICATION_INSERT], NULL, (modelized_t *) application);
     statement_fetch(&statements[STMT_APPLICATION_INSERT], error);
     // TODO: if !update (0 == sqlite_affected_rows), duplicate?
 
-    return COMMAND_SUCCESS;
+    return CMD_FLAG_SKIP_HISTORY | (NULL != *error ? COMMAND_SUCCESS : COMMAND_FAILURE);
 }
 
 static command_status_t application_delete(COMMAND_ARGS)

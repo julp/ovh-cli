@@ -53,6 +53,6 @@ void table_sort(table_t *, size_t, table_sort_t);
 void table_store(table_t *, ...);
 
 table_t *table_new_from_model(const model_t *, uint32_t);
-void table_store_modelized(table_t *, void *);
+void table_store_modelized(table_t *, modelized_t *);
 
 #endif /* !TABLE_H */

@@ -9,6 +9,48 @@
 #include "struct/xtring.h"
 #include "struct/hashtable.h"
 
+// arguments
+typedef struct {
+    char *application;
+} me_argument_t;
+
+static const char *credential_status[] = {
+    N_("expired"),
+    N_("pendingValidation"),
+    N_("refused"),
+    N_("validated"),
+    NULL
+};
+
+static const char *application_status[] = {
+    N_("active"),
+    N_("blocked"),
+    N_("inactive"),
+    N_("trusted"),
+    NULL
+};
+
+typedef struct {
+    modelized_t data;
+    int status;
+    char *name;
+    int applicationId;
+    char *description;
+    char *applicationKey;
+} application_t;
+
+static model_t application_model = {
+    sizeof(application_t), "applications", NULL, NULL,
+    (const model_field_t []) {
+        { "status",         MODEL_TYPE_ENUM,   offsetof(application_t, status),         0, application_status, 0 },
+        { "name",           MODEL_TYPE_STRING, offsetof(application_t, name),           0, NULL,               0 },
+        { "applicationId",  MODEL_TYPE_INT,    offsetof(application_t, applicationId),  0, NULL,               MODEL_FLAG_PRIMARY | MODEL_FLAG_INTERNAL },
+        { "description",    MODEL_TYPE_STRING, offsetof(application_t, description),    0, NULL,               0 },
+        { "applicationKey", MODEL_TYPE_STRING, offsetof(application_t, applicationKey), 0, NULL,               0 },
+        MODEL_FIELD_SENTINEL
+    }
+};
+
 static bool me_ctor(error_t **UNUSED(error))
 {
     // NOP (for now)
@@ -89,12 +131,6 @@ static command_status_t me(COMMAND_ARGS)
     return COMMAND_SUCCESS;
 }
 
-typedef struct {
-    char *name;
-    size_t status;
-    char *description;
-} application_t;
-
 void application_destroy(void *data)
 {
     if (NULL != data) {
@@ -117,21 +153,7 @@ static struct {
     { "DELETE", STR_LEN("DELETE") }
 };
 
-static const char *credential_status[] = {
-    N_("expired"),
-    N_("pendingValidation"),
-    N_("refused"),
-    N_("validated")
-};
-
-static const char *application_status[] = {
-    N_("active"),
-    N_("blocked"),
-    N_("inactive"),
-    N_("trusted")
-};
-
-static command_status_t me_credential_list(COMMAND_ARGS)
+static command_status_t credentials_list(COMMAND_ARGS)
 {
     bool success;
     request_t *req;
@@ -301,7 +323,7 @@ static command_status_t me_credential_list(COMMAND_ARGS)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static command_status_t me_credential_flush(COMMAND_ARGS)
+static command_status_t credentials_flush(COMMAND_ARGS)
 {
     bool success;
     request_t *req;
@@ -334,19 +356,107 @@ static command_status_t me_credential_flush(COMMAND_ARGS)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
+static command_status_t application_list(COMMAND_ARGS)
+{
+    table_t *t;
+    bool success;
+    request_t *req;
+    json_document_t *doc;
+
+    USED(arg);
+    USED(mainopts);
+    t = table_new_from_model(&application_model, TABLE_FLAG_DELEGATE);
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me/api/application");
+    success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+    request_destroy(req);
+    if (success) {
+        Iterator it;
+
+        json_array_to_iterator(&it, json_document_get_root(doc));
+        for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
+            json_value_t v;
+            json_document_t *doc;
+            int64_t applicationId;
+
+            v = (json_value_t) iterator_current(&it, NULL);
+            applicationId = json_get_integer(v);
+            req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me/api/application/%" PRIu32, applicationId);
+            success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+            request_destroy(req);
+            if (success) {
+                application_t application;
+
+                modelized_init(&application_model, (modelized_t *) &application);
+                json_object_to_modelized(json_document_get_root(doc), (modelized_t *) &application, TRUE, NULL);
+                json_document_destroy(doc);
+                table_store_modelized(t, (modelized_t *) &application);
+            }
+        }
+        iterator_close(&it);
+        json_document_destroy(doc);
+    }
+    table_display(t, TABLE_FLAG_NONE);
+    table_destroy(t);
+
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
+static command_status_t application_delete(COMMAND_ARGS)
+{
+    bool success;
+    // TODO: get ID from name (args->application)
+#if 0
+    request_t *req;
+    int applicationId;
+    me_argument_t *args;
+
+    USED(mainopts);
+    args = (me_argument_t *) arg;
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, error, API_BASE_URL "/me/api/application/%" PRIu32, applicationId);
+    success = request_execute(req, RESPONSE_IGNORE, NULL, error);
+    request_destroy(req);
+#else
+    success = TRUE;
+    USED(arg);
+    USED(error);
+    USED(mainopts);
+#endif
+
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
 static void me_regcomm(graph_t *g)
 {
     argument_t *lit_me;
-    argument_t *lit_crendentials, *lit_cred_list, *lit_cred_flush;
 
     lit_me = argument_create_literal("me", me, _("display your personal informations"));
-    lit_crendentials = argument_create_literal("credentials", NULL, NULL);
-    lit_cred_list = argument_create_literal("list", me_credential_list, _("list all credentials"));
-    lit_cred_flush = argument_create_literal("flush", me_credential_flush, _("revoke all credentials"));
 
     graph_create_full_path(g, lit_me, NULL);
-    graph_create_full_path(g, lit_crendentials, lit_cred_list, NULL);
-    graph_create_full_path(g, lit_crendentials, lit_cred_flush, NULL);
+    // credentials ...
+    {
+        argument_t *lit_crendentials, *lit_list, *lit_flush;
+
+        lit_crendentials = argument_create_literal("credentials", NULL, NULL);
+        lit_list = argument_create_literal("list", credentials_list, _("list all credentials"));
+        lit_flush = argument_create_literal("flush", credentials_flush, _("revoke all credentials"));
+
+        graph_create_full_path(g, lit_crendentials, lit_list, NULL);
+        graph_create_full_path(g, lit_crendentials, lit_flush, NULL);
+    }
+    // me application ...
+    {
+        argument_t *arg_application;
+        argument_t *lit_application, *lit_list, *lit_delete;
+
+        lit_application = argument_create_literal("application", NULL, NULL);
+        lit_list = argument_create_literal("list", application_list, NULL);
+        lit_delete = argument_create_literal("delete", application_delete, NULL);
+
+        arg_application = argument_create_string(offsetof(me_argument_t, application), "<application>", NULL, NULL);
+
+        graph_create_full_path(g, lit_me, lit_application, lit_list, NULL);
+        graph_create_full_path(g, lit_me, lit_application, arg_application, lit_delete, NULL);
+    }
 }
 
 static void me_register_rules(json_value_t rules, bool ro)

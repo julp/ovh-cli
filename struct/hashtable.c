@@ -30,7 +30,7 @@ struct _HashTable {
     ht_hash_t mask;
 };
 
-#define MIN_SIZE 8
+static bool hashtable_put_real(HashTable *, uint32_t, ht_hash_t, ht_key_t, void *, void **);
 
 ht_hash_t value_hash(ht_key_t k)
 {
@@ -127,8 +127,8 @@ static inline void hashtable_maybe_resize(HashTable *this)
     }
 }
 
-HashTable *hashtable_new(
-//     size_t capacity,
+HashTable *hashtable_sized_new(
+    size_t capacity,
     HashFunc hf,
     EqualFunc ef,
     DupFunc key_duper,
@@ -142,7 +142,7 @@ HashTable *hashtable_new(
     this->count = 0;
     this->gHead = NULL;
     this->gTail = NULL;
-    this->capacity = /*nearest_power(capacity, */HASHTABLE_MIN_SIZE/*)*/;
+    this->capacity = nearest_power(capacity, HASHTABLE_MIN_SIZE);
     this->mask = this->capacity - 1;
     this->hf = hf;
     if (NULL == ef) {
@@ -157,6 +157,34 @@ HashTable *hashtable_new(
     memset(this->nodes, 0, this->capacity * sizeof(*this->nodes));
 
     return this;
+}
+
+HashTable *hashtable_new(
+    HashFunc hf,
+    EqualFunc ef,
+    DupFunc key_duper,
+    DtorFunc key_dtor,
+    DtorFunc value_dtor
+) {
+    return hashtable_sized_new(HASHTABLE_MIN_SIZE, hf, ef, key_duper, key_dtor, value_dtor);
+}
+
+HashTable *hashtable_copy(HashTable *ht, DupFunc key_duper_override, DupFunc value_duper)
+{
+    HashNode *n;
+    HashTable *copy;
+    DupFunc key_duper;
+
+    assert(NULL != ht);
+
+    copy = hashtable_sized_new(ht->capacity, ht->hf, ht->ef, ht->key_duper, ht->key_dtor, ht->value_dtor);
+    key_duper = NULL == key_duper_override ? ht->key_duper : key_duper_override;
+
+    for (n = ht->gHead; NULL != n; n = n->gNext) {
+        hashtable_put_real(copy, 0, n->hash, NULL == key_duper ? n->key : (ht_key_t) key_duper((void *) n->key), NULL == value_duper ? n->data : value_duper((void *) n->data), NULL);
+    }
+
+    return copy;
 }
 
 HashTable *hashtable_ascii_cs_new(DupFunc key_duper, DtorFunc key_dtor, DtorFunc value_dtor)
