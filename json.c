@@ -484,8 +484,9 @@ void json_object_to_modelized(json_value_t object, modelized_t *ptr, bool copy, 
                     time_t v;
 
                     v = 0;
-                    if (json_null != propvalue) {
-                        date_parse_to_timestamp(json_get_string(propvalue), "%c", &v);
+                    if (!isnull) {
+                        // %F is equivalent to "%Y-%m-%d"
+                        date_parse_to_timestamp(json_get_string(propvalue), "%F", &v);
                     }
                     *((time_t *) (((char *) ptr) + f->offset)) = v;
                     break;
@@ -495,8 +496,13 @@ void json_object_to_modelized(json_value_t object, modelized_t *ptr, bool copy, 
                     time_t v;
 
                     v = 0;
-                    if (json_null != propvalue) {
-                        date_parse_to_timestamp(json_get_string(propvalue), "%F", &v);
+                    if (!isnull) {
+                        // %F is equivalent to "%Y-%m-%d"
+                        // %T is equivalent to "%H:%M:%S"
+                        // %z is replaced by the time zone offset from UTC; a leading plus sign stands for east of UTC,
+                        // a minus sign for west of UTC, hours and minutes follow with two digits each and no delimiter
+                        // between them (common form for RFC 822 date headers)
+                        date_parse_to_timestamp(json_get_string(propvalue), "%FT%T%z", &v);
                     }
                     *((time_t *) (((char *) ptr) + f->offset)) = v;
                     break;
