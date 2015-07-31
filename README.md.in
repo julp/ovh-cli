@@ -1,0 +1,89 @@
+* Don't have any browser to manage your domains, servers and so on?
+* Want to automate/script some tasks?
+* Want to quickly make some administrative jobs on a domain/server?
+
+## Disclaimer
+
+* **Never ever** install this tool on servers (dedicated as VPS) you rent to OVH
+* I decline all responsabilities of the usage made of this tool, there is no warranty
+* I'm not affiliated in any way to the OVH company
+
+## Prerequisites
+
+### Build dependencies
+
+* cmake >= 2.8.8
+* (a C compiler)
+
+### Run dependencies
+
+* openssl
+* libcurl
+* libxml2
+* libedit (autocompletion)
+* libiconv
+* gettext (optional)
+* sqlite3
+
+## Install
+
+ Clone/compile/install ovh-cli
+```
+git clone ...
+cd <path/to/build/directory>
+cmake <path/to/sources/directory> (-DCMAKE_INSTALL_PREFIX=/usr/local)
+make
+(sudo) make install
+```
+
+## First usage
+
+* OVH Europe
+    + [Create your application](https://eu.api.ovh.com/createApp/)
+    + [Create all keys at once](https://eu.api.ovh.com/createToken/)
+* OVH North America
+    + [Create your application](https://ca.api.ovh.com/createApp/)
+    + [Create all keys at once](https://ca.api.ovh.com/createToken/)
+* So you Start Europe
+    + [Create your application](https://eu.api.soyoustart.com/createApp/)
+    + [Create all keys at once](https://eu.api.soyoustart.com/createToken/)
+* So you Start North America
+    + [Create your application](https://ca.api.soyoustart.com/createApp/)
+    + [Create all keys at once](https://ca.api.soyoustart.com/createToken/)
+* Kimsufi Europe
+    + [Create your application](https://eu.api.kimsufi.com/createApp/)
+    + [Create all keys at once](https://eu.api.kimsufi.com/createToken/)
+* Kimsufi North America
+    + [Create your application](https://ca.api.kimsufi.com/createApp/)
+    + [Create all keys at once](https://ca.api.kimsufi.com/createToken/)
+* Runabove
+    + [Create your application](https://api.runabove.com/createApp/)
+    + [Create all keys at once](https://api.runabove.com/createToken/)
+
+
+1. Create and register your application(s):
+```
+ovh application <endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runabove-ca, soyoustart-ca, soyoustart-eu)> add <application key> <application secret>
+```
+
+2. Register your account(s):
+    * with your password instead of a valid consumer key: `ovh account <nic-handle> add password <password> endpoint <endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runabove-ca, soyoustart-ca, soyoustart-eu)>`
+    * with a valid consumer key instead of a password (use link "Create all keys at once" above): `ovh account <nic-handle> add password "" key <consumer key> expires in illimited endpoint <endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runabove-ca, soyoustart-ca, soyoustart-eu)>` (if your consumer key is not unlimited, replace `illimited` by `"X days"`)
+    * without password or consumer key: `ovh account <nic-handle> add password "" endpoint <endpoint (one of: kimsufi-ca, kimsufi-eu, ovh-ca, ovh-eu, runabove-ca, soyoustart-ca, soyoustart-eu)>` and follow instructions to acquire a consumer key
+
+## Commands
+
+```
+@HELP@
+```
+
+For partial bash completion (in current shell), run: `source <(ovh complete)`
+
+## Examples
+
+Hard reboot a dedicated server in rescue mode:
+```
+ovh dedicated <server name> boot <name of rescue boot>
+ovh dedicated <server name> reboot
+```
+(press tab for list and/or completion of server and boot names)

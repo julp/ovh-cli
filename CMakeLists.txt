@@ -154,3 +154,10 @@ add_executable(ovh main.c graph.c json.c error.c util.c model.c date.c graphic.c
 target_link_libraries(ovh ${LIBRARIES} ${Intl_LIBRARIES} ${CURL_LIBRARIES} ${ICONV_LIBRARIES} ${LIBXML2_LIBRARIES} ${OPENSSL_LIBRARIES} ${SQLITE3_LIBRARIES} ${EDITLINE_LIBRARIES})
 
 install(TARGETS ovh DESTINATION bin)
+
+execute_process(COMMAND ${CMAKE_CURRENT_BINARY_DIR}/ovh help OUTPUT_VARIABLE HELP)
+configure_file(
+    "README.md.in"
+    "README.md"
+    @ONLY
+)
