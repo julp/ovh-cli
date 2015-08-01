@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <inttypes.h>
+#include <string.h>
 #include <strings.h>
 #include "model.h"
 #include "common.h"
@@ -44,3 +45,33 @@ modelized_t *modelized_new(const model_t *model)
 
     return ptr;
 }
+
+const model_field_t *model_find_field_by_name(const model_t *model, const char *field_name, size_t field_name_len)
+{
+    const model_field_t *f, *match;
+
+    for (match = NULL, f = model->fields; NULL == match && NULL != f->column_name; f++) {
+        if (0 == strncmp(f->column_name, field_name, field_name_len)) {
+            match = f;
+        }
+    }
+
+    return match;
+}
+
+#if 0
+void modelized_name_to_s(modelized_t *ptr, char *buffer, size_t buffer_size)
+{
+    //
+}
+
+void modelized_id_to_s(modelized_t *ptr, char *buffer, size_t buffer_size)
+{
+    //
+}
+
+void modelized_id_from_s(modelized_t *ptr, argument_t *arg, char *buffer) // in graph.[ch]
+{
+    //
+}
+#endif

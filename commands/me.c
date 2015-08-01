@@ -541,7 +541,11 @@ static command_status_t application_delete(COMMAND_ARGS)
         if (hashtable_quick_get(amd->applications, h, args->application, &application)) {
             request_t *req;
 
+#if 0
             req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, error, API_BASE_URL "/me/api/application/%" PRIu32, application->applicationId);
+#else
+            req = request_modelized_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, error, "/me/api/application/{applicationId}", (modelized_t *) application);
+#endif
             success = request_execute(req, RESPONSE_IGNORE, NULL, error);
             request_destroy(req);
             if (success) {

@@ -237,6 +237,74 @@ static model_t boot_model = {
     }
 };
 
+static const char * const task_functions[] = {
+    "addVirtualMac",
+    "addWindowSplaFromExistingSerial",
+    "applyBackupFtpAcls",
+    "applyBackupFtpQuota",
+    "changePasswordBackupFTP",
+    "checkAndReleaseIp",
+    "createBackupFTP",
+    "createOrUpdateRipeOrg",
+    "createPrivateNetwork",
+    "disableFirewall",
+    "enableFirewall",
+    "genericMoveFloatingIp",
+    "hardReboot",
+    "migrateBackupFTP",
+    "moveFloatingIp",
+    "moveVirtualMac",
+    "reinstallServer",
+    "releaseIp",
+    "removeBackupFTP",
+    "removeVirtualMac",
+    "requestAccessIPMI",
+    "resetIPMI",
+    "resetIPMISession",
+    "testIPMIhttp",
+    "testIPMIpassword",
+    "testIPMIping",
+    "virtualMacAdd",
+    "virtualMacDelete",
+    NULL
+};
+
+static const char * const task_status[] = {
+    "cancelled",
+    "customerError",
+    "doing",
+    "done",
+    "init",
+    "ovhError",
+    "todo",
+    NULL
+};
+
+typedef struct {
+    modelized_t data;
+    int taskId;
+    int function;
+    time_t lastUpdate;
+    char *comment;
+    int status;
+    time_t startDate;
+    time_t doneDate;
+} task_t;
+
+static model_t task_model = {
+    sizeof(task_t), "tasks", NULL, NULL,
+    (const model_field_t []) {
+        { "taskId",     MODEL_TYPE_INT,      offsetof(task_t, taskId),     0, NULL,           MODEL_FLAG_PRIMARY | MODEL_FLAG_INTERNAL },
+        { "function",   MODEL_TYPE_ENUM,     offsetof(task_t, function),   0, task_functions, 0 },
+        { "lastUpdate", MODEL_TYPE_DATETIME, offsetof(task_t, lastUpdate), 0, NULL,           MODEL_FLAG_NULLABLE },
+        { "comment",    MODEL_TYPE_STRING,   offsetof(task_t, comment),    0, NULL,           MODEL_FLAG_NULLABLE },
+        { "status",     MODEL_TYPE_ENUM,     offsetof(task_t, status),     0, task_status,    0 },
+        { "startDate",  MODEL_TYPE_DATETIME, offsetof(task_t, startDate),  0, NULL,           0 },
+        { "doneDate",   MODEL_TYPE_DATETIME, offsetof(task_t, doneDate),   0, NULL,           MODEL_FLAG_NULLABLE },
+        MODEL_FIELD_SENTINEL
+    }
+};
+
 sqlite_migration_t dedicated_migrations[] = {
     {
         1,
@@ -739,6 +807,106 @@ static command_status_t dedicated_mrtg(COMMAND_ARGS)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
+static bool fetch_task(const char *server_name, task_t *task, error_t **error)
+{
+    bool success;
+    request_t *req;
+    json_document_t *doc;
+
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/dedicated/server/%s/task/%d", server_name, task->taskId);
+    success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+    request_destroy(req);
+    if (success) {
+        json_object_to_modelized(json_document_get_root(doc), (modelized_t *) task, TRUE, NULL);
+        json_document_destroy(doc);
+    }
+
+    return success;
+}
+
+static command_status_t dedicated_task_list(COMMAND_ARGS)
+{
+    table_t *t;
+    bool success;
+    request_t *req;
+    json_document_t *doc;
+    dedicated_argument_t *args;
+
+    USED(mainopts);
+    args = (dedicated_argument_t *) arg;
+    assert(NULL != args->server_name);
+    t = table_new_from_model(&task_model, TABLE_FLAG_DELEGATE);
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/dedicated/server/%s/task", args->server_name);
+    success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+    request_destroy(req);
+    if (success) {
+        task_t task;
+        Iterator it;
+        json_value_t root;
+
+        modelized_init(&task_model, (modelized_t *) &task);
+        root = json_document_get_root(doc);
+        json_array_to_iterator(&it, root);
+        for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+            json_value_t v;
+
+            v = (json_value_t) iterator_current(&it, NULL);
+            task.taskId = json_get_integer(v);
+            success = fetch_task(args->server_name, &task, error);
+            table_store_modelized(t, (modelized_t *) &task);
+        }
+        iterator_close(&it);
+        json_document_destroy(doc);
+    }
+    table_display(t, TABLE_FLAG_NONE);
+    table_destroy(t);
+
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
+static command_status_t dedicated_task_wait(COMMAND_ARGS)
+{
+    task_t task;
+    bool success;
+//     request_t *req;
+//     json_document_t *doc;
+
+    USED(mainopts);
+    modelized_init(&task_model, (modelized_t *) &task);
+#if 0
+    while (1) {
+        // GET /dedicated/server/{serviceName}/task/{taskId}
+        if (task->doneDate) {
+            break;
+        }
+        sleep(5);
+    }
+#else
+    USED(arg);
+    USED(error);
+    success = TRUE;
+#endif
+
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
+static command_status_t dedicated_task_cancel(COMMAND_ARGS)
+{
+    bool success;
+//     request_t *req;
+
+    USED(mainopts);
+#if 0
+    // POST /dedicated/server/{serviceName}/task/{taskId}/cancel
+#else
+    USED(arg);
+    USED(error);
+    success = TRUE;
+#endif
+
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
 static bool complete_servers(void *UNUSED(parsed_arguments), const char *current_argument, size_t current_argument_len, completer_t *possibilities, void *UNUSED(data))
 {
     char *v;
@@ -822,6 +990,15 @@ static void dedicated_regcomm(graph_t *g)
 
         graph_create_full_path(g, lit_dedicated, arg_server, lit_reverse, lit_delete, NULL);
         graph_create_full_path(g, lit_dedicated, arg_server, lit_reverse, lit_set, arg_reverse, NULL);
+    }
+    // dedicated <server> task ...
+    {
+        argument_t *lit_task, *lit_list;
+
+        lit_task = argument_create_literal("task", NULL, NULL);
+        lit_list = argument_create_literal("list", dedicated_task_list, _("list tasks"));
+
+        graph_create_full_path(g, lit_dedicated, arg_server, lit_task, lit_list, NULL);
     }
 }
 

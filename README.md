@@ -114,6 +114,7 @@ Available commands:
              reverse
                  delete => remove reverse DNS
                  set <reverse> => define reverse DNS
+             task list => list tasks
      domain
          check => display domains about to expire
          list => list your domains

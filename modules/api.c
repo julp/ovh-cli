@@ -14,7 +14,7 @@
 
 struct request_t {
     CURL *ch;
-    char *url;
+    const char *url;
     uint32_t flags;
     long http_status;
     // <CURLOPT_POSTFIELDS>
@@ -66,6 +66,13 @@ static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, voi
     return total_size;
 }
 
+/**
+ * Add a HTTP header to a request.
+ * This function is intended for cases when header value is known at compile time.
+ *
+ * @param req the HTTP request
+ * @param header the complete (name + ": " + value) header (like "Accept: text/xml")
+ */
 void request_add_header1(request_t *req, const char *header)
 {
     // NOTE: curl_slist_append() copies the string
@@ -91,6 +98,17 @@ static char *stpcpy_s(char *to, const char *from, const char * const zero)
     }
 }
 
+/**
+ * Add a HTTP header to a request.
+ * This function is intended for cases when header values is dynamic.
+ *
+ * @param req the HTTP request
+ * @param header the complete "name" of the header, ':' + space included (like "Accept: ")
+ * @param value the value of the header
+ * @param error the error to populate on failure
+ *
+ * @return TRUE on success
+ */
 bool request_add_header2(request_t *req, const char *header, const char *value, error_t **error)
 {
     char *p, buffer[1024];
@@ -109,6 +127,17 @@ bool request_add_header2(request_t *req, const char *header, const char *value, 
     return NULL != p;
 }
 
+/**
+ * Signs in the OVH API way the HTTP request
+ *
+ * @param req the request to sign with SHA1 and headers
+ * @param error the error to populate on failure
+ *
+ * @return TRUE on success
+ *
+ * @note to effectively sign a request, an active account and
+ * application are needed (obviously for the same endpoint)
+ */
 bool request_sign(request_t *req, error_t **error)
 {
     EVP_MD_CTX ctx;
@@ -182,13 +211,55 @@ static const int8_t unreserved[] = {
     /* F */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
+static void write_baseurl(char **w, size_t *dst_len, size_t dst_size)
+{
+    *dst_len += endpoints[current_application->endpoint_id].base_len;
+    if (dst_size > *dst_len) {
+        memcpy(*w, endpoints[current_application->endpoint_id].base, endpoints[current_application->endpoint_id].base_len);
+        *w += endpoints[current_application->endpoint_id].base_len;
+    }
+}
+
+static void write_escaped_string(const char *s, char **w, size_t *dst_len, size_t dst_size)
+{
+    const char *p;
+
+    for (p = s; '\0' != *p; p++) {
+        if (unreserved[(unsigned char) *p]) {
+            ++*dst_len;
+            if (dst_size > *dst_len) {
+                **w++ = *p;
+            }
+        } else {
+            *dst_len += STR_LEN("%XX");
+            if (dst_size > *dst_len) {
+                *w += sprintf(*w, "%%%02X", (unsigned char) *p);
+            }
+        }
+    }
+}
+
+static void write_int(int num, char **w, size_t *dst_len, size_t dst_size)
+{
+    size_t num_len;
+
+    num_len = snprintf(NULL, 0, "%d", num);
+    *dst_len += num_len;
+    if (dst_size > *dst_len) {
+        *w += sprintf(*w, "%d", num);
+    }
+}
+
 /**
+ * Build an URL from a kind of printf formatted string
+ *
  * URL format:
  * - %% for a '%'
  * - %B for endpoint's base URL for the current account
  * - %s for a string substitution into the URL (it is escaped) - if NULL, ignored
  * - %S for a string substitution as is (no escaping) - if NULL, ignored
  * - %u for an integer (uint32_t)
+ * - %d for an integer (int)
  **/
 static size_t urlf(char *dst, size_t dst_size, const char *fmt, va_list ap)
 {
@@ -210,32 +281,14 @@ static size_t urlf(char *dst, size_t dst_size, const char *fmt, va_list ap)
                     }
                     break;
                 case 'B':
-                {
-                    dst_len += endpoints[current_application->endpoint_id].base_len;
-                    if (dst_size > dst_len) {
-                        memcpy(w, endpoints[current_application->endpoint_id].base, endpoints[current_application->endpoint_id].base_len);
-                        w += endpoints[current_application->endpoint_id].base_len;
-                    }
+                    write_baseurl(&w, &dst_len, dst_size);
                     break;
-                }
                 case 's':
                 {
-                    const char *s, *p;
+                    const char *s;
 
                     if (NULL != (s = va_arg(ap, const char *))) {
-                        for (p = s; '\0' != *p; p++) {
-                            if (unreserved[(unsigned char) *p]) {
-                                ++dst_len;
-                                if (dst_size > dst_len) {
-                                    *w++ = *p;
-                                }
-                            } else {
-                                dst_len += STR_LEN("%XX");
-                                if (dst_size > dst_len) {
-                                    w += sprintf(w, "%%%02X", (unsigned char) *p);
-                                }
-                            }
-                        }
+                        write_escaped_string(s, &w, &dst_len, dst_size);
                     }
                     break;
                 }
@@ -252,6 +305,14 @@ static size_t urlf(char *dst, size_t dst_size, const char *fmt, va_list ap)
                             w += s_len;
                         }
                     }
+                    break;
+                }
+                case 'd':
+                {
+                    int num;
+
+                    num = va_arg(ap, int);
+                    write_int(num, &w, &dst_len, dst_size);
                     break;
                 }
                 case 'u': /* PRIu32 */
@@ -283,26 +344,113 @@ static size_t urlf(char *dst, size_t dst_size, const char *fmt, va_list ap)
     return dst_len;
 }
 
-request_t *request_vnew(uint32_t flags, http_method_t method, const void *pdata, error_t **error, const char *url, va_list args)
+static bool parse_modelized(char *dst, size_t *dst_len, size_t dst_size, const char *fmt, modelized_t *ptr, error_t **error)
+{
+    char *w;
+    const char *r, *ocurly;
+
+    w = dst;
+    r = fmt;
+    *dst_len = 0;
+    ocurly = NULL;
+    if ('/' == *fmt) {
+        write_baseurl(&w, dst_len, dst_size);
+    }
+    while ('\0' != *r) {
+        if (NULL == ocurly) {
+            if ('{' == *r) {
+                ocurly = r;
+            } else {
+                ++*dst_len;
+                if (dst_size > *dst_len) {
+                    *w++ = *r;
+                }
+            }
+        } else {
+            if ('}' == *r) {
+                if (r - ocurly > 1) {
+                    const model_field_t *f;
+
+                    if (NULL == (f = model_find_field_by_name(ptr->model, ocurly + 1, r - ocurly - 2))) {
+                        debug("skip unknown field named %.*s", r - ocurly - 1, ocurly + 1);
+                    } else {
+                        switch (f->type) {
+                            case MODEL_TYPE_INT:
+                            case MODEL_TYPE_BOOL:
+                            {
+                                int num;
+
+                                num = *((int *) (((char *) ptr) + f->offset));
+                                write_int(num, &w, dst_len, dst_size);
+                                break;
+                            }
+                            case MODEL_TYPE_DATE:
+                            case MODEL_TYPE_DATETIME:
+                            {
+//                                 *((time_t *) (((char *) ptr) + f->offset))
+                                break;
+                            }
+                            case MODEL_TYPE_ENUM:
+                            {
+                                const char *s;
+
+                                s = f->enum_values[*((int *) (((char *) ptr) + f->offset))];
+                                if (NULL != s) {
+                                    write_escaped_string(s, &w, dst_len, dst_size);
+                                }
+                                break;
+                            }
+                            case MODEL_TYPE_STRING:
+                            {
+                                const char *s;
+
+                                s = *((char **) (((char *) ptr) + f->offset));
+                                if (NULL != s) {
+                                    write_escaped_string(s, &w, dst_len, dst_size);
+                                }
+                                break;
+                            }
+                            default:
+                                assert(FALSE);
+                                break;
+                        }
+                    }
+                }
+                ocurly = NULL;
+            }
+        }
+        ++r;
+    }
+    if (dst_size > *dst_len) {
+        *w++ = '\0';
+    }
+    if (NULL != ocurly) {
+        error_set(error, WARN, _("unterminated curly braces in %s"), fmt);
+    }
+
+    return NULL == *error;
+}
+
+/**
+ * Prepares a HTTP request
+ *
+ * @param flags a ORed mask of REQUEST_FLAG_* constants
+ * @param method the HTTP method, one of the HTTP_* constants
+ * @param pdata a pointer to data to send as body's request
+ * @param error the error populated with the eventual error
+ * @param url the final URL, previously malloced
+ *
+ * @return a representation of the HTTP request ready to be executed or NULL on failure
+ */
+static request_t *request_new_real(uint32_t flags, http_method_t method, const void *pdata, error_t **UNUSED(error), const char *url)
 {
     request_t *req;
-    va_list cpyargs;
-    size_t url_len, url_size;
 
-    assert(NULL != url);
-    if (!check_current_application_and_account(!HAS_FLAG(flags, REQUEST_FLAG_SIGN), error)) {
-        return NULL;
-    }
     req = mem_new(*req);
+    req->url = url;
     req->flags = flags;
     req->headers = NULL;
     req->method = method;
-    va_copy(cpyargs, args);
-    url_size = urlf(NULL, 0, url, cpyargs) + 1;
-    req->url = mem_new_n(*req->url, url_size);
-    va_end(cpyargs);
-    url_len = urlf(req->url, url_size, url, args);
-    assert(url_len < url_size);
     req->pdata = req->data = NULL;
     req->ch = curl_easy_init();
     req->buffer = string_new();
@@ -331,6 +479,8 @@ request_t *request_vnew(uint32_t flags, http_method_t method, const void *pdata,
         }
     }
     /**
+     * NOTE: (quote from libcurl documentation)
+     *
      * If you want to do a zero-byte POST, you need to set CURLOPT_POSTFIELDSIZE explicitly to zero,
      * as simply setting CURLOPT_POSTFIELDS to NULL or "" just effectively disables the sending of
      * the specified string. libcurl will instead assume that you'll send the POST data using the
@@ -356,18 +506,105 @@ request_t *request_vnew(uint32_t flags, http_method_t method, const void *pdata,
     return req;
 }
 
-request_t *request_new(uint32_t flags, http_method_t method, const void *pdata, error_t **error, const char *url, ...)
+/**
+ * Prepare a HTTP request from an autodecribed data
+ *
+ * @param flags a ORed mask of REQUEST_FLAG_* constants
+ * @param method the HTTP method, one of the HTTP_* constants
+ * @param pdata a pointer to data to send as body's request
+ * @param error the error populated with the eventual error
+ * @param url_fmt the URL in a OVH like formatted string. Eg: {fieldname}
+ * @param ptr an autodecribed data from which to extract subdata that are
+ * then included into the final URL
+ *
+ * @return the HTTP request or NULL on failure
+ */
+request_t *request_modelized_new(uint32_t flags, http_method_t method, const void *pdata, error_t **error, const char *url_fmt, modelized_t *ptr)
+{
+    char *final_url;
+    size_t url_len, url_size;
+
+    assert(NULL != url_fmt);
+    assert(NULL != ptr);
+    if (!check_current_application_and_account(!HAS_FLAG(flags, REQUEST_FLAG_SIGN), error)) {
+        return NULL;
+    }
+    if (!parse_modelized(NULL, &url_size, 0, url_fmt, ptr, error)) {
+        return NULL;
+    }
+    ++url_size; // '\0'
+    final_url = mem_new_n(*final_url, url_size);
+    parse_modelized(final_url, &url_len, url_size, url_fmt, ptr, error);
+    assert(url_len < url_size);
+
+    return request_new_real(flags, method, pdata, error, final_url);
+}
+
+/**
+ * Prepare a HTTP request from a vprintf-formatted URL
+ *
+ * @param flags a ORed mask of REQUEST_FLAG_* constants
+ * @param method the HTTP method, one of the HTTP_* constants
+ * @param pdata a pointer to data to send as body's request
+ * @param error the error populated with the eventual error
+ * @param url_fmt the URL in a vprintf like formatted string
+ * @param args the values to include into the final URL
+ *
+ * @return the HTTP request or NULL on failure
+ */
+request_t *request_vnew(uint32_t flags, http_method_t method, const void *pdata, error_t **error, const char *url_fmt, va_list args)
+{
+    va_list cpyargs;
+    char *final_url;
+    size_t url_len, url_size;
+
+    assert(NULL != url_fmt);
+    if (!check_current_application_and_account(!HAS_FLAG(flags, REQUEST_FLAG_SIGN), error)) {
+        return NULL;
+    }
+    va_copy(cpyargs, args);
+    url_size = urlf(NULL, 0, url_fmt, cpyargs) + 1;
+    final_url = mem_new_n(*final_url, url_size);
+    va_end(cpyargs);
+    url_len = urlf(final_url, url_size, url_fmt, args);
+    assert(url_len < url_size);
+
+    return request_new_real(flags, method, pdata, error, final_url);
+}
+
+/**
+ * Prepare a HTTP request from a printf-formatted URL
+ *
+ * @param flags a ORed mask of REQUEST_FLAG_* constants
+ * @param method the HTTP method, one of the HTTP_* constants
+ * @param pdata a pointer to data to send as body's request
+ * @param error the error populated with the eventual error
+ * @param url_fmt the URL in a printf like formatted string
+ * @param ... the values to include into the final URL
+ *
+ * @return the HTTP request or NULL on failure
+ */
+request_t *request_new(uint32_t flags, http_method_t method, const void *pdata, error_t **error, const char *url_fmt, ...)
 {
     va_list args;
     request_t *req;
 
-    va_start(args, url);
-    req = request_vnew(flags, method, pdata, error, url, args);
+    assert(NULL != url_fmt);
+    if (!check_current_application_and_account(!HAS_FLAG(flags, REQUEST_FLAG_SIGN), error)) {
+        return NULL;
+    }
+    va_start(args, url_fmt);
+    req = request_vnew(flags, method, pdata, error, url_fmt, args);
     va_end(args);
 
     return req;
 }
 
+/**
+ * Free memory associated to a HTTP request
+ *
+ * @param req the HTTP request
+ */
 void request_destroy(request_t *req)
 {
     assert(NULL != req);
@@ -389,6 +626,16 @@ void request_destroy(request_t *req)
     free(req);
 }
 
+/**
+ * Add a POST field (key/value pair) to a request
+ *
+ * @param req the request
+ * @param name the field name
+ * @param value its value
+ *
+ * @note name and value are copied by libcurl so they
+ * haven't to persist until the call to request_execute
+ */
 void request_add_post_field(request_t *req, const char *name, const char *value)
 {
     /**
@@ -399,11 +646,29 @@ void request_add_post_field(request_t *req, const char *name, const char *value)
     curl_formadd(&req->formpost, &req->lastptr, CURLFORM_COPYNAME, name, CURLFORM_COPYCONTENTS, value, CURLFORM_END);
 }
 
+/**
+ * Get HTTP status code of response (after the request has been executed with request_execute)
+ *
+ * @param req the executed request
+ *
+ * @return the HTTP code of the response
+ */
 long request_response_status(request_t *req)
 {
     return req->http_status;
 }
 
+/**
+ * Execute a HTTP request
+ *
+ * @param req the HTTP request to execute
+ * @param output_type one of the RESPONSE_* constants
+ * @param output if request is successfull, *output is a char *, json_document_t * or xmlDocPtr *
+ *   with the content of the response according to output_type
+ * @param error the error to populate on failure
+ *
+ * @return TRUE on success
+ */
 bool request_execute(request_t *req, int output_type, void **output, error_t **error)
 {
     CURLcode res;

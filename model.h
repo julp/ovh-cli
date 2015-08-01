@@ -30,7 +30,7 @@ typedef struct {
 typedef struct {
     size_t size;
     const char *name;
-    const char *(*to_name)(void *); // ou simplement size_t vers offsetof du champ à utiliser ?
+    const char *(*to_name)(void *); // ou simplement size_t vers offsetof du model_field_t utiliser ?
     const char *(*to_s)(void *); // ou on copie la chaîne à la suite du buffer (String?) ? - void (*to_name)(void *, String *)
     const model_field_t *fields;
 } model_t;
@@ -41,6 +41,8 @@ typedef struct {
 
 #define MODEL_FIELD_SENTINEL \
     { NULL, 0, 0, 0, NULL, 0 }
+
+const model_field_t *model_find_field_by_name(const model_t *, const char *, size_t);
 
 void modelized_destroy(modelized_t *);
 modelized_t *modelized_new(const model_t *);

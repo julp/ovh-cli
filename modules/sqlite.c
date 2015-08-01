@@ -242,50 +242,47 @@ static void _statement_model_set_output_bind(sqlite_statement_t *stmt, const mod
 {
     int i, l;
 
-    // TODO: use an hashtable ?
     for (i = 0, l = sqlite3_column_count(stmt->prepared); i < l; i++) {
-        bool match;
         const model_field_t *f;
+        size_t column_name_len;
         const char *column_name;
 
         column_name = sqlite3_column_name(stmt->prepared, i);
-        for (match = FALSE, f = model->fields; !match && NULL != f->column_name; f++) {
-            if (0 == strcmp(f->column_name, column_name)) {
-                switch (f->type) {
-                    case MODEL_TYPE_BOOL:
-                        *((bool *) (((char *) ptr) + f->offset)) = /*!!*/sqlite3_column_int(stmt->prepared, i);
-                        break;
-                    case MODEL_TYPE_INT:
-                    case MODEL_TYPE_ENUM:
-                        *((int *) (((char *) ptr) + f->offset)) = sqlite3_column_int(stmt->prepared, i);
-                        break;
-                    case MODEL_TYPE_DATE:
-                    case MODEL_TYPE_DATETIME:
-                        *((time_t *) (((char *) ptr) + f->offset)) = sqlite3_column_int64(stmt->prepared, i);
-                        break;
-                    case MODEL_TYPE_STRING:
-                    {
-                        char *uv;
-                        const unsigned char *sv;
+        column_name_len = strlen(column_name);
+        if (NULL != (f = model_find_field_by_name(model, column_name, column_name_len))) {
+            switch (f->type) {
+                case MODEL_TYPE_BOOL:
+                    *((bool *) (((char *) ptr) + f->offset)) = /*!!*/sqlite3_column_int(stmt->prepared, i);
+                    break;
+                case MODEL_TYPE_INT:
+                case MODEL_TYPE_ENUM:
+                    *((int *) (((char *) ptr) + f->offset)) = sqlite3_column_int(stmt->prepared, i);
+                    break;
+                case MODEL_TYPE_DATE:
+                case MODEL_TYPE_DATETIME:
+                    *((time_t *) (((char *) ptr) + f->offset)) = sqlite3_column_int64(stmt->prepared, i);
+                    break;
+                case MODEL_TYPE_STRING:
+                {
+                    char *uv;
+                    const unsigned char *sv;
 
-                        sv = sqlite3_column_text(stmt->prepared, i);
-                        if (NULL == sv) {
-                            uv = NULL;
-                        } else {
-                            uv = strdup((char *) sv);
-                        }
-                        *((char **) (((char *) ptr) + f->offset)) = uv;
-                        break;
+                    sv = sqlite3_column_text(stmt->prepared, i);
+                    if (NULL == sv) {
+                        uv = NULL;
+                    } else {
+                        uv = strdup((char *) sv);
                     }
-                    default:
-                        assert(FALSE);
-                        break;
+                    *((char **) (((char *) ptr) + f->offset)) = uv;
+                    break;
                 }
-                match = TRUE;
+                default:
+                    assert(FALSE);
+                    break;
             }
         }
 #ifdef DEBUG
-        if (!match && 0 != strcmp(column_name, "account_id")) {
+        if (NULL == f && 0 != strcmp(column_name, "accountId")) {
             debug(_("Column '%s' unmapped for output (query: %s)"), column_name, sqlite3_sql(stmt->prepared));
         }
 #endif /* DEBUG */
