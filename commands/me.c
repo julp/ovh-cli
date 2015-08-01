@@ -7,10 +7,14 @@
 #include "modules/api.h"
 #include "modules/table.h"
 #include "struct/xtring.h"
+#include "commands/account.h"
 #include "struct/hashtable.h"
 
 // arguments
 typedef struct {
+    int status;
+    bool nocache;
+    char *contract;
     char *application;
 } me_argument_t;
 
@@ -30,6 +34,14 @@ static const char *application_status[] = {
     NULL
 };
 
+static const char *contract_status[] = {
+    N_("ko"),
+    N_("obsolete"),
+    N_("ok"),
+    N_("todo"),
+    NULL
+};
+
 typedef struct {
     modelized_t data;
     int status;
@@ -37,32 +49,121 @@ typedef struct {
     int applicationId;
     char *description;
     char *applicationKey;
-} application_t;
+} me_application_t;
 
 static model_t application_model = {
-    sizeof(application_t), "applications", NULL, NULL,
+    sizeof(me_application_t), "applications", NULL, NULL,
     (const model_field_t []) {
-        { "status",         MODEL_TYPE_ENUM,   offsetof(application_t, status),         0, application_status, 0 },
-        { "name",           MODEL_TYPE_STRING, offsetof(application_t, name),           0, NULL,               0 },
-        { "applicationId",  MODEL_TYPE_INT,    offsetof(application_t, applicationId),  0, NULL,               MODEL_FLAG_PRIMARY | MODEL_FLAG_INTERNAL },
-        { "description",    MODEL_TYPE_STRING, offsetof(application_t, description),    0, NULL,               0 },
-        { "applicationKey", MODEL_TYPE_STRING, offsetof(application_t, applicationKey), 0, NULL,               0 },
+        { "status",         MODEL_TYPE_ENUM,   offsetof(me_application_t, status),         0, application_status, 0 },
+        { "name",           MODEL_TYPE_STRING, offsetof(me_application_t, name),           0, NULL,               0 },
+        { "applicationId",  MODEL_TYPE_INT,    offsetof(me_application_t, applicationId),  0, NULL,               MODEL_FLAG_PRIMARY | MODEL_FLAG_INTERNAL },
+        { "description",    MODEL_TYPE_STRING, offsetof(me_application_t, description),    0, NULL,               0 },
+        { "applicationKey", MODEL_TYPE_STRING, offsetof(me_application_t, applicationKey), 0, NULL,               0 },
         MODEL_FIELD_SENTINEL
     }
 };
 
-static HashTable *applications;
+typedef struct {
+    modelized_t data;
+    int agreed;
+    time_t date2;
+    int id;
+    int contractId;
+    time_t date;
+    char *text;
+    char *pdf;
+    char *name;
+    bool active;
+} contract_t;
+
+/**
+ * TODO:
+ * - contracts may have the same name so they conflict (the name of the previous contract is kept while the object is destroyed)
+ * - contracts are shared between accounts?
+ */
+static model_t contract_model = {
+    sizeof(contract_t), "contracts", NULL, NULL,
+    (const model_field_t []) {
+        // GET /me/agreements/{id}
+        { "agreed",     MODEL_TYPE_ENUM,     offsetof(contract_t, agreed),     0, contract_status, 0 },
+        { "date" "2",   MODEL_TYPE_DATETIME, offsetof(contract_t, date2),      0, NULL,            0 },
+        { "id",         MODEL_TYPE_INT,      offsetof(contract_t, id),         0, NULL,            MODEL_FLAG_PRIMARY | MODEL_FLAG_INTERNAL },
+        { "contractId", MODEL_TYPE_INT,      offsetof(contract_t, contractId), 0, NULL,            MODEL_FLAG_INTERNAL },
+        // GET /me/agreements/{id}/contract
+        { "date",       MODEL_TYPE_DATE,     offsetof(contract_t, date),       0, NULL,            0 },
+        { "text",       MODEL_TYPE_STRING,   offsetof(contract_t, text),       0, NULL,            MODEL_FLAG_INTERNAL }, // internal, text is too long
+        { "pdf",        MODEL_TYPE_STRING,   offsetof(contract_t, pdf),        0, NULL,            0 },
+        { "name",       MODEL_TYPE_STRING,   offsetof(contract_t, name),       0, NULL,            0 }, // name is not unique!!!
+        { "active",     MODEL_TYPE_BOOL,     offsetof(contract_t, active),     0, NULL,            0 },
+        MODEL_FIELD_SENTINEL
+    }
+};
+
+typedef struct {
+    HashTable *contracts;
+    HashTable *applications;
+} account_me_data_t;
+
+#define MODULE_NAME "me"
+
+#define FETCH_ACCOUNT_DATA(/*account_me_data_t **/ amd) \
+    do { \
+        amd = NULL; \
+        account_current_get_data(MODULE_NAME, (void **) &amd); \
+        assert(NULL != amd); \
+    } while (0);
+
+static void account_me_data_dtor(void *data)
+{
+    account_me_data_t *amd;
+
+    assert(NULL != data);
+    amd = (account_me_data_t *) data;
+    hashtable_destroy(amd->contracts);
+    hashtable_destroy(amd->applications);
+    free(amd);
+}
+
+static void me_on_set_account(void **data)
+{
+    if (NULL == *data) {
+        account_me_data_t *amd;
+
+        amd = mem_new(*amd);
+        amd->contracts = hashtable_ascii_cs_new(NULL, NULL, (DtorFunc) modelized_destroy);
+        amd->applications = hashtable_ascii_cs_new(NULL, NULL, (DtorFunc) modelized_destroy);
+        *data = amd;
+    }
+}
 
 static bool me_ctor(error_t **UNUSED(error))
 {
-    applications = hashtable_ascii_cs_new(NULL, NULL, (DtorFunc) modelized_destroy);
+    account_register_module_callbacks(MODULE_NAME, account_me_data_dtor, me_on_set_account);
 
     return TRUE;
 }
 
 static void me_dtor(void)
 {
-    hashtable_destroy(applications);
+    // NOP
+}
+
+static void hashtable_of_modelized_to_table(const model_t *model, HashTable *ht)
+{
+    table_t *t;
+    Iterator it;
+
+    t = table_new_from_model(model, 0);
+    hashtable_to_iterator(&it, ht);
+    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+        modelized_t *obj;
+
+        obj = iterator_current(&it, NULL);
+        table_store_modelized(t, obj);
+    }
+    iterator_close(&it);
+    table_display(t, TABLE_FLAG_NONE);
+    table_destroy(t);
 }
 
 #if 0
@@ -133,12 +234,12 @@ static command_status_t me(COMMAND_ARGS)
     return COMMAND_SUCCESS;
 }
 
-void application_destroy(void *data)
+static void application_destroy(void *data)
 {
     if (NULL != data) {
-        application_t *app;
+        me_application_t *app;
 
-        app = (application_t *) data;
+        app = (me_application_t *) data;
         free(app->name);
         free(app->description);
         free(app);
@@ -203,7 +304,7 @@ static command_status_t credentials_list(COMMAND_ARGS)
             request_destroy(req);
             if (success) {
                 json_value_t root;
-                application_t *app;
+                me_application_t *app;
                 int64_t applicationId;
                 const char *stringified_rules;
                 time_t lastUse, expiration, creation;
@@ -358,12 +459,12 @@ static command_status_t credentials_flush(COMMAND_ARGS)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static bool fetch_applications(error_t **error)
+static bool fetch_applications(HashTable *applications, bool force, error_t **error)
 {
     bool success;
 
     success = TRUE;
-    if (0 == hashtable_size(applications)) { // if you haven't any applications, you couldn't use ovh-cli
+    if (0 == hashtable_size(applications) || force) { // if you haven't any applications, you couldn't use ovh-cli
         request_t *req;
         json_document_t *doc;
 
@@ -373,6 +474,9 @@ static bool fetch_applications(error_t **error)
         if (success) {
             Iterator it;
 
+            if (force) {
+                hashtable_clear(applications);
+            }
             json_array_to_iterator(&it, json_document_get_root(doc));
             for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
                 json_value_t v;
@@ -385,9 +489,9 @@ static bool fetch_applications(error_t **error)
                 success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
                 request_destroy(req);
                 if (success) {
-                    application_t *application;
+                    me_application_t *application;
 
-                    application = (application_t *) modelized_new(&application_model);
+                    application = (me_application_t *) modelized_new(&application_model);
                     json_object_to_modelized(json_document_get_root(doc), (modelized_t *) application, TRUE, NULL);
                     hashtable_put(applications, 0, application->name, application, NULL);
                     json_document_destroy(doc);
@@ -404,25 +508,15 @@ static bool fetch_applications(error_t **error)
 static command_status_t application_list(COMMAND_ARGS)
 {
     bool success;
+    me_argument_t *args;
+    account_me_data_t *amd;
 
-    USED(arg);
     USED(mainopts);
-    success = fetch_applications(error);
+    args = (me_argument_t *) arg;
+    FETCH_ACCOUNT_DATA(amd);
+    success = fetch_applications(amd->applications, args->nocache, error);
     if (success) {
-        table_t *t;
-        Iterator it;
-
-        t = table_new_from_model(&application_model, 0);
-        hashtable_to_iterator(&it, applications);
-        for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
-            modelized_t *application;
-
-            application = /*(modelized_t *)*/iterator_current(&it, NULL);
-            table_store_modelized(t, application);
-        }
-        iterator_close(&it);
-        table_display(t, TABLE_FLAG_NONE);
-        table_destroy(t);
+        hashtable_of_modelized_to_table(&application_model, amd->applications);
     }
 
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
@@ -431,23 +525,27 @@ static command_status_t application_list(COMMAND_ARGS)
 static command_status_t application_delete(COMMAND_ARGS)
 {
     bool success;
-    request_t *req;
     me_argument_t *args;
+    account_me_data_t *amd;
 
     USED(mainopts);
     args = (me_argument_t *) arg;
-    success = fetch_applications(error);
+    assert(NULL != args->application);
+    FETCH_ACCOUNT_DATA(amd);
+    success = fetch_applications(amd->applications, FALSE, error);
     if (success) {
         ht_hash_t h;
-        application_t *application;
+        me_application_t *application;
 
-        h = hashtable_hash(applications, args->application);
-        if (hashtable_quick_get(applications, h, args->application, &application)) {
+        h = hashtable_hash(amd->applications, args->application);
+        if (hashtable_quick_get(amd->applications, h, args->application, &application)) {
+            request_t *req;
+
             req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, error, API_BASE_URL "/me/api/application/%" PRIu32, application->applicationId);
             success = request_execute(req, RESPONSE_IGNORE, NULL, error);
             request_destroy(req);
             if (success) {
-                hashtable_quick_delete(applications, h, args->application, TRUE);
+                hashtable_quick_delete(amd->applications, h, args->application, TRUE);
             }
         } else {
             error_set(error, NOTICE, _("no such application named %s"), args->application);
@@ -457,13 +555,170 @@ static command_status_t application_delete(COMMAND_ARGS)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
+static bool fetch_contracts(HashTable *contracts, bool force, error_t **error)
+{
+    bool success;
+
+    success = TRUE;
+    if (0 == hashtable_size(contracts) || force) {
+        request_t *req;
+        json_document_t *doc;
+
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me/agreements");
+        success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+        request_destroy(req);
+        if (success) {
+            Iterator it;
+
+            if (force) {
+                hashtable_clear(contracts);
+            }
+            json_array_to_iterator(&it, json_document_get_root(doc));
+            for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
+                int64_t id;
+                json_value_t v;
+                json_document_t *doc;
+
+                v = (json_value_t) iterator_current(&it, NULL);
+                id = json_get_integer(v);
+                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me/agreements/%" PRIu32, id);
+                success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+                request_destroy(req);
+                if (success) {
+                    contract_t *contract;
+
+                    contract = (contract_t *) modelized_new(&contract_model);
+                    json_object_to_modelized(json_document_get_root(doc), (modelized_t *) contract, TRUE, NULL);
+                    json_document_destroy(doc);
+                    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me/agreements/%" PRIu32 "/contract", id);
+                    success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+                    request_destroy(req);
+                    if (success) {
+                        contract->date2 = contract->date; // workaround: copy current value of date to date2
+                        json_object_to_modelized(json_document_get_root(doc), (modelized_t *) contract, TRUE, NULL);
+                        json_document_destroy(doc);
+                        hashtable_put(contracts, 0, contract->name, contract, NULL);
+                    } else {
+                        modelized_destroy((modelized_t *) contract);
+                    }
+                }
+            }
+            iterator_close(&it);
+            json_document_destroy(doc);
+        }
+    }
+
+    return success;
+}
+
+static command_status_t contract_list(COMMAND_ARGS)
+{
+    bool success;
+    me_argument_t *args;
+    account_me_data_t *amd;
+
+    USED(mainopts);
+    args = (me_argument_t *) arg;
+    FETCH_ACCOUNT_DATA(amd);
+    // TODO: filter with args->status
+    success = fetch_contracts(amd->contracts, FALSE, error);
+    if (success) {
+        hashtable_of_modelized_to_table(&contract_model, amd->contracts);
+    }
+
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
+static command_status_t contract_show(COMMAND_ARGS)
+{
+    bool success;
+    me_argument_t *args;
+    account_me_data_t *amd;
+
+    USED(mainopts);
+    args = (me_argument_t *) arg;
+    assert(NULL != args->contract);
+    FETCH_ACCOUNT_DATA(amd);
+    success = fetch_contracts(amd->contracts, FALSE, error);
+    if (success) {
+        contract_t *contract;
+
+        if (hashtable_get(amd->contracts, args->contract, &contract)) {
+            // TODO: pipe to PAGER?
+            puts(contract->text);
+        } else {
+            error_set(error, NOTICE, _("no such contract named %s"), args->contract);
+        }
+    }
+
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
+static int string_array_to_index(const char * const *values, const char *value)
+{
+    const char * const *v;
+
+    for (v = values; NULL != *v; v++) {
+        if (0 == strcmp(value, *v)) {
+            return v - values;
+        }
+    }
+
+    return -1;
+}
+
+static command_status_t contract_accept(COMMAND_ARGS)
+{
+    bool success;
+    me_argument_t *args;
+    account_me_data_t *amd;
+
+    USED(mainopts);
+    args = (me_argument_t *) arg;
+    FETCH_ACCOUNT_DATA(amd);
+    success = fetch_contracts(amd->contracts, FALSE, error);
+    if (success) {
+        contract_t *contract;
+
+        if (hashtable_get(amd->contracts, args->contract, &contract)) {
+            request_t *req;
+
+            req = request_new(REQUEST_FLAG_SIGN, HTTP_POST, NULL, error, API_BASE_URL "/me/agreements/%" PRIu32 "/accept", contract->id);
+            success = request_execute(req, RESPONSE_IGNORE, NULL, error);
+            request_destroy(req);
+            if (success) {
+                contract->agreed = string_array_to_index(contract_status, "ok");
+            }
+        } else {
+            error_set(error, NOTICE, _("no such contract named %s"), args->contract);
+        }
+    }
+
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+}
+
 static bool complete_application_name(void *parsed_arguments, const char *current_argument, size_t current_argument_len, completer_t *possibilities, void *UNUSED(data))
 {
-    if (!fetch_applications(NULL)) {
+    account_me_data_t *amd;
+
+    FETCH_ACCOUNT_DATA(amd);
+    if (!fetch_applications(amd->applications, FALSE, NULL)) {
         return FALSE;
     }
 
-    return complete_from_hashtable_keys(parsed_arguments, current_argument, current_argument_len, possibilities, applications);
+    return complete_from_hashtable_keys(parsed_arguments, current_argument, current_argument_len, possibilities, amd->applications);
+}
+
+static bool complete_contract_name(void *parsed_arguments, const char *current_argument, size_t current_argument_len, completer_t *possibilities, void *UNUSED(data))
+{
+    account_me_data_t *amd;
+
+    FETCH_ACCOUNT_DATA(amd);
+    if (!fetch_contracts(amd->contracts, FALSE, NULL)) {
+        return FALSE;
+    }
+
+    return complete_from_hashtable_keys(parsed_arguments, current_argument, current_argument_len, possibilities, amd->contracts);
 }
 
 static void me_regcomm(graph_t *g)
@@ -496,7 +751,26 @@ static void me_regcomm(graph_t *g)
         arg_application = argument_create_string(offsetof(me_argument_t, application), "<application>", complete_application_name, NULL);
 
         graph_create_full_path(g, lit_me, lit_application, lit_list, NULL);
+        graph_create_full_path(g, lit_me, lit_application, lit_list, argument_create_literal("nocache", NULL, NULL), NULL);
         graph_create_full_path(g, lit_me, lit_application, arg_application, lit_delete, NULL);
+    }
+    // me contract ...
+    {
+        argument_t *arg_contract, *arg_status;
+        argument_t *lit_contract, *lit_list, *lit_accept, *lit_show;
+
+        lit_contract = argument_create_literal("contract", NULL, NULL);
+        lit_list = argument_create_literal("list", contract_list, _("list contracts"));
+        lit_show = argument_create_literal("show", contract_show, _("show a contract"));
+        lit_accept = argument_create_literal("accept", contract_accept, _("accept a contract"));
+
+        arg_contract = argument_create_string(offsetof(me_argument_t, contract), "<contract>", complete_contract_name, NULL);
+        arg_status = argument_create_choices(offsetof(me_argument_t, status), "<status>",  contract_status);
+
+        graph_create_full_path(g, lit_me, lit_contract, lit_list, NULL);
+        graph_create_full_path(g, lit_me, lit_contract, lit_list, arg_status, NULL);
+        graph_create_full_path(g, lit_me, lit_contract, arg_contract, lit_show, NULL);
+        graph_create_full_path(g, lit_me, lit_contract, arg_contract, lit_accept, NULL);
     }
 }
 

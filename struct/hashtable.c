@@ -230,6 +230,11 @@ static bool hashtable_put_real(HashTable *this, uint32_t flags, ht_hash_t h, ht_
                     this->value_dtor(n->data);
                 }
                 n->data = value;
+                if (NULL == this->key_duper) {
+                    n->key = key;
+                } else {
+                    n->key = (ht_key_t) this->key_duper((void *) key);
+                }
                 return TRUE;
             }
             return FALSE;
