@@ -504,7 +504,7 @@ static command_status_t account_add_or_update(COMMAND_ARGS, bool update)
     } else {
         bool nulls[5] = { 0 };
 
-        assert(((size_t) sqlite3_bind_parameter_count(statements[STMT_ACCOUNT_UPDATE].prepared)) == ARRAY_SIZE(nulls));
+        CHECK_NULLS_LENGTH(nulls, statements[STMT_ACCOUNT_UPDATE]);
         nulls[0] = NULL == args->password;
         nulls[1] = NULL == args->consumer_key;
         nulls[2] = NULL == args->consumer_key;
@@ -612,7 +612,7 @@ static command_status_t application_add(COMMAND_ARGS)
     statement_fetch(&statements[STMT_APPLICATION_INSERT], error);
     // TODO: if !update (0 == sqlite_affected_rows), duplicate?
 
-    return CMD_FLAG_SKIP_HISTORY | (NULL != *error ? COMMAND_SUCCESS : COMMAND_FAILURE);
+    return CMD_FLAG_SKIP_HISTORY | (NULL == *error ? COMMAND_SUCCESS : COMMAND_FAILURE);
 }
 
 static command_status_t application_delete(COMMAND_ARGS)
