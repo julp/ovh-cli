@@ -228,7 +228,8 @@ static void write_escaped_string(const char *s, char **w, size_t *dst_len, size_
         if (unreserved[(unsigned char) *p]) {
             ++*dst_len;
             if (dst_size > *dst_len) {
-                **w++ = *p;
+                **w = *p;
+                ++*w;
             }
         } else {
             *dst_len += STR_LEN("%XX");
