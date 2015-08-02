@@ -30,6 +30,7 @@ graph_t *graph_new(void);
 command_status_t graph_dispatch_command(graph_t *, int, const char **, const main_options_t *, error_t **);
 
 argument_t *argument_create_choices_off_on(size_t, handle_t);
+argument_t *argument_create_choices_false_true(size_t, handle_t);
 argument_t *argument_create_choices_disable_enable(size_t, handle_t);
 
 void completer_push(completer_t *, const char *, bool);

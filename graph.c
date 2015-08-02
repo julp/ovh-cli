@@ -293,6 +293,22 @@ argument_t *argument_create_choices(size_t offset, const char *hint, const char 
     return node;
 }
 
+static const char * const false_true[] = {
+    "false",
+    "true",
+    NULL
+};
+
+argument_t *argument_create_choices_false_true(size_t offset, handle_t handle)
+{
+    argument_t *node;
+
+    node = argument_create_choices(offset, "<true/false>", false_true);
+    node->handle = handle;
+
+    return node;
+}
+
 static const char * const off_on[] = {
     "off",
     "on",
@@ -303,11 +319,8 @@ argument_t *argument_create_choices_off_on(size_t offset, handle_t handle)
 {
     argument_t *node;
 
-    CREATE_ARG(node, ARG_TYPE_CHOICES, "<on/off>");
+    node = argument_create_choices(offset, "<on/off>", off_on);
     node->handle = handle;
-    node->offset = offset;
-    node->complete = complete_choices;
-    node->completion_data = (void *) off_on;
 
     return node;
 }
@@ -322,11 +335,8 @@ argument_t *argument_create_choices_disable_enable(size_t offset, handle_t handl
 {
     argument_t *node;
 
-    CREATE_ARG(node, ARG_TYPE_CHOICES, "<enable/disable>");
+    node = argument_create_choices(offset, "<enable/disable>", disable_enable);
     node->handle = handle;
-    node->offset = offset;
-    node->complete = complete_choices;
-    node->completion_data = (void *) disable_enable;
 
     return node;
 }
@@ -586,7 +596,7 @@ void plug_update_subcommands(graph_t *g, graph_node_t *parent, const model_t *mo
             field_arguments[field_arguments_length].start = argument_create_literal(f->column_name, NULL, NULL);
             switch (f->type) {
                 case MODEL_TYPE_BOOL:
-                    field_arguments[field_arguments_length].end = argument_create_choices_off_on(f->offset, NULL);
+                    field_arguments[field_arguments_length].end = argument_create_choices_false_true(f->offset, NULL);
                     break;
                 case MODEL_TYPE_INT:
                     field_arguments[field_arguments_length].end = argument_create_uint(f->offset, hint);

@@ -129,12 +129,13 @@ Available commands:
                      nocache
                          type <type>
                  <record>
-                     add <value> type <type>
+                     add <value> => create a DNS record
+                         name <name>
+                             target <value>
+                                 ttl <ttl>
+                                 type <type>
                      delete => delete a DNS record
                      update
-                         subDomain 
-                             target 
-                                 ttl 
              refresh => generate a new serial to reflect any change on a DNS zone
      export => export OVH accounts and applications in ovh-cli commands format
      help => show help

@@ -135,8 +135,8 @@ static const char * const offers[] = {
 };
 
 static const char * const name_server_types[] = {
-    "external",
-    "hosted",
+    N_("external"),
+    N_("hosted"),
     NULL
 };
 
@@ -509,10 +509,10 @@ static command_status_t domain_check(COMMAND_ARGS)
 #include <libxml/parser.h>
 static command_status_t domain_export(COMMAND_ARGS)
 {
+    bool success;
     xmlDocPtr doc;
     request_t *req;
     xmlNodePtr root;
-    bool request_success;
     domain_record_argument_t *args;
 
     USED(mainopts);
@@ -521,7 +521,7 @@ static command_status_t domain_export(COMMAND_ARGS)
 
     req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/domain/zone/%s/export", args->domain);
     REQUEST_XML_RESPONSE_WANTED(req); // we ask XML instead of JSON else we have to parse invalid json document or to unescape characters
-    if ((request_success = request_execute(req, RESPONSE_XML, (void **) &doc, error))) {
+    if ((success = request_execute(req, RESPONSE_XML, (void **) &doc, error))) {
         if (NULL != (root = xmlDocGetRootElement(doc))) {
             xmlChar *content;
 
@@ -529,18 +529,18 @@ static command_status_t domain_export(COMMAND_ARGS)
             puts((const char *) content);
             xmlFree(content);
         }
-        request_success = NULL != root;
+        success = NULL != root;
         xmlFreeDoc(doc);
     }
     request_destroy(req);
 
-    return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
 static command_status_t domain_refresh(COMMAND_ARGS)
 {
+    bool success;
     request_t *req;
-    bool request_success;
     domain_record_argument_t *args;
 
     USED(mainopts);
@@ -548,10 +548,10 @@ static command_status_t domain_refresh(COMMAND_ARGS)
     assert(NULL != args->domain);
 
     req = request_new(REQUEST_FLAG_SIGN, HTTP_POST, NULL, error, API_BASE_URL "/domain/zone/%s/refresh", args->domain);
-    request_success = request_execute(req, RESPONSE_IGNORE, NULL, error); // Response is void
+    success = request_execute(req, RESPONSE_IGNORE, NULL, error); // Response is void
     request_destroy(req);
 
-    return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
 static bool get_domain_records(const char *domain, domain_t **d, bool force, error_t **error)
@@ -627,7 +627,7 @@ static command_status_t record_list(COMMAND_ARGS)
 // TODO: ttl (optionnal)
 static command_status_t record_add(COMMAND_ARGS)
 {
-    bool request_success;
+    bool success;
     json_document_t *doc;
     domain_record_argument_t *args;
 
@@ -655,13 +655,13 @@ static command_status_t record_add(COMMAND_ARGS)
             request_t *req;
 
             req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, error, API_BASE_URL "/domain/zone/%s/record", args->domain);
-            request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+            success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
             request_destroy(req);
             json_document_destroy(reqdoc);
         }
     }
     // result
-    if (request_success) {
+    if (success) {
         domain_t *d;
         ht_hash_t h;
         domain_set_t *ds;
@@ -679,7 +679,7 @@ static command_status_t record_add(COMMAND_ARGS)
         ask_for_refresh(RELAY_COMMAND_ARGS);
     }
 
-    return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
 static size_t find_record(HashTable *records, const char *subDomain, record_t **match)
@@ -706,14 +706,14 @@ static size_t find_record(HashTable *records, const char *subDomain, record_t **
 static command_status_t record_delete(COMMAND_ARGS)
 {
     domain_t *d;
+    bool success;
     record_t *match;
-    bool request_success;
     domain_record_argument_t *args;
 
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
     assert(NULL != args->record);
-    if ((request_success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, FALSE, error)))) {
+    if ((success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, FALSE, error)))) {
 #if 0
         // what was the goal? If true, it is more the domain which does not exist!
         if (!hashtable_get(domains, argv[0], &d)) {
@@ -746,17 +746,17 @@ static command_status_t record_delete(COMMAND_ARGS)
 
             // request
             req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, error, API_BASE_URL "/domain/zone/%s/record/%" PRIu32, args->domain, match->id);
-            request_success = request_execute(req, RESPONSE_IGNORE, NULL, error);
+            success = request_execute(req, RESPONSE_IGNORE, NULL, error);
             request_destroy(req);
             // result
-            if (request_success) {
+            if (success) {
                 hashtable_quick_delete(d->records, match->id, NULL, TRUE);
                 ask_for_refresh(RELAY_COMMAND_ARGS);
             }
         }
     }
 
-    return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
 // arguments: [ttl <int>] [name <string>] [target <string>]
@@ -834,8 +834,8 @@ static command_status_t record_update(COMMAND_ARGS)
 
 static command_status_t dnssec_status(COMMAND_ARGS)
 {
+    bool success;
     request_t *req;
-    bool request_success;
     json_document_t *doc;
     domain_record_argument_t *args;
 
@@ -843,9 +843,9 @@ static command_status_t dnssec_status(COMMAND_ARGS)
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
     req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
-    request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+    success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
-    if (request_success) {
+    if (success) {
         json_value_t root, v;
 
         root = json_document_get_root(doc);
@@ -861,13 +861,13 @@ static command_status_t dnssec_status(COMMAND_ARGS)
         json_document_destroy(doc);
     }
 
-    return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
 static command_status_t dnssec_enable_disable(COMMAND_ARGS)
 {
+    bool success;
     request_t *req;
-    bool request_success;
     domain_record_argument_t *args;
 
     USED(mainopts);
@@ -878,10 +878,10 @@ static command_status_t dnssec_enable_disable(COMMAND_ARGS)
     } else {
         req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, error, API_BASE_URL "/domain/zone/%s/dnssec", args->domain);
     }
-    request_success = request_execute(req, RESPONSE_IGNORE, NULL, error);
+    success = request_execute(req, RESPONSE_IGNORE, NULL, error);
     request_destroy(req);
 
-    return request_success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
 static bool complete_domains(void *UNUSED(parsed_arguments), const char *current_argument, size_t current_argument_len, completer_t *possibilities, void *UNUSED(data))
@@ -904,12 +904,12 @@ static bool complete_records(void *parsed_arguments, const char *current_argumen
 {
 #if 0
     domain_t *d;
-    bool request_success;
+    bool success;
     domain_record_argument_t *args;
 
     args = (domain_record_argument_t *) parsed_arguments;
     assert(NULL != args->domain);
-    if ((request_success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, FALSE, NULL)))) {
+    if ((success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, FALSE, NULL)))) {
         Iterator it;
 
         hashtable_to_iterator(&it, d->records);
@@ -924,7 +924,7 @@ static bool complete_records(void *parsed_arguments, const char *current_argumen
         iterator_close(&it);
     }
 
-    return request_success;
+    return success;
 #else
     domain_record_argument_t *args;
 
