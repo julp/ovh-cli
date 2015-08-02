@@ -558,6 +558,64 @@ static void graph_generate_subpath(graph_t *g, graph_node_t *start, graph_node_t
     }
 }
 
+#ifdef TEST
+void plug_update_subcommands(graph_t *g, graph_node_t *parent, const model_t *model, handle_t handle, const char *description)
+{
+    const model_field_t *f;
+    argument_t *lit_update;
+    struct subpath *field_arguments;
+    size_t field_arguments_length, field_arguments_size;
+
+    field_arguments_length = field_arguments_size = 0;
+    for (f = model->fields; NULL != f->column_name; f++) {
+        if (!HAS_FLAG(f->flags, MODEL_FLAG_INTERNAL | MODEL_FLAG_RO)) {
+            ++field_arguments_size;
+        }
+    }
+    lit_update = argument_create_literal("update", handle, description);
+    graph_create_path(g, parent, lit_update, NULL);
+    field_arguments = mem_new_n(*field_arguments, field_arguments_size);
+    for (f = model->fields; NULL != f->column_name; f++) {
+        if (!HAS_FLAG(f->flags, MODEL_FLAG_INTERNAL | MODEL_FLAG_RO)) {
+            char *p, hint[4096];
+
+            hint[0] = '<';
+            p = stpcpy(hint + 1, f->column_name); // TODO: safer
+            *p++ = '>';
+            *p++ = '\0';
+            field_arguments[field_arguments_length].start = argument_create_literal(f->column_name, NULL, NULL);
+            switch (f->type) {
+                case MODEL_TYPE_BOOL:
+                    field_arguments[field_arguments_length].end = argument_create_choices_off_on(f->offset, NULL);
+                    break;
+                case MODEL_TYPE_INT:
+                    field_arguments[field_arguments_length].end = argument_create_uint(f->offset, hint);
+                    break;
+                case MODEL_TYPE_ENUM:
+                    field_arguments[field_arguments_length].end = argument_create_choices(f->offset, hint, f->enum_values);
+                    break;
+                case MODEL_TYPE_STRING:
+                    field_arguments[field_arguments_length].end = argument_create_string(f->offset, hint, NULL, NULL);
+                break;
+                case MODEL_TYPE_DATE:
+                case MODEL_TYPE_DATETIME:
+                default:
+                    assert(FALSE);
+            }
+#if 1
+            graph_create_path(g, field_arguments[field_arguments_length].start, field_arguments[field_arguments_length].end, NULL);
+#else
+            graph_node_insert_child(g, lit_update, field_arguments[field_arguments_length].start);
+            graph_node_insert_child(g, field_arguments[field_arguments_length].start, field_arguments[field_arguments_length].end);
+#endif
+            ++field_arguments_length;
+        }
+    }
+    graph_generate_subpath(g, lit_update, g->end, field_arguments, field_arguments_length, field_arguments_length);
+    free(field_arguments);
+}
+#endif /* TEST */
+
 void graph_create_all_path(graph_t *g, graph_node_t *start, graph_node_t *end, ...)
 {
     va_list ap, aq;

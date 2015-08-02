@@ -143,19 +143,19 @@ static const char * const name_server_types[] = {
 static model_t domain_model = {
     sizeof(domain_t), "domains", NULL, NULL,
     (const model_field_t []) {
-        { "name",               MODEL_TYPE_STRING, offsetof(domain_t, name),               0, NULL,                 MODEL_FLAG_PRIMARY },
-        { "hasDnsAnycast",      MODEL_TYPE_BOOL,   offsetof(domain_t, hasDnsAnycast),      0, NULL,                 0 },
-        { "dnssecSupported",    MODEL_TYPE_BOOL,   offsetof(domain_t, dnssecSupported),    0, NULL,                 0 },
-        { "owoSupported",       MODEL_TYPE_BOOL,   offsetof(domain_t, owoSupported),       0, NULL,                 0 },
+        { "name",               MODEL_TYPE_STRING, offsetof(domain_t, name),               0, NULL,                 MODEL_FLAG_PRIMARY | MODEL_FLAG_RO },
+        { "hasDnsAnycast",      MODEL_TYPE_BOOL,   offsetof(domain_t, hasDnsAnycast),      0, NULL,                 MODEL_FLAG_RO },
+        { "dnssecSupported",    MODEL_TYPE_BOOL,   offsetof(domain_t, dnssecSupported),    0, NULL,                 MODEL_FLAG_RO },
+        { "owoSupported",       MODEL_TYPE_BOOL,   offsetof(domain_t, owoSupported),       0, NULL,                 MODEL_FLAG_RO },
         { "transferLockStatus", MODEL_TYPE_ENUM,   offsetof(domain_t, transferLockStatus), 0, transfer_lock_status, 0 },
-        { "offer",              MODEL_TYPE_ENUM,   offsetof(domain_t, offer),              0, offers,               0 },
+        { "offer",              MODEL_TYPE_ENUM,   offsetof(domain_t, offer),              0, offers,               MODEL_FLAG_RO },
         { "nameServerType",     MODEL_TYPE_ENUM,   offsetof(domain_t, nameServerType),     0, name_server_types,    0 },
-        { "engagedUpTo",        MODEL_TYPE_DATE,   offsetof(domain_t, engagedUpTo),        0, NULL,                 MODEL_FLAG_NULLABLE },
-        { "contactBilling",     MODEL_TYPE_STRING, offsetof(domain_t, contactBilling),     0, NULL,                 0 },
-        { "expiration",         MODEL_TYPE_DATE,   offsetof(domain_t, expiration),         0, NULL,                 0 },
-        { "contactTech",        MODEL_TYPE_STRING, offsetof(domain_t, contactTech),        0, NULL,                 0 },
-        { "contactAdmin",       MODEL_TYPE_STRING, offsetof(domain_t, contactAdmin),       0, NULL,                 0 },
-        { "creation",           MODEL_TYPE_DATE,   offsetof(domain_t, creation),           0, NULL,                 0 },
+        { "engagedUpTo",        MODEL_TYPE_DATE,   offsetof(domain_t, engagedUpTo),        0, NULL,                 MODEL_FLAG_NULLABLE | MODEL_FLAG_RO },
+        { "contactBilling",     MODEL_TYPE_STRING, offsetof(domain_t, contactBilling),     0, NULL,                 MODEL_FLAG_RO },
+        { "expiration",         MODEL_TYPE_DATE,   offsetof(domain_t, expiration),         0, NULL,                 MODEL_FLAG_RO },
+        { "contactTech",        MODEL_TYPE_STRING, offsetof(domain_t, contactTech),        0, NULL,                 MODEL_FLAG_RO },
+        { "contactAdmin",       MODEL_TYPE_STRING, offsetof(domain_t, contactAdmin),       0, NULL,                 MODEL_FLAG_RO },
+        { "creation",           MODEL_TYPE_DATE,   offsetof(domain_t, creation),           0, NULL,                 MODEL_FLAG_RO },
         MODEL_FIELD_SENTINEL
     }
 };
@@ -186,11 +186,11 @@ static const char *record_to_s(void *ptr)
 static model_t record_model = {
     sizeof(record_t), "records", record_to_name, record_to_s,
     (const model_field_t []) {
-        { "id",        MODEL_TYPE_INT,    offsetof(record_t, id),        0, NULL,                MODEL_FLAG_PRIMARY | MODEL_FLAG_INTERNAL },
-        { "zone",      MODEL_TYPE_STRING, offsetof(record_t, zone),      0, NULL,                MODEL_FLAG_INTERNAL },
+        { "id",        MODEL_TYPE_INT,    offsetof(record_t, id),        0, NULL,                MODEL_FLAG_PRIMARY | MODEL_FLAG_INTERNAL | MODEL_FLAG_RO },
+        { "zone",      MODEL_TYPE_STRING, offsetof(record_t, zone),      0, NULL,                MODEL_FLAG_INTERNAL | MODEL_FLAG_RO },
         { "ttl",       MODEL_TYPE_INT,    offsetof(record_t, ttl),       0, NULL,                0 }, // in minutes
         { "subDomain", MODEL_TYPE_STRING, offsetof(record_t, subDomain), 0, NULL,                0 }, // record name
-        { "fieldType", MODEL_TYPE_ENUM,   offsetof(record_t, fieldType), 0, domain_record_types, 0 },
+        { "fieldType", MODEL_TYPE_ENUM,   offsetof(record_t, fieldType), 0, domain_record_types, MODEL_FLAG_RO },
         { "target",    MODEL_TYPE_STRING, offsetof(record_t, target),    0, NULL,                0 }, // record value
         MODEL_FIELD_SENTINEL
     }
@@ -1013,8 +1013,12 @@ static void domain_regcomm(graph_t *g)
         graph_create_full_path(g, lit_domain, arg_domain, lit_record, arg_record, lit_delete, NULL);
 
 //         graph_create_path(g, /*lit_domain*/arg_domain, lit_update, /*arg_domain, */lit_record, arg_record, NULL);
+#ifndef TEST
         graph_create_path(g, arg_record, lit_update, NULL);
         graph_create_all_path(g, lit_update, NULL, 2, lit_name, arg_name, 2, lit_target, arg_value, 2, lit_ttl, arg_ttl, 0);
+#else
+        plug_update_subcommands(g, arg_record, &record_model, record_update, _("XXX"));
+#endif /* !TEST */
     }
 }
 

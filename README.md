@@ -129,13 +129,12 @@ Available commands:
                      nocache
                          type <type>
                  <record>
-                     add <value> => create a DNS record
-                         name <name>
-                             target <value>
-                                 ttl <ttl>
-                                 type <type>
+                     add <value> type <type>
                      delete => delete a DNS record
                      update
+                         subDomain 
+                             target 
+                                 ttl 
              refresh => generate a new serial to reflect any change on a DNS zone
      export => export OVH accounts and applications in ovh-cli commands format
      help => show help
@@ -174,7 +173,7 @@ Available commands:
              <contract>
                  accept => accept a contract
                  show => show a contract
-     quit => exit this program
+     quit => exit program
      tickets
          create <subject> => open a new support ticket
          list => list support ticket

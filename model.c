@@ -60,6 +60,22 @@ const model_field_t *model_find_field_by_name(const model_t *model, const char *
 }
 
 #if 0
+size_t model_fields_count(const model_t *model, uint32_t flags, bool negated)
+{
+    size_t columns_count;
+    const model_field_t *f;
+
+    for (columns_count = 0, f = model->fields; NULL != f->column_name; f++) {
+        if (negated == (0 != HAS_FLAG(f->flags, flags))) {
+            ++columns_count;
+        }
+    }
+
+    return columns_count;
+}
+#endif
+
+#if 0
 void modelized_name_to_s(modelized_t *ptr, char *buffer, size_t buffer_size)
 {
     //

@@ -40,4 +40,8 @@ bool complete_from_hashtable_keys(void *, const char *, size_t, completer_t *, v
 
 char *graph_bash(graph_t *);
 
+# ifdef TEST
+void plug_update_subcommands(graph_t *, graph_node_t *, const model_t *, handle_t, const char *);
+# endif /* TEST */
+
 #endif /* !GRAPH_H */

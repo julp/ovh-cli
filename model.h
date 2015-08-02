@@ -13,10 +13,11 @@ typedef enum {
 } model_field_type_t;
 
 #define MODEL_FLAG_NONE     (0)
-#define MODEL_FLAG_PRIMARY  (1<<0)
-#define MODEL_FLAG_UNIQUE   (1<<1)
-#define MODEL_FLAG_NULLABLE (1<<2)
-#define MODEL_FLAG_INTERNAL (1<<3)
+#define MODEL_FLAG_RO       (1<<0)
+#define MODEL_FLAG_PRIMARY  (1<<1)
+#define MODEL_FLAG_UNIQUE   (1<<2)
+#define MODEL_FLAG_NULLABLE (1<<3)
+#define MODEL_FLAG_INTERNAL (1<<4)
 
 typedef struct {
     const char *column_name;
