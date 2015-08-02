@@ -794,6 +794,9 @@ char *model_to_sql(const model_t *model)
     string_append_string(buffer, model->name);
     STRING_APPEND_STRING(buffer, "(\n");
     for (f = model->fields; NULL != f->column_name; f++) {
+        if (f != model->fields) {
+            STRING_APPEND_STRING(buffer, ",\n");
+        }
         switch (f->type) {
             case MODEL_TYPE_INT:
             case MODEL_TYPE_BOOL:
@@ -814,23 +817,23 @@ char *model_to_sql(const model_t *model)
         }
         string_append_string(buffer, f->column_name);
         if (!HAS_FLAG(f->flags, MODEL_FLAG_NULLABLE)) {
-            STRING_APPEND_STRING(buffer, "NOT NULL ");
+            STRING_APPEND_STRING(buffer, " NOT NULL");
         }
         if (HAS_FLAG(f->flags, MODEL_FLAG_UNIQUE)) {
-            STRING_APPEND_STRING(buffer, "UNIQUE ");
+            STRING_APPEND_STRING(buffer, " UNIQUE");
         }
-        STRING_APPEND_STRING(buffer, ",\n");
     }
     if (0 != primaries_length) {
-        STRING_APPEND_STRING(buffer, "PRIMARY(");
-        while (0 != --primaries_length) {
+        STRING_APPEND_STRING(buffer, ",\n\tPRIMARY(");
+        while (0 != primaries_length--) {
             string_append_string(buffer, primaries[primaries_length]->column_name);
-            STRING_APPEND_STRING(buffer, ", ");
+            if (0 != primaries_length) {
+                STRING_APPEND_STRING(buffer, ", ");
+            }
         }
-        // remove ', '?
         STRING_APPEND_STRING(buffer, ")\n");
     } else {
-        // remove ',\n'?
+        string_append_char(buffer, '\n');
     }
     STRING_APPEND_STRING(buffer, ");");
 
