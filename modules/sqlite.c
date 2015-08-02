@@ -782,7 +782,7 @@ bool complete_from_modelized(const model_t *model, sqlite_statement_t *stmt, com
     return TRUE;
 }
 
-char *model_to_sql(const model_t *model)
+char *model_to_sql_create_table(const model_t *model)
 {
     String *buffer;
     size_t primaries_length;
@@ -836,6 +836,34 @@ char *model_to_sql(const model_t *model)
         string_append_char(buffer, '\n');
     }
     STRING_APPEND_STRING(buffer, ");");
+
+    return string_orphan(buffer);
+}
+
+char *model_to_sql_upsert(const model_t *model)
+{
+    String *buffer;
+    const model_field_t *f;
+
+    buffer = string_new();
+    STRING_APPEND_STRING(buffer, "INSERT OR REPLACE INTO ");
+    string_append_string(buffer, model->name);
+    string_append_char(buffer, '(');
+    for (f = model->fields; NULL != f->column_name; f++) {
+        if (f != model->fields) {
+            STRING_APPEND_STRING(buffer, ", ");
+        }
+        string_append_string(buffer, f->column_name);
+    }
+    STRING_APPEND_STRING(buffer, " ) VALUES(");
+    for (f = model->fields; NULL != f->column_name; f++) {
+        if (f != model->fields) {
+            STRING_APPEND_STRING(buffer, ", ");
+        }
+        string_append_char(buffer, ':');
+        string_append_string(buffer, f->column_name);
+    }
+    string_append_char(buffer, ')');
 
     return string_orphan(buffer);
 }

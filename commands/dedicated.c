@@ -864,6 +864,7 @@ static command_status_t dedicated_task_list(COMMAND_ARGS)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
+#if 0
 static command_status_t dedicated_task_wait(COMMAND_ARGS)
 {
     task_t task;
@@ -906,6 +907,7 @@ static command_status_t dedicated_task_cancel(COMMAND_ARGS)
 
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
+#endif
 
 static bool complete_servers(void *UNUSED(parsed_arguments), const char *current_argument, size_t current_argument_len, completer_t *possibilities, void *UNUSED(data))
 {

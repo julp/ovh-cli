@@ -423,7 +423,7 @@ static bool fetch_domains(domain_set_t *ds, bool force, error_t **error)
                 d->records = hashtable_new(NULL, value_equal, NULL, NULL, record_destroy); // TODO: COMPAT
                 v = (json_value_t) iterator_current(&it, NULL);
                 hashtable_put(ds->domains, 0, json_get_string(v), d, NULL); // ds->domains has strdup as key_duper, don't need to strdup it ourself
-                success &= fetch_domain(d, json_get_string(v), force, error);
+                success = fetch_domain(d, json_get_string(v), force, error);
             }
             iterator_close(&it);
             ds->uptodate = TRUE;
