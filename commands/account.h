@@ -5,7 +5,7 @@
 typedef struct {
     modelized_t data;
     int id;
-    bool isdefault;
+    bool is_default;
     char *name;
     char *password;
     time_t expires_at;
@@ -15,11 +15,14 @@ typedef struct {
 
 typedef struct {
     modelized_t data;
-    char *key;
+    char *app_key;
     char *secret;
     int endpoint_id;
 } application_t;
 
+#define key app_key
+
+model_t *account_model;
 const account_t *current_account;
 const application_t *current_application;
 

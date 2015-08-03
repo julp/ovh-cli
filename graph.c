@@ -72,10 +72,11 @@ static model_t argument_model = { /* dummy model */
 #if 0
     (const model_field_t []) {
         MODEL_FIELD_SENTINEL
-    }
+    },
 #else
-    NULL
+    NULL,
 #endif
+    0
 };
 
 /**

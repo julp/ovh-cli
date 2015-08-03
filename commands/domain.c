@@ -140,24 +140,25 @@ static const char * const name_server_types[] = {
     NULL
 };
 
-static model_t domain_model = {
-    sizeof(domain_t), "domains", NULL, NULL,
-    (const model_field_t []) {
-        { "name",               MODEL_TYPE_STRING, offsetof(domain_t, name),               0, NULL,                 MODEL_FLAG_PRIMARY | MODEL_FLAG_RO },
-        { "hasDnsAnycast",      MODEL_TYPE_BOOL,   offsetof(domain_t, hasDnsAnycast),      0, NULL,                 MODEL_FLAG_RO },
-        { "dnssecSupported",    MODEL_TYPE_BOOL,   offsetof(domain_t, dnssecSupported),    0, NULL,                 MODEL_FLAG_RO },
-        { "owoSupported",       MODEL_TYPE_BOOL,   offsetof(domain_t, owoSupported),       0, NULL,                 MODEL_FLAG_RO },
-        { "transferLockStatus", MODEL_TYPE_ENUM,   offsetof(domain_t, transferLockStatus), 0, transfer_lock_status, 0 },
-        { "offer",              MODEL_TYPE_ENUM,   offsetof(domain_t, offer),              0, offers,               MODEL_FLAG_RO },
-        { "nameServerType",     MODEL_TYPE_ENUM,   offsetof(domain_t, nameServerType),     0, name_server_types,    0 },
-        { "engagedUpTo",        MODEL_TYPE_DATE,   offsetof(domain_t, engagedUpTo),        0, NULL,                 MODEL_FLAG_NULLABLE | MODEL_FLAG_RO },
-        { "contactBilling",     MODEL_TYPE_STRING, offsetof(domain_t, contactBilling),     0, NULL,                 MODEL_FLAG_RO },
-        { "expiration",         MODEL_TYPE_DATE,   offsetof(domain_t, expiration),         0, NULL,                 MODEL_FLAG_RO },
-        { "contactTech",        MODEL_TYPE_STRING, offsetof(domain_t, contactTech),        0, NULL,                 MODEL_FLAG_RO },
-        { "contactAdmin",       MODEL_TYPE_STRING, offsetof(domain_t, contactAdmin),       0, NULL,                 MODEL_FLAG_RO },
-        { "creation",           MODEL_TYPE_DATE,   offsetof(domain_t, creation),           0, NULL,                 MODEL_FLAG_RO },
-        MODEL_FIELD_SENTINEL
-    }
+static model_t *domain_model, *record_model;
+
+#undef DECL_FIELD_STRUCT_NAME
+#define DECL_FIELD_STRUCT_NAME domain_t
+static model_field_t domain_fields[] = {
+    DECL_FIELD_STRING(N_("name"), name, MODEL_FLAG_PRIMARY | MODEL_FLAG_RO),
+    DECL_FIELD_BOOL(N_("hasDnsAnycast"), hasDnsAnycast, MODEL_FLAG_RO),
+    DECL_FIELD_BOOL(N_("dnssecSupported"), dnssecSupported, MODEL_FLAG_RO),
+    DECL_FIELD_BOOL(N_("owoSupported"), owoSupported, MODEL_FLAG_RO),
+    DECL_FIELD_ENUM(N_("transferLockStatus"), transferLockStatus, 0, transfer_lock_status),
+    DECL_FIELD_ENUM(N_("offer"), offer, MODEL_FLAG_RO, offers),
+    DECL_FIELD_ENUM(N_("nameServerType"), nameServerType, 0, name_server_types),
+    DECL_FIELD_DATE(N_("engagedUpTo"), engagedUpTo, MODEL_FLAG_NULLABLE | MODEL_FLAG_RO),
+    DECL_FIELD_STRING(N_("contactBilling"), contactBilling, MODEL_FLAG_RO),
+    DECL_FIELD_DATE(N_("expiration"), expiration, MODEL_FLAG_RO),
+    DECL_FIELD_STRING(N_("contactTech"), contactTech, MODEL_FLAG_RO),
+    DECL_FIELD_STRING(N_("contactAdmin"), contactAdmin, MODEL_FLAG_RO),
+    DECL_FIELD_DATE(N_("creation"), creation, MODEL_FLAG_RO),
+    MODEL_FIELD_SENTINEL
 };
 
 static const char *record_to_name(void *ptr)
@@ -183,17 +184,16 @@ static const char *record_to_s(void *ptr)
     return strdup(buffer);
 }
 
-static model_t record_model = {
-    sizeof(record_t), "records", record_to_name, record_to_s,
-    (const model_field_t []) {
-        { "id",        MODEL_TYPE_INT,    offsetof(record_t, id),        0, NULL,                MODEL_FLAG_PRIMARY | MODEL_FLAG_INTERNAL | MODEL_FLAG_RO },
-        { "zone",      MODEL_TYPE_STRING, offsetof(record_t, zone),      0, NULL,                MODEL_FLAG_INTERNAL | MODEL_FLAG_RO },
-        { "ttl",       MODEL_TYPE_INT,    offsetof(record_t, ttl),       0, NULL,                0 }, // in minutes
-        { "subDomain", MODEL_TYPE_STRING, offsetof(record_t, subDomain), 0, NULL,                0 }, // record name
-        { "fieldType", MODEL_TYPE_ENUM,   offsetof(record_t, fieldType), 0, domain_record_types, MODEL_FLAG_RO },
-        { "target",    MODEL_TYPE_STRING, offsetof(record_t, target),    0, NULL,                0 }, // record value
-        MODEL_FIELD_SENTINEL
-    }
+#undef DECL_FIELD_STRUCT_NAME
+#define DECL_FIELD_STRUCT_NAME record_t
+static model_field_t record_fields[] = {
+    DECL_FIELD_INT(N_("id"), id, MODEL_FLAG_PRIMARY | MODEL_FLAG_INTERNAL | MODEL_FLAG_RO),
+    DECL_FIELD_STRING(N_("zone"), zone, MODEL_FLAG_INTERNAL | MODEL_FLAG_RO),
+    DECL_FIELD_INT(N_("TTL"), ttl, 0), // in minutes
+    DECL_FIELD_STRING(N_("subdomain"), subDomain, 0), // record name
+    DECL_FIELD_ENUM(N_("type"), fieldType, MODEL_FLAG_RO, domain_record_types),
+    DECL_FIELD_STRING(N_("target"), target, 0), // record value
+    MODEL_FIELD_SENTINEL
 };
 
 static void domain_destroy(void *data)
@@ -260,6 +260,11 @@ static void domain_on_set_account(void **data)
 
 static bool domain_ctor(error_t **error)
 {
+    domain_model = model_new("domains", sizeof(domain_t), domain_fields, ARRAY_SIZE(domain_fields) - 1);
+    record_model = model_new("records", sizeof(record_t), record_fields, ARRAY_SIZE(record_fields) - 1);
+    record_model->to_s = record_to_s;
+    record_model->to_name = record_to_name;
+
     account_register_module_callbacks(MODULE_NAME, domain_set_destroy, domain_on_set_account);
 
     if (!create_or_migrate("domains", "CREATE TABLE domains(\n\
@@ -314,6 +319,8 @@ static bool domain_ctor(error_t **error)
 static void domain_dtor(void)
 {
     statement_batched_finalize(statements, STMT_COUNT);
+    model_destroy(domain_model);
+    model_destroy(record_model);
 }
 
 static command_status_t domain_refresh(COMMAND_ARGS);
@@ -343,7 +350,7 @@ static bool parse_record(HashTable *records, json_document_t *doc, error_t **err
     json_object_get_property(root, "fieldType", &v);
     r->fieldType = json_get_enum(v, domain_record_types, RECORD_TYPE_ANY);
 #else
-    r = (record_t *) modelized_new(&record_model);
+    r = (record_t *) modelized_new(record_model);
     json_object_to_modelized(json_document_get_root(doc), (modelized_t *) r, FALSE, NULL);
 #endif
     statement_bind_from_model(&statements[STMT_RECORD_UPSERT], NULL, (modelized_t *) r);
@@ -419,7 +426,7 @@ static bool fetch_domains(domain_set_t *ds, bool force, error_t **error)
                 domain_t *d;
                 json_value_t v;
 
-                d = (domain_t *) modelized_new(&domain_model);
+                d = (domain_t *) modelized_new(domain_model);
                 d->records = hashtable_new(NULL, value_equal, NULL, NULL, record_destroy); // TODO: COMPAT
                 v = (json_value_t) iterator_current(&it, NULL);
                 hashtable_put(ds->domains, 0, json_get_string(v), d, NULL); // ds->domains has strdup as key_duper, don't need to strdup it ourself
@@ -453,7 +460,7 @@ static command_status_t domain_list(COMMAND_ARGS)
     // display
     statement_bind(&statements[STMT_DOMAIN_LIST], NULL, current_account->id);
 
-    return statement_to_table(&domain_model, &statements[STMT_DOMAIN_LIST]);
+    return statement_to_table(domain_model, &statements[STMT_DOMAIN_LIST]);
 }
 
 static command_status_t domain_check(COMMAND_ARGS)
@@ -613,14 +620,14 @@ static command_status_t record_list(COMMAND_ARGS)
     USED(mainopts);
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
-    if (COMMAND_SUCCESS == (ret = get_domain_records(args->domain, &d, args->nocache, error))) {
+    if (get_domain_records(args->domain, &d, args->nocache, error)) {
         // display
         statement_bind(&statements[STMT_RECORD_LIST], NULL, current_account->id, args->domain);
 
-        return statement_to_table(&record_model, &statements[STMT_RECORD_LIST]);
+        return statement_to_table(record_model, &statements[STMT_RECORD_LIST]);
     }
 
-    return ret;
+    return COMMAND_FAILURE;
 }
 
 // ./ovh domain domain.ext record toto add www type CNAME
@@ -932,7 +939,7 @@ static bool complete_records(void *parsed_arguments, const char *current_argumen
     assert(NULL != args->domain);
     statement_bind(&statements[STMT_RECORD_COMPLETION], NULL, current_account->id, args->domain, current_argument);
 
-    return complete_from_modelized(&record_model, &statements[STMT_RECORD_COMPLETION], possibilities);
+    return complete_from_modelized(record_model, &statements[STMT_RECORD_COMPLETION], possibilities);
 #endif
 }
 
@@ -1017,7 +1024,7 @@ static void domain_regcomm(graph_t *g)
         graph_create_path(g, arg_record, lit_update, NULL);
         graph_create_all_path(g, lit_update, NULL, 2, lit_name, arg_name, 2, lit_target, arg_value, 2, lit_ttl, arg_ttl, 0);
 #else
-        plug_update_subcommands(g, arg_record, &record_model, record_update, _("XXX"));
+        plug_update_subcommands(g, arg_record, record_model, record_update, _("XXX"));
 #endif /* !TEST */
     }
 }

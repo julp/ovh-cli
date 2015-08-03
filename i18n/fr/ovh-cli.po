@@ -228,7 +228,7 @@ msgstr "racine"
 
 #: /home/julp/ovh-cli/commands/dedicated.c:566
 msgid "linkSpeed"
-msgstr "bande passante"
+msgstr "BP"
 
 #: /home/julp/ovh-cli/commands/dedicated.c:567
 msgid "engagedUpTo"

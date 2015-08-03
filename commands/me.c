@@ -42,6 +42,8 @@ static const char *contract_status[] = {
     NULL
 };
 
+static model_t *contract_model, *application_model;
+
 typedef struct {
     modelized_t data;
     int status;
@@ -51,16 +53,15 @@ typedef struct {
     char *applicationKey;
 } me_application_t;
 
-static model_t application_model = {
-    sizeof(me_application_t), "applications", NULL, NULL,
-    (const model_field_t []) {
-        { "status",         MODEL_TYPE_ENUM,   offsetof(me_application_t, status),         0, application_status, 0 },
-        { "name",           MODEL_TYPE_STRING, offsetof(me_application_t, name),           0, NULL,               0 },
-        { "applicationId",  MODEL_TYPE_INT,    offsetof(me_application_t, applicationId),  0, NULL,               MODEL_FLAG_PRIMARY | MODEL_FLAG_INTERNAL },
-        { "description",    MODEL_TYPE_STRING, offsetof(me_application_t, description),    0, NULL,               0 },
-        { "applicationKey", MODEL_TYPE_STRING, offsetof(me_application_t, applicationKey), 0, NULL,               0 },
-        MODEL_FIELD_SENTINEL
-    }
+#undef DECL_FIELD_STRUCT_NAME
+#define DECL_FIELD_STRUCT_NAME me_application_t
+static model_field_t application_fields[] = {
+    DECL_FIELD_ENUM(N_("status"), status, 0, application_status),
+    DECL_FIELD_STRING(N_("name"), name, 0),
+    DECL_FIELD_INT(N_("applicationId"), applicationId, MODEL_FLAG_PRIMARY | MODEL_FLAG_INTERNAL),
+    DECL_FIELD_STRING(N_("description"), description, 0),
+    DECL_FIELD_STRING(N_("key"), applicationKey, 0),
+    MODEL_FIELD_SENTINEL
 };
 
 typedef struct {
@@ -81,22 +82,21 @@ typedef struct {
  * - contracts may have the same name so they conflict (the name of the previous contract is kept while the object is destroyed)
  * - contracts are shared between accounts?
  */
-static model_t contract_model = {
-    sizeof(contract_t), "contracts", NULL, NULL,
-    (const model_field_t []) {
-        // GET /me/agreements/{id}
-        { "agreed",     MODEL_TYPE_ENUM,     offsetof(contract_t, agreed),     0, contract_status, 0 },
-        { "date" "2",   MODEL_TYPE_DATETIME, offsetof(contract_t, date2),      0, NULL,            0 },
-        { "id",         MODEL_TYPE_INT,      offsetof(contract_t, id),         0, NULL,            MODEL_FLAG_PRIMARY | MODEL_FLAG_INTERNAL },
-        { "contractId", MODEL_TYPE_INT,      offsetof(contract_t, contractId), 0, NULL,            MODEL_FLAG_INTERNAL },
-        // GET /me/agreements/{id}/contract
-        { "date",       MODEL_TYPE_DATE,     offsetof(contract_t, date),       0, NULL,            0 },
-        { "text",       MODEL_TYPE_STRING,   offsetof(contract_t, text),       0, NULL,            MODEL_FLAG_INTERNAL }, // internal, text is too long
-        { "pdf",        MODEL_TYPE_STRING,   offsetof(contract_t, pdf),        0, NULL,            0 },
-        { "name",       MODEL_TYPE_STRING,   offsetof(contract_t, name),       0, NULL,            0 }, // name is not unique!!!
-        { "active",     MODEL_TYPE_BOOL,     offsetof(contract_t, active),     0, NULL,            0 },
-        MODEL_FIELD_SENTINEL
-    }
+#undef DECL_FIELD_STRUCT_NAME
+#define DECL_FIELD_STRUCT_NAME contract_t
+static model_field_t contract_fields[] = {
+    // GET /me/agreements/{id}
+    DECL_FIELD_ENUM(N_("agreed"), agreed, 0, contract_status),
+    DECL_FIELD_DATETIME(N_("date"), date2, 0),
+    DECL_FIELD_INT(N_("id"), id, MODEL_FLAG_PRIMARY | MODEL_FLAG_INTERNAL),
+    DECL_FIELD_INT(N_("contractId"), contractId, MODEL_FLAG_INTERNAL),
+    // GET /me/agreements/{id}/contract
+    DECL_FIELD_DATE(N_("date"), date, 0),
+    DECL_FIELD_STRING(N_("text"), text, MODEL_FLAG_INTERNAL),
+    DECL_FIELD_STRING(N_("link to PDF"), pdf, 0),
+    DECL_FIELD_STRING(N_("name"), name, 0),
+    DECL_FIELD_BOOL(N_("active"), active, 0),
+    MODEL_FIELD_SENTINEL
 };
 
 typedef struct {
@@ -139,13 +139,16 @@ static void me_on_set_account(void **data)
 static bool me_ctor(error_t **UNUSED(error))
 {
     account_register_module_callbacks(MODULE_NAME, account_me_data_dtor, me_on_set_account);
+    contract_model = model_new("contracts", sizeof(contract_t), contract_fields, ARRAY_SIZE(contract_fields) - 1);
+    application_model = model_new("applications", sizeof(me_application_t), application_fields, ARRAY_SIZE(application_fields) - 1);
 
     return TRUE;
 }
 
 static void me_dtor(void)
 {
-    // NOP
+    model_destroy(contract_model);
+    model_destroy(application_model);
 }
 
 static void hashtable_of_modelized_to_table(const model_t *model, HashTable *ht)
@@ -491,7 +494,7 @@ static bool fetch_applications(HashTable *applications, bool force, error_t **er
                 if (success) {
                     me_application_t *application;
 
-                    application = (me_application_t *) modelized_new(&application_model);
+                    application = (me_application_t *) modelized_new(application_model);
                     json_object_to_modelized(json_document_get_root(doc), (modelized_t *) application, TRUE, NULL);
                     hashtable_put(applications, 0, application->name, application, NULL);
                     json_document_destroy(doc);
@@ -516,7 +519,7 @@ static command_status_t application_list(COMMAND_ARGS)
     FETCH_ACCOUNT_DATA(amd);
     success = fetch_applications(amd->applications, args->nocache, error);
     if (success) {
-        hashtable_of_modelized_to_table(&application_model, amd->applications);
+        hashtable_of_modelized_to_table(application_model, amd->applications);
     }
 
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
@@ -591,7 +594,7 @@ static bool fetch_contracts(HashTable *contracts, bool force, error_t **error)
                 if (success) {
                     contract_t *contract;
 
-                    contract = (contract_t *) modelized_new(&contract_model);
+                    contract = (contract_t *) modelized_new(contract_model);
                     json_object_to_modelized(json_document_get_root(doc), (modelized_t *) contract, TRUE, NULL);
                     json_document_destroy(doc);
                     req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me/agreements/%" PRIu32 "/contract", id);
@@ -627,7 +630,7 @@ static command_status_t contract_list(COMMAND_ARGS)
     // TODO: filter with args->status
     success = fetch_contracts(amd->contracts, FALSE, error);
     if (success) {
-        hashtable_of_modelized_to_table(&contract_model, amd->contracts);
+        hashtable_of_modelized_to_table(contract_model, amd->contracts);
     }
 
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;

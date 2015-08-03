@@ -459,10 +459,10 @@ void json_object_to_modelized(json_value_t object, modelized_t *ptr, bool copy, 
 {
     const model_field_t *f;
 
-    for (f = ptr->model->fields; NULL != f->column_name; f++) {
+    for (f = ptr->model->fields; NULL != f->ovh_name; f++) {
         json_value_t propvalue;
 
-        if (json_object_get_property(object, f->column_name, &propvalue)) {
+        if (json_object_get_property(object, f->ovh_name, &propvalue)) {
             bool isnull;
 
             isnull = json_null == propvalue;

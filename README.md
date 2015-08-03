@@ -84,6 +84,7 @@ Available commands:
                          password <password>
              default => set the default account
              delete => remove an OVH account
+             invalidate => drop consumer key associated to given OVH account
              switch => switch to another OVH account
              update
      application

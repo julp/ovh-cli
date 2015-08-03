@@ -244,12 +244,12 @@ static void _statement_model_set_output_bind(sqlite_statement_t *stmt, const mod
 
     for (i = 0, l = sqlite3_column_count(stmt->prepared); i < l; i++) {
         const model_field_t *f;
-        size_t column_name_len;
-        const char *column_name;
+        size_t ovh_name_len;
+        const char *ovh_name;
 
-        column_name = sqlite3_column_name(stmt->prepared, i);
-        column_name_len = strlen(column_name);
-        if (NULL != (f = model_find_field_by_name(model, column_name, column_name_len))) {
+        ovh_name = sqlite3_column_name(stmt->prepared, i);
+        ovh_name_len = strlen(ovh_name);
+        if (NULL != (f = model_find_field_by_name(model, ovh_name, ovh_name_len))) {
             switch (f->type) {
                 case MODEL_TYPE_BOOL:
                     *((bool *) (((char *) ptr) + f->offset)) = /*!!*/sqlite3_column_int(stmt->prepared, i);
@@ -282,8 +282,8 @@ static void _statement_model_set_output_bind(sqlite_statement_t *stmt, const mod
             }
         }
 #ifdef DEBUG
-        if (NULL == f && 0 != strcmp(column_name, "accountId")) {
-            debug(_("Column '%s' unmapped for output (query: %s)"), column_name, sqlite3_sql(stmt->prepared));
+        if (NULL == f && 0 != strcmp(ovh_name, "accountId")) {
+            debug(_("Column '%s' unmapped for output (query: %s)"), ovh_name, sqlite3_sql(stmt->prepared));
         }
 #endif /* DEBUG */
     }
@@ -565,10 +565,10 @@ void statement_bind_from_model(sqlite_statement_t *stmt, const bool *nulls, mode
     sqlite3_clear_bindings(stmt->prepared);
 #endif
     placeholder[0] = ':';
-    for (f = ptr->model->fields; NULL != f->column_name; f++) {
+    for (f = ptr->model->fields; NULL != f->ovh_name; f++) {
         int paramno;
 
-        strlcpy(placeholder + 1, f->column_name, ARRAY_SIZE(placeholder) - 1);
+        strlcpy(placeholder + 1, f->ovh_name, ARRAY_SIZE(placeholder) - 1);
         if (0 != (paramno = sqlite3_bind_parameter_index(stmt->prepared, placeholder))) {
             if (NULL == nulls || !nulls[paramno]) {
                 switch (f->type) {
@@ -793,7 +793,7 @@ char *model_to_sql_create_table(const model_t *model)
     STRING_APPEND_STRING(buffer, "CREATE TABLE ");
     string_append_string(buffer, model->name);
     STRING_APPEND_STRING(buffer, "(\n");
-    for (f = model->fields; NULL != f->column_name; f++) {
+    for (f = model->fields; NULL != f->ovh_name; f++) {
         if (f != model->fields) {
             STRING_APPEND_STRING(buffer, ",\n");
         }
@@ -815,7 +815,7 @@ char *model_to_sql_create_table(const model_t *model)
         if (HAS_FLAG(f->flags, MODEL_FLAG_PRIMARY)) {
             primaries[primaries_length++] = f;
         }
-        string_append_string(buffer, f->column_name);
+        string_append_string(buffer, f->ovh_name);
         if (!HAS_FLAG(f->flags, MODEL_FLAG_NULLABLE)) {
             STRING_APPEND_STRING(buffer, " NOT NULL");
         }
@@ -826,7 +826,7 @@ char *model_to_sql_create_table(const model_t *model)
     if (0 != primaries_length) {
         STRING_APPEND_STRING(buffer, ",\n\tPRIMARY(");
         while (0 != primaries_length--) {
-            string_append_string(buffer, primaries[primaries_length]->column_name);
+            string_append_string(buffer, primaries[primaries_length]->ovh_name);
             if (0 != primaries_length) {
                 STRING_APPEND_STRING(buffer, ", ");
             }
@@ -849,19 +849,19 @@ char *model_to_sql_upsert(const model_t *model)
     STRING_APPEND_STRING(buffer, "INSERT OR REPLACE INTO ");
     string_append_string(buffer, model->name);
     string_append_char(buffer, '(');
-    for (f = model->fields; NULL != f->column_name; f++) {
+    for (f = model->fields; NULL != f->ovh_name; f++) {
         if (f != model->fields) {
             STRING_APPEND_STRING(buffer, ", ");
         }
-        string_append_string(buffer, f->column_name);
+        string_append_string(buffer, f->ovh_name);
     }
     STRING_APPEND_STRING(buffer, " ) VALUES(");
-    for (f = model->fields; NULL != f->column_name; f++) {
+    for (f = model->fields; NULL != f->ovh_name; f++) {
         if (f != model->fields) {
             STRING_APPEND_STRING(buffer, ", ");
         }
         string_append_char(buffer, ':');
-        string_append_string(buffer, f->column_name);
+        string_append_string(buffer, f->ovh_name);
     }
     string_append_char(buffer, ')');
 

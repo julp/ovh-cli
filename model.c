@@ -12,7 +12,7 @@ void modelized_destroy(modelized_t *ptr)
         const model_field_t *f;
 
         if (NULL != ptr->model->fields) {
-            for (f = ptr->model->fields; NULL != f->column_name; f++) {
+            for (f = ptr->model->fields; NULL != f->ovh_name; f++) {
                 if (MODEL_TYPE_STRING == f->type) {
                     char *v;
 
@@ -50,13 +50,36 @@ const model_field_t *model_find_field_by_name(const model_t *model, const char *
 {
     const model_field_t *f, *match;
 
-    for (match = NULL, f = model->fields; NULL == match && NULL != f->column_name; f++) {
-        if (0 == strncmp(f->column_name, field_name, field_name_len)) {
+    for (match = NULL, f = model->fields; NULL == match && NULL != f->ovh_name; f++) {
+        if (0 == strncmp(f->ovh_name, field_name, field_name_len)) {
             match = f;
         }
     }
 
     return match;
+}
+
+model_t *model_new(const char *name, size_t size, model_field_t *fields, size_t fields_count)
+{
+    model_t *model;
+
+    model = mem_new(*model);
+    model->name = name;
+    model->size = size;
+    model->fields = fields;
+    model->fields_count = fields_count;
+
+    return model;
+}
+
+void model_destroy(model_t *model)
+{
+    free(model);
+}
+
+void modelized_belongs_to(modelized_t *owner, modelized_t *owned)
+{
+    //
 }
 
 #if 0
@@ -65,7 +88,7 @@ size_t model_fields_count(const model_t *model, uint32_t flags, bool negated)
     size_t columns_count;
     const model_field_t *f;
 
-    for (columns_count = 0, f = model->fields; NULL != f->column_name; f++) {
+    for (columns_count = 0, f = model->fields; NULL != f->ovh_name; f++) {
         if (negated == (0 != HAS_FLAG(f->flags, flags))) {
             ++columns_count;
         }
