@@ -42,6 +42,17 @@ typedef enum {
 #define DECL_FIELD_ENUM(i18n_name, ovh_name, flags, enum_values) \
     { i18n_name, #ovh_name, MODEL_TYPE_ENUM, offsetof(DECL_FIELD_STRUCT_NAME, ovh_name), 0, enum_values, flags }
 
+#define MODELIZED_SET_STRING(obj, new_value) \
+    do { \
+        if (NULL != obj) { \
+            free((void *) obj); \
+            obj = NULL; \
+        } \
+        if (NULL != new_value) { \
+            obj = strdup(new_value); \
+        } \
+    } while (0);
+
 typedef struct {
     const char *i18n_key;
     const char *ovh_name;
@@ -62,12 +73,14 @@ typedef struct {
     const char *(*to_s)(void *); // ou on copie la chaîne à la suite du buffer (String?) ? - void (*to_name)(void *, String *)
     const model_field_t *fields;
     size_t fields_count;
+    const model_field_t *pk;
 } model_t;
 
 typedef struct {
     const model_t *model;
 } modelized_t;
 
+modelized_t *modelized_copy(modelized_t *);
 model_t *model_new(const char *, size_t, model_field_t *, size_t);
 void model_destroy(model_t *);
 

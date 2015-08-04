@@ -840,13 +840,35 @@ char *model_to_sql_create_table(const model_t *model)
     return string_orphan(buffer);
 }
 
-char *model_to_sql_upsert(const model_t *model)
+enum {
+    INSERT,
+    INSERT_OR_IGNORE,
+    INSERT_OR_REPLACE,
+    UPSERT = INSERT_OR_REPLACE,
+};
+
+static char *model_to_sql_xsert(const model_t *model, int type)
 {
     String *buffer;
     const model_field_t *f;
 
     buffer = string_new();
-    STRING_APPEND_STRING(buffer, "INSERT OR REPLACE INTO ");
+//     STRING_APPEND_STRING(buffer, "INSERT OR REPLACE INTO ");
+    STRING_APPEND_STRING(buffer, "INSERT ");
+    switch (type) {
+        case INSERT:
+            break;
+        case INSERT_OR_IGNORE:
+            STRING_APPEND_STRING(buffer, "OR IGNORE ");
+            break;
+        case INSERT_OR_REPLACE:
+            STRING_APPEND_STRING(buffer, "OR REPLACE ");
+            break;
+        default:
+            assert(FALSE);
+            break;
+    }
+    STRING_APPEND_STRING(buffer, "INTO ");
     string_append_string(buffer, model->name);
     string_append_char(buffer, '(');
     for (f = model->fields; NULL != f->ovh_name; f++) {
@@ -866,6 +888,143 @@ char *model_to_sql_upsert(const model_t *model)
     string_append_char(buffer, ')');
 
     return string_orphan(buffer);
+}
+
+char *model_to_sql_upsert(const model_t *model)
+{
+    return model_to_sql_xsert(model, UPSERT);
+}
+
+char *model_to_sql_insert(const model_t *model)
+{
+    return model_to_sql_xsert(model, INSERT);
+}
+
+static void sql_append_pk_where_clause(String *buffer, const model_t *model)
+{
+    string_append_string(buffer, model->pk->ovh_name);
+    STRING_APPEND_STRING(buffer, " = :");
+    string_append_string(buffer, model->pk->ovh_name);
+}
+
+char *model_to_sql_update(const model_t *model)
+{
+    String *buffer;
+    const model_field_t *f;
+
+    buffer = string_new();
+    STRING_APPEND_STRING(buffer, "UPDATE ");
+    string_append_string(buffer, model->name);
+    STRING_APPEND_STRING(buffer, " SET ");
+    for (f = model->fields; NULL != f->ovh_name; f++) {
+        if (f != model->fields) {
+            STRING_APPEND_STRING(buffer, ", ");
+        }
+        string_append_string(buffer, f->ovh_name);
+        STRING_APPEND_STRING(buffer, " = IFNULL(:");
+        string_append_string(buffer, f->ovh_name);
+        STRING_APPEND_STRING(buffer, ", ");
+        string_append_string(buffer, f->ovh_name);
+        string_append_char(buffer, ')');
+    }
+    STRING_APPEND_STRING(buffer, " WHERE ");
+    sql_append_pk_where_clause(buffer, model);
+
+    return string_orphan(buffer);
+}
+
+char *model_to_sql_delete(const model_t *model)
+{
+    String *buffer;
+    const model_field_t *f;
+
+    buffer = string_new();
+    STRING_APPEND_STRING(buffer, "DELETE FROM ");
+    string_append_string(buffer, model->name);
+    STRING_APPEND_STRING(buffer, " WHERE ");
+    if (NULL == model->pk) {
+        for (f = model->fields; NULL != f->ovh_name; f++) {
+            if (f != model->fields) {
+                STRING_APPEND_STRING(buffer, " AND ");
+            }
+            string_append_string(buffer, f->ovh_name);
+            STRING_APPEND_STRING(buffer, " = :");
+            string_append_string(buffer, f->ovh_name);
+        }
+    } else {
+        sql_append_pk_where_clause(buffer, model);
+    }
+
+    return string_orphan(buffer);
+}
+
+bool modelized_save(modelized_t *obj, error_t **error)
+{
+    char *sql;
+    bool setAI, success;
+
+    assert(NULL != obj);
+    assert(NULL != obj->model);
+
+    setAI = FALSE;
+    if (NULL != obj->model->pk && MODEL_TYPE_INT == obj->model->pk->type) {
+        if (0 == *((int *) (((char *) obj) + obj->model->pk->offset))) {
+            // insert + set id with auto-increment value
+            setAI = TRUE;
+            sql = model_to_sql_insert(obj->model);
+        } else {
+            // update (ou pas si on utilise l'ID OVH)
+            sql = model_to_sql_update(obj->model);
+        }
+    } else {
+        // upsert
+        sql = model_to_sql_upsert(obj->model);
+    }
+    {
+        sqlite_statement_t stmt = DECL_STMT(sql, "", "");
+
+        success = SQLITE_OK == sqlite3_prepare_v2(db, stmt.statement, -1, &stmt.prepared, NULL);
+        if (success) {
+            statement_bind_from_model(&stmt, NULL, obj);
+            success = statement_fetch_to_model(&stmt, obj, error);
+            sqlite3_finalize(stmt.prepared);
+        } else {
+            error_set(error, WARN, _("%s for %s"), sqlite3_errmsg(db), sqlite3_sql(stmt.prepared));
+        }
+    }
+    if (setAI) {
+        *((int *) (((char *) obj) + obj->model->pk->offset)) = sqlite_last_insert_id();
+    }
+    free(sql);
+
+    return success;
+}
+
+bool modelized_delete(modelized_t *obj, error_t **error)
+{
+    char *sql;
+    bool success;
+//     sqlite3_stmt *stmt;
+
+    assert(NULL != obj);
+    assert(NULL != obj->model);
+
+    sql = model_to_sql_delete(obj->model); // TODO: do it once at model creation (model_new)
+    {
+        sqlite_statement_t stmt = DECL_STMT(sql, "", "");
+
+        success = SQLITE_OK == sqlite3_prepare_v2(db, stmt.statement, -1, &stmt.prepared, NULL);
+        if (success) {
+            statement_bind_from_model(&stmt, NULL, obj);
+            success = statement_fetch_to_model(&stmt, obj, error);
+            sqlite3_finalize(stmt.prepared);
+        } else {
+            error_set(error, WARN, _("%s for %s"), sqlite3_errmsg(db), sqlite3_sql(stmt.prepared));
+        }
+    }
+    free(sql);
+
+    return success;
 }
 
 static void sqlite_startswith(sqlite3_context *context, int argc, sqlite3_value **argv)

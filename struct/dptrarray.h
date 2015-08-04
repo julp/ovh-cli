@@ -25,7 +25,7 @@ size_t dptrarray_length(DPtrArray *);
 DPtrArray *dptrarray_new(DupFunc, DtorFunc, void *) WARN_UNUSED_RESULT;
 void *dptrarray_pop(DPtrArray *);
 void *dptrarray_push(DPtrArray *, void *);
-void dptrarray_remove_at(DPtrArray *, size_t);
+void *dptrarray_remove_at(DPtrArray *, size_t, bool);
 void dptrarray_remove_range(DPtrArray *, size_t, size_t);
 void dptrarray_set_size(DPtrArray *, size_t);
 void *dptrarray_shift(DPtrArray *);

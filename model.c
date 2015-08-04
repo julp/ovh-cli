@@ -8,6 +8,7 @@
 void modelized_destroy(modelized_t *ptr)
 {
     assert(NULL != ptr->model);
+
     if (0 != ptr->model->size) {
         const model_field_t *f;
 
@@ -40,10 +41,40 @@ modelized_t *modelized_new(const model_t *model)
     modelized_t *ptr;
 
     assert(0 != model->size);
+
     ptr = malloc(model->size);
     modelized_init(model, ptr);
 
     return ptr;
+}
+
+modelized_t *modelized_copy(modelized_t *src/*, bool copy*/)
+{
+    modelized_t *copy;
+
+    assert(NULL != src->model);
+    assert(0 != src->model->size);
+
+    copy = malloc(src->model->size);
+    memcpy(copy, src, src->model->size);
+    if (/*copy && */0 != src->model->size) {
+        const model_field_t *f;
+
+        if (NULL != src->model->fields) {
+            for (f = src->model->fields; NULL != f->ovh_name; f++) {
+                if (MODEL_TYPE_STRING == f->type) {
+                    char *v;
+
+                    v = *((char **) (((char *) src) + f->offset));
+                    if (NULL != v) {
+                        *((char **) (((char *) copy) + f->offset)) = strdup(v);
+                    }
+                }
+            }
+        }
+    }
+
+    return copy;
 }
 
 const model_field_t *model_find_field_by_name(const model_t *model, const char *field_name, size_t field_name_len)
@@ -64,10 +95,22 @@ model_t *model_new(const char *name, size_t size, model_field_t *fields, size_t 
     model_t *model;
 
     model = mem_new(*model);
+    model->pk = NULL;
     model->name = name;
     model->size = size;
     model->fields = fields;
     model->fields_count = fields_count;
+    if (0 != model->size) {
+        const model_field_t *f;
+
+        if (NULL != model->fields) {
+            for (f = model->fields; NULL != f->ovh_name; f++) {
+                if (HAS_FLAG(f->flags, MODEL_FLAG_PRIMARY)) {
+                    model->pk = f;
+                }
+            }
+        }
+    }
 
     return model;
 }
@@ -81,22 +124,6 @@ void modelized_belongs_to(modelized_t *owner, modelized_t *owned)
 {
     //
 }
-
-#if 0
-size_t model_fields_count(const model_t *model, uint32_t flags, bool negated)
-{
-    size_t columns_count;
-    const model_field_t *f;
-
-    for (columns_count = 0, f = model->fields; NULL != f->ovh_name; f++) {
-        if (negated == (0 != HAS_FLAG(f->flags, flags))) {
-            ++columns_count;
-        }
-    }
-
-    return columns_count;
-}
-#endif
 
 #if 0
 void modelized_name_to_s(modelized_t *ptr, char *buffer, size_t buffer_size)

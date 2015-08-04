@@ -1,4 +1,5 @@
 #include <string.h>
+#include <unistd.h>
 #include <inttypes.h>
 
 #include "common.h"
@@ -9,20 +10,22 @@
 #include "modules/table.h"
 #include "modules/sqlite.h"
 #include "commands/account.h"
-#include "struct/hashtable.h"
+#include "struct/dptrarray.h"
 
 #define MODULE_NAME "domain"
 
-#define FETCH_DOMAINS_IF_NEEDED
-
-#define FETCH_ACCOUNT_DOMAINS(/*domain_set **/ ds) \
+#define FETCH_DOMAINS_IF_NEEDED \
     do { \
-        ds = NULL; \
-        account_current_get_data(MODULE_NAME, (void **) &ds); \
-        assert(NULL != ds); \
+        time_t updated_at; \
+ \
+        if (!fetch_domains(args->nocache || (!account_get_last_fetch_for(MODULE_NAME, &updated_at, error) && NULL == *error), error)) { \
+            return COMMAND_FAILURE; \
+        } \
     } while (0);
 
 // account 0,N <=> 1,1 domain 0,N <=> 1,1 record
+
+#define TEST_WITHOUT_SENDING_HTTP_REQUEST
 
 typedef enum {
 #define DECLARE_RECORD_TYPE(name) \
@@ -58,29 +61,23 @@ enum {
     STMT_RECORD_LIST,
     STMT_RECORD_UPSERT,
     STMT_RECORD_COMPLETION,
+    STMT_RECORD_FIND_BY_NAME,
     STMT_COUNT
 };
 
 static sqlite_statement_t statements[STMT_COUNT] = {
-    [ STMT_DOMAIN_LIST ]       = DECL_STMT("SELECT * FROM domains WHERE accountId = ?", "i", ""),
-    [ STMT_DOMAIN_UPSERT ]     = DECL_STMT("INSERT OR REPLACE INTO domains(accountId, name, hasDnsAnycast, dnssecSupported, owoSupported, transferLockStatus, offer, nameServerType, engagedUpTo, contactBilling, expiration, contactTech, contactAdmin, creation) VALUES(:accountId, :name, :hasDnsAnycast, :dnssecSupported, :owoSupported, :transferLockStatus, :offer, :nameServerType, :engagedUpTo, :contactBilling, :expiration, :contactTech, :contactAdmin, :creation)", "is" "bb" "biii" "isissi", ""),
-    [ STMT_DOMAIN_COMPLETION ] = DECL_STMT("SELECT name FROM domains WHERE accountId = ? AND name LIKE ? || '%'", "is", "s"),
-    [ STMT_RECORD_LIST ]       = DECL_STMT("SELECT records.* FROM records JOIN domains ON records.zone = domains.name WHERE accountId = ? AND domains.name = ?", "is", ""),
-    [ STMT_RECORD_UPSERT ]     = DECL_STMT("INSERT OR REPLACE INTO records(target, ttl, zone, fieldType, id, subDomain) VALUES(:target, :ttl, :zone, :fieldType, :id, :subDomain)", "sisiis", ""),
-    [ STMT_RECORD_COMPLETION ] = DECL_STMT("SELECT records.* FROM records JOIN domains ON records.zone = domains.name WHERE accountId = ? AND domains.name = ? AND startswith(subDomain, ?)", "iss", ""),
+    [ STMT_DOMAIN_LIST ]         = DECL_STMT("SELECT * FROM domains WHERE accountId = ?", "i", ""),
+    [ STMT_DOMAIN_UPSERT ]       = DECL_STMT("INSERT OR REPLACE INTO domains(accountId, name, hasDnsAnycast, dnssecSupported, owoSupported, transferLockStatus, offer, nameServerType, engagedUpTo, contactBilling, expiration, contactTech, contactAdmin, creation) VALUES(:accountId, :name, :hasDnsAnycast, :dnssecSupported, :owoSupported, :transferLockStatus, :offer, :nameServerType, :engagedUpTo, :contactBilling, :expiration, :contactTech, :contactAdmin, :creation)", "is" "bb" "biii" "isissi", ""),
+    [ STMT_DOMAIN_COMPLETION ]   = DECL_STMT("SELECT name FROM domains WHERE accountId = ? AND name LIKE ? || '%'", "is", "s"),
+    [ STMT_RECORD_LIST ]         = DECL_STMT("SELECT records.* FROM records JOIN domains ON records.zone = domains.name WHERE accountId = ? AND domains.name = ?", "is", ""),
+    [ STMT_RECORD_UPSERT ]       = DECL_STMT("INSERT OR REPLACE INTO records(target, ttl, zone, fieldType, id, subDomain) VALUES(:target, :ttl, :zone, :fieldType, :id, :subDomain)", "sisiis", ""),
+    [ STMT_RECORD_COMPLETION ]   = DECL_STMT("SELECT records.* FROM records JOIN domains ON records.zone = domains.name WHERE accountId = ? AND domains.name = ? AND startswith(subDomain, ?)", "iss", ""),
+    [ STMT_RECORD_FIND_BY_NAME ] = DECL_STMT("SELECT records.* FROM records JOIN domains ON records.zone = domains.name WHERE accountId = ? AND domains.name = ? AND subDomain = ?", "iss", ""),
 };
-
-// describe all domains owned by a given account
-typedef struct {
-    bool uptodate;
-    HashTable *domains;
-} domain_set_t;
 
 // describe a domain
 typedef struct {
     modelized_t data;
-    bool uptodate;
-    HashTable *records;
     char *name;
     bool hasDnsAnycast;
     bool dnssecSupported;
@@ -196,76 +193,12 @@ static model_field_t record_fields[] = {
     MODEL_FIELD_SENTINEL
 };
 
-static void domain_destroy(void *data)
-{
-    domain_t *d;
-
-    assert(NULL != data);
-
-    d = (domain_t *) data;
-    hashtable_destroy(d->records);
-    free(d);
-}
-
-static void record_destroy(void *data)
-{
-    record_t *r;
-
-    assert(NULL != data);
-
-    r = (record_t *) data;
-    FREE(r, subDomain);
-    FREE(r, target);
-    free(r);
-}
-
-static domain_t *domain_new(void)
-{
-    domain_t *d;
-
-    d = mem_new(*d);
-    d->uptodate = FALSE;
-    d->records = hashtable_new(NULL, value_equal, NULL, NULL, record_destroy);
-    d->name = d->contactBilling = d->contactTech = d->contactAdmin = NULL;
-    d->hasDnsAnycast = d->dnssecSupported = d->owoSupported = FALSE;
-    d->transferLockStatus = d->offer = d->nameServerType = 0;
-    d->engagedUpTo = d->expiration = d->creation = (time_t) 0;
-
-    return d;
-}
-
-static void domain_set_destroy(void *data)
-{
-    domain_set_t *ds;
-
-    assert(NULL != data);
-    ds = (domain_set_t *) data;
-    if (NULL != ds->domains) {
-        hashtable_destroy(ds->domains);
-    }
-    free(ds);
-}
-
-static void domain_on_set_account(void **data)
-{
-    if (NULL == *data) {
-        domain_set_t *ds;
-
-        ds = mem_new(*ds);
-        ds->uptodate = FALSE;
-        ds->domains = hashtable_ascii_cs_new((DupFunc) strdup, free, domain_destroy);
-        *data = ds;
-    }
-}
-
 static bool domain_ctor(error_t **error)
 {
     domain_model = model_new("domains", sizeof(domain_t), domain_fields, ARRAY_SIZE(domain_fields) - 1);
     record_model = model_new("records", sizeof(record_t), record_fields, ARRAY_SIZE(record_fields) - 1);
     record_model->to_s = record_to_s;
     record_model->to_name = record_to_name;
-
-    account_register_module_callbacks(MODULE_NAME, domain_set_destroy, domain_on_set_account);
 
     if (!create_or_migrate("domains", "CREATE TABLE domains(\n\
         accountId INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,\n\
@@ -335,80 +268,116 @@ static void ask_for_refresh(COMMAND_ARGS)
     }
 }
 
-static bool parse_record(HashTable *records, json_document_t *doc, error_t **error)
+static bool parse_record(domain_t *UNUSED(domain), json_document_t *doc, error_t **error)
 {
-    record_t *r;
-#if 0
-    json_value_t root, v;
+    record_t *record;
 
-    root = json_document_get_root(doc);
-    r = mem_new(*r);
-    JSON_GET_PROP_INT(root, "id", r->id);
-    JSON_GET_PROP_INT(root, "ttl", r->ttl);
-    JSON_GET_PROP_STRING(root, "target", r->target);
-    JSON_GET_PROP_STRING(root, "subDomain", r->subDomain);
-    json_object_get_property(root, "fieldType", &v);
-    r->fieldType = json_get_enum(v, domain_record_types, RECORD_TYPE_ANY);
-#else
-    r = (record_t *) modelized_new(record_model);
-    json_object_to_modelized(json_document_get_root(doc), (modelized_t *) r, FALSE, NULL);
-#endif
-    statement_bind_from_model(&statements[STMT_RECORD_UPSERT], NULL, (modelized_t *) r);
+    record = (record_t *) modelized_new(record_model);
+    json_object_to_modelized(json_document_get_root(doc), (modelized_t *) record, FALSE, NULL);
+#if 1
+    statement_bind_from_model(&statements[STMT_RECORD_UPSERT], NULL, (modelized_t *) record);
     statement_fetch(&statements[STMT_RECORD_UPSERT], error);
-    hashtable_quick_put(records, 0, r->id, NULL, r, NULL);
+#else
+    modelized_save((modelized_t *) record, error);
+#endif
     json_document_destroy(doc);
 
     return NULL == *error;
 }
 
-static bool fetch_domain(domain_t *d, const char * const domain_name, bool force, error_t **error)
+static bool get_domain_records(domain_t *domain, bool force, error_t **error)
 {
     bool success;
 
     success = TRUE;
     if (force) {
-        size_t i;
-        const char * const urls[] = { API_BASE_URL "/domain/zone/%s", API_BASE_URL "/domain/%s", API_BASE_URL "/domain/%s/serviceInfos" };
-        json_document_t *docs[ARRAY_SIZE(urls)];
+        request_t *req;
+        json_document_t *doc;
 
-        d->name = domain_name;
-        for (i = 0; success && i < ARRAY_SIZE(urls); i++) {
-            request_t *req;
-            req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, urls[i], domain_name);
-            success &= request_execute(req, RESPONSE_JSON, (void **) &docs[i], error);
-            request_destroy(req);
-            if (success) {
-                json_object_to_modelized(json_document_get_root(docs[i]), (modelized_t *) d, FALSE, NULL);
-            }
-        }
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/domain/zone/%s/record", domain->name);
+        success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+        request_destroy(req);
+        // result
         if (success) {
-            statement_bind( /* e = enum (int), d = date (int), |n = or NULL */
-                &statements[STMT_DOMAIN_UPSERT], NULL /*"is" "bb" "biii" "isissi"*/,
-                // accountId (i), name (s)
-                current_account->id, d->name,
-                // hasDnsAnycast (b), dnssecSupported (b)
-                d->hasDnsAnycast, d->dnssecSupported,
-                // owoSupported (b), transferLockStatus (e), offer (e), nameServerType (e)
-                d->owoSupported, d->transferLockStatus, d->offer, d->nameServerType,
-                // engaged_up_to (d|n), contact_billing (s), expiration (d), contact_tech (s), contact_admin (s), creation (d)
-                d->engagedUpTo, d->contactBilling, d->expiration, d->contactTech, d->contactAdmin, d->creation
-            );
-            statement_fetch(&statements[STMT_DOMAIN_UPSERT], error);
-        }
-        while (0 != --i) {
-            json_document_destroy(docs[i]);
+            Iterator it;
+            json_value_t root;
+
+            root = json_document_get_root(doc);
+            json_array_to_iterator(&it, root);
+            for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
+                json_value_t v;
+                json_document_t *doc;
+
+                v = (json_value_t) iterator_current(&it, NULL);
+                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/domain/zone/%s/record/%u", domain->name, json_get_integer(v));
+                success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+                request_destroy(req);
+                // result
+                if (success) {
+                    success = parse_record(domain, doc, error);
+                }
+            }
+            iterator_close(&it);
+            json_document_destroy(doc);
         }
     }
 
     return success;
 }
 
-static bool fetch_domains(domain_set_t *ds, bool force, error_t **error)
+static bool fetch_domain(const char * const domain_name, bool force, error_t **error)
 {
     bool success;
 
     success = TRUE;
-    if (!ds->uptodate || force) {
+    if (force) {
+        size_t i;
+        domain_t domain;
+        const char * const urls[] = { API_BASE_URL "/domain/zone/%s", API_BASE_URL "/domain/%s", API_BASE_URL "/domain/%s/serviceInfos" };
+        json_document_t *docs[ARRAY_SIZE(urls)];
+
+        modelized_init(domain_model, (modelized_t *) &domain);
+        domain.name = (char *) domain_name; // TODO: rename name to zone to have nothing to do?
+        for (i = 0; success && i < ARRAY_SIZE(urls); i++) {
+            request_t *req;
+            req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, urls[i], domain_name);
+            success = request_execute(req, RESPONSE_JSON, (void **) &docs[i], error);
+            request_destroy(req);
+            if (success) {
+                json_object_to_modelized(json_document_get_root(docs[i]), (modelized_t *) &domain, FALSE, NULL);
+            }
+        }
+        if (success) {
+            statement_bind( /* e = enum (int), d = date (int), |n = or NULL */
+                &statements[STMT_DOMAIN_UPSERT], NULL /*"is" "bb" "biii" "isissi"*/,
+                // accountId (i), name (s)
+                current_account->id, domain.name,
+                // hasDnsAnycast (b), dnssecSupported (b)
+                domain.hasDnsAnycast, domain.dnssecSupported,
+                // owoSupported (b), transferLockStatus (e), offer (e), nameServerType (e)
+                domain.owoSupported, domain.transferLockStatus, domain.offer, domain.nameServerType,
+                // engaged_up_to (d|n), contact_billing (s), expiration (d), contact_tech (s), contact_admin (s), creation (d)
+                domain.engagedUpTo, domain.contactBilling, domain.expiration, domain.contactTech, domain.contactAdmin, domain.creation
+            );
+            statement_fetch(&statements[STMT_DOMAIN_UPSERT], error);
+        }
+        while (0 != --i) {
+            json_document_destroy(docs[i]);
+        }
+        if (success) {
+            success = get_domain_records(&domain, force, error);
+        }
+    }
+
+    return success;
+}
+
+static bool fetch_domains(bool force, error_t **error)
+{
+    bool success;
+
+    success = TRUE;
+    if (force) {
         request_t *req;
         json_document_t *doc;
 
@@ -420,20 +389,14 @@ static bool fetch_domains(domain_set_t *ds, bool force, error_t **error)
             json_value_t root;
 
             root = json_document_get_root(doc);
-            hashtable_clear(ds->domains);
             json_array_to_iterator(&it, root);
             for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
-                domain_t *d;
                 json_value_t v;
 
-                d = (domain_t *) modelized_new(domain_model);
-                d->records = hashtable_new(NULL, value_equal, NULL, NULL, record_destroy); // TODO: COMPAT
                 v = (json_value_t) iterator_current(&it, NULL);
-                hashtable_put(ds->domains, 0, json_get_string(v), d, NULL); // ds->domains has strdup as key_duper, don't need to strdup it ourself
-                success = fetch_domain(d, json_get_string(v), force, error);
+                success = fetch_domain(json_get_string(v), force, error);
             }
             iterator_close(&it);
-            ds->uptodate = TRUE;
             json_document_destroy(doc);
             if (success) {
                 account_set_last_fetch_for(MODULE_NAME, error);
@@ -446,17 +409,12 @@ static bool fetch_domains(domain_set_t *ds, bool force, error_t **error)
 
 static command_status_t domain_list(COMMAND_ARGS)
 {
-    domain_set_t *ds;
     domain_record_argument_t *args;
 
     USED(mainopts);
     args = (domain_record_argument_t *) arg;
-    FETCH_ACCOUNT_DOMAINS(ds);
     // populate
     FETCH_DOMAINS_IF_NEEDED;
-    if (!fetch_domains(ds, args->nocache, error)) {
-        return COMMAND_FAILURE;
-    }
     // display
     statement_bind(&statements[STMT_DOMAIN_LIST], NULL, current_account->id);
 
@@ -465,52 +423,15 @@ static command_status_t domain_list(COMMAND_ARGS)
 
 static command_status_t domain_check(COMMAND_ARGS)
 {
-    bool success;
-    domain_set_t *ds;
+//     bool success;
+    domain_record_argument_t *args;
 
-    USED(arg);
     USED(mainopts);
-    FETCH_ACCOUNT_DOMAINS(ds);
-    // populate
-    if ((success = fetch_domains(ds, FALSE, error))) {
-        time_t now;
-        Iterator it;
+    args = (domain_record_argument_t *) arg;
+    FETCH_DOMAINS_IF_NEEDED;
+    // TODO
 
-        now = time(NULL);
-        hashtable_to_iterator(&it, ds->domains);
-        for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
-            request_t *req;
-            json_document_t *doc;
-            const char *domain_name;
-
-            iterator_current(&it, (void **) &domain_name);
-            // request
-            req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/domain/%s/serviceInfos", domain_name);
-            success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
-            request_destroy(req);
-            // response
-            if (success) {
-                time_t domain_expiration;
-                json_value_t root, expiration;
-
-                root = json_document_get_root(doc);
-                if (json_object_get_property(root, "expiration", &expiration)) {
-                    if (date_parse_to_timestamp(json_get_string(expiration), NULL, &domain_expiration)) {
-                        int diff_days;
-
-                        diff_days = date_diff_in_days(domain_expiration, now);
-                        if (diff_days > 0 && diff_days < 3000) {
-                            printf("%s expires in %d days\n", domain_name, diff_days);
-                        }
-                    }
-                }
-                json_document_destroy(doc);
-            }
-        }
-        iterator_close(&it);
-    }
-
-    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
+    return COMMAND_SUCCESS;
 }
 
 #include <libxml/parser.h>
@@ -561,73 +482,19 @@ static command_status_t domain_refresh(COMMAND_ARGS)
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static bool get_domain_records(const char *domain, domain_t **d, bool force, error_t **error)
-{
-    bool success;
-    domain_set_t *ds;
-
-    *d = NULL;
-    FETCH_ACCOUNT_DOMAINS(ds);
-    success = TRUE;
-    // TODO: hashtable_clear((*d)->records) if force
-    if (!hashtable_get(ds->domains, domain, d) || !(*d)->uptodate || force) {
-        request_t *req;
-        json_document_t *doc;
-
-        if (NULL == *d) {
-            *d = domain_new();
-            hashtable_put(ds->domains, 0, domain, *d, NULL);
-        }
-        req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/domain/zone/%s/record", domain);
-        success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
-        request_destroy(req);
-        // result
-        if (success) {
-            Iterator it;
-            json_value_t root;
-
-            root = json_document_get_root(doc);
-            json_array_to_iterator(&it, root);
-            for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
-                json_value_t v;
-                json_document_t *doc;
-
-                v = (json_value_t) iterator_current(&it, NULL);
-                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/domain/zone/%s/record/%u", domain, json_get_integer(v));
-                success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
-                request_destroy(req);
-                // result
-                if (success) {
-                    success = parse_record((*d)->records, doc, error);
-                }
-            }
-            iterator_close(&it);
-            json_document_destroy(doc);
-            (*d)->uptodate = TRUE;
-        }
-    }
-
-    return success;
-}
-
 // TODO: optionnal arguments fieldType and subDomain in query string
 static command_status_t record_list(COMMAND_ARGS)
 {
-    domain_t *d;
-    command_status_t ret;
     domain_record_argument_t *args;
 
     USED(mainopts);
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
-    if (get_domain_records(args->domain, &d, args->nocache, error)) {
-        // display
-        statement_bind(&statements[STMT_RECORD_LIST], NULL, current_account->id, args->domain);
+    FETCH_DOMAINS_IF_NEEDED; // just the one we want instead of all of them?
+    // display
+    statement_bind(&statements[STMT_RECORD_LIST], NULL, current_account->id, args->domain);
 
-        return statement_to_table(record_model, &statements[STMT_RECORD_LIST]);
-    }
-
-    return COMMAND_FAILURE;
+    return statement_to_table(record_model, &statements[STMT_RECORD_LIST]);
 }
 
 // ./ovh domain domain.ext record toto add www type CNAME
@@ -657,6 +524,7 @@ static command_status_t record_add(COMMAND_ARGS)
                 json_object_set_property(root, "subDomain", json_string(args->record));
             json_document_set_root(reqdoc, root);
         }
+#ifndef TEST_WITHOUT_SENDING_HTTP_REQUEST
         // request
         {
             request_t *req;
@@ -666,101 +534,122 @@ static command_status_t record_add(COMMAND_ARGS)
             request_destroy(req);
             json_document_destroy(reqdoc);
         }
+#endif /* !TEST_WITHOUT_SENDING_HTTP_REQUEST */
     }
     // result
     if (success) {
-        domain_t *d;
-        ht_hash_t h;
-        domain_set_t *ds;
-
-        d = NULL;
-        ds = NULL;
-        account_current_get_data(MODULE_NAME, (void **) &ds);
-        assert(NULL != ds);
-        h = hashtable_hash(ds->domains, args->domain);
-        if (!hashtable_quick_get(ds->domains, h, args->domain, &d)) {
-            d = domain_new();
-            hashtable_quick_put(ds->domains, 0, h, args->domain, d, NULL);
-        }
-        parse_record(d->records, doc, error);
+        parse_record(NULL/* since unused */, doc, error);
         ask_for_refresh(RELAY_COMMAND_ARGS);
     }
 
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
-static size_t find_record(HashTable *records, const char *subDomain, record_t **match)
+static bool handle_conflict_on_record_name(const char *domain_name, const char *record_name, modelized_t **recordp)
 {
+    bool ret;
+    size_t l;
     Iterator it;
-    size_t matches;
+    DPtrArray *ary;
+    record_t record;
 
-    matches = 0;
-    hashtable_to_iterator(&it, records);
+    assert(NULL != domain_name);
+    assert(NULL != record_name);
+    assert(NULL != recordp);
+
+    ret = TRUE;
+    *recordp = NULL;
+    modelized_init(record_model, (modelized_t *) &record);
+    ary = dptrarray_new(NULL, (DtorFunc) modelized_destroy, NULL);
+    statement_bind(&statements[STMT_RECORD_FIND_BY_NAME], NULL, current_account->id, domain_name, record_name);
+    // TODO: make iterator_current allocate and return a new "object"?
+    statement_model_to_iterator(&it, &statements[STMT_RECORD_FIND_BY_NAME], record_model, (char *) &record);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        record_t *r;
+        modelized_t *copy;
 
-        r = iterator_current(&it, NULL);
-        if (r->subDomain[0] == subDomain[0] && 0 == strcmp(r->subDomain, subDomain)) { // TODO: strcmp_l? type?
-            ++matches;
-            *match = r;
-        }
+        iterator_current(&it, NULL);
+        copy = modelized_copy((modelized_t *) &record); // TODO: leaks for MODEL_TYPE_STRING in record (modules/sqlite.c has already done a strdup)
+        dptrarray_push(ary, copy);
     }
     iterator_close(&it);
+    l = dptrarray_length(ary);
+    switch (l) {
+        case 0:
+            ret = FALSE;
+            break;
+        case 1:
+            *recordp = dptrarray_remove_at(ary, 0, FALSE);
+            break;
+        default:
+            if (isatty(STDOUT_FILENO) && isatty(STDIN_FILENO)) {
+                while (NULL == *recordp) {
+                    size_t i;
+                    int userno;
+                    char line[64];
 
-    return matches;
+                    fputs(_("Targetted record is ambiguous.\n"), stdout);
+                    for (i = 0; i < l; i++) {
+                        modelized_t *match;
+                        const char *name, *desc;
+
+                        match = dptrarray_at_unsafe(ary, i, modelized_t);
+                        name = match->model->to_name(match);
+                        desc = match->model->to_s(match);
+                        printf("    %2zu. %s - %s\n", i + 1, name, desc);
+                        free((void *) name);
+                        free((void *) desc);
+                    }
+                    printf("    %2d. %s\n", 0, "Cancel");
+                    fputs(_("Please enter your choice: "), stdout);
+                    fflush(stdout);
+                    if (NULL != fgets(line, STR_SIZE(line), stdin)) {
+                        userno = atoi(line);
+                        if (0 == userno) {
+                            break;
+                        } else if (userno > 0 && ((size_t) userno) <= l) {
+                            *recordp = dptrarray_remove_at(ary, userno - 1, FALSE);
+                        }
+                    }
+                }
+            } else {
+                ret = FALSE;
+            }
+    }
+    dptrarray_destroy(ary);
+
+    return ret;
 }
 
 static command_status_t record_delete(COMMAND_ARGS)
 {
-    domain_t *d;
     bool success;
-    record_t *match;
+    record_t *record;
     domain_record_argument_t *args;
 
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
     assert(NULL != args->record);
-    if ((success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, FALSE, error)))) {
-#if 0
-        // what was the goal? If true, it is more the domain which does not exist!
-        if (!hashtable_get(domains, argv[0], &d)) {
-            error_set(error, WARN, "Domain '%s' doesn't have any record named '%s'\n", argv[0], argv[3]);
-            return COMMAND_FAILURE;
-        }
-#endif
-        {
-            size_t matches;
+    FETCH_DOMAINS_IF_NEEDED; // just the one we want instead of all of them?
+    success = handle_conflict_on_record_name(args->domain, args->record, (modelized_t **) &record);
+    if (success && NULL != record) {
+        request_t *req;
 
-            matches = find_record(d->records, args->record, &match);
-            switch (matches) {
-                case 1:
-                {
-                    if (!confirm(mainopts, _("Confirm deletion of '%s.%s'"), match->subDomain, args->domain)) {
-                        return COMMAND_SUCCESS; // yeah, success because user canceled it
-                    }
-                    break;
-                }
-                case 0:
-                    error_set(error, INFO, "No record match '%s'", args->record);
-                    return COMMAND_SUCCESS;
-                default:
-                    error_set(error, WARN, "Abort, more than one record match '%s'", args->record);
-                    return COMMAND_FAILURE;
-            }
-        }
-        {
-            request_t *req;
-
-            // request
-            req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, error, API_BASE_URL "/domain/zone/%s/record/%" PRIu32, args->domain, match->id);
-            success = request_execute(req, RESPONSE_IGNORE, NULL, error);
-            request_destroy(req);
-            // result
+        // request
+#ifndef TEST_WITHOUT_SENDING_HTTP_REQUEST
+        req = request_new(REQUEST_FLAG_SIGN, HTTP_DELETE, NULL, error, API_BASE_URL "/domain/zone/%s/record/%d", args->domain, record->id);
+        success = request_execute(req, RESPONSE_IGNORE, NULL, error);
+        request_destroy(req);
+#else
+        debug("deleting: %s %s %s", record->subDomain, record->target, domain_record_types[record->fieldType]);
+#endif /* !TEST_WITHOUT_SENDING_HTTP_REQUEST */
+        // result
+        if (success) {
+            success = modelized_delete((modelized_t *) record, error);
             if (success) {
-                hashtable_quick_delete(d->records, match->id, NULL, TRUE);
                 ask_for_refresh(RELAY_COMMAND_ARGS);
             }
         }
+        modelized_destroy((modelized_t *) record);
     }
 
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
@@ -771,32 +660,18 @@ static command_status_t record_delete(COMMAND_ARGS)
 // if we change record's name (subDomain), we need to update records cache
 static command_status_t record_update(COMMAND_ARGS)
 {
-    domain_t *d;
-    record_t *r;
     bool success;
+    record_t *record;
     domain_record_argument_t *args;
 
     USED(mainopts);
     args = (domain_record_argument_t *) arg;
     assert(NULL != args->domain);
     assert(NULL != args->record);
-    if ((success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, FALSE, error)))) {
+    FETCH_DOMAINS_IF_NEEDED; // just the one we want instead of all of them?
+    success = handle_conflict_on_record_name(args->domain, args->record, (modelized_t **) &record);
+    if (success && NULL != record) {
         json_document_t *reqdoc;
-
-        size_t matches;
-
-        matches = find_record(d->records, args->record, &r);
-        switch (matches) {
-            case 1:
-                // NOP : OK
-                break;
-            case 0:
-                error_set(error, WARN, "Abort, no record match '%s'", args->record);
-                return COMMAND_FAILURE;
-            default:
-                error_set(error, WARN, "Abort, more than one record match '%s'", args->record);
-                return COMMAND_FAILURE;
-        }
         // data
         {
             json_value_t root;
@@ -804,39 +679,41 @@ static command_status_t record_update(COMMAND_ARGS)
             reqdoc = json_document_new();
             root = json_object();
             if (NULL != args->value) {
+                MODELIZED_SET_STRING(record->target, args->value);
                 json_object_set_property(root, "target", json_string(args->value));
             }
             if (NULL != args->subDomain) {
+                MODELIZED_SET_STRING(record->subDomain, args->subDomain);
                 json_object_set_property(root, "subDomain", json_string(args->subDomain));
             }
+            record->ttl = args->ttl;
             json_object_set_property(root, "ttl", json_integer(args->ttl));
             json_document_set_root(reqdoc, root);
         }
+#ifndef TEST_WITHOUT_SENDING_HTTP_REQUEST
         // request
         {
             request_t *req;
 
-            req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_PUT, reqdoc, error, API_BASE_URL "/domain/zone/%s/record/%" PRIu32, args->domain, r->id);
+            req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_PUT, reqdoc, error, API_BASE_URL "/domain/zone/%s/record/%d", args->domain, record->id);
             success = request_execute(req, RESPONSE_IGNORE, NULL, error);
             request_destroy(req);
             json_document_destroy(reqdoc);
         }
+#else
+        debug("updating: %s %s %s", record->subDomain, record->target, domain_record_types[record->fieldType]);
+        json_document_destroy(reqdoc);
+#endif /* !TEST_WITHOUT_SENDING_HTTP_REQUEST */
         if (success) {
-            if (NULL != args->value) {
-                FREE(r, target);
-                r->target = strdup(args->value);
+            success = modelized_save((modelized_t *) record, error);
+            if (success) {
+                ask_for_refresh(RELAY_COMMAND_ARGS);
             }
-            if (NULL != args->subDomain) {
-                FREE(r, subDomain);
-                r->subDomain = strdup(args->subDomain);
-            }
-            r->ttl = args->ttl;
-            ask_for_refresh(RELAY_COMMAND_ARGS);
         }
+        modelized_destroy((modelized_t *) record);
     }
-//     debug("request update of %s.%s to %s.%s with TTL = %" PRIu32 " and value = '%s'", args->record, args->domain, args->subDomain, args->domain, args->ttl, args->value);
 
-    return COMMAND_SUCCESS;
+    return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
 }
 
 static command_status_t dnssec_status(COMMAND_ARGS)
@@ -909,30 +786,6 @@ static bool complete_domains(void *UNUSED(parsed_arguments), const char *current
 
 static bool complete_records(void *parsed_arguments, const char *current_argument, size_t current_argument_len, completer_t *possibilities, void *UNUSED(data))
 {
-#if 0
-    domain_t *d;
-    bool success;
-    domain_record_argument_t *args;
-
-    args = (domain_record_argument_t *) parsed_arguments;
-    assert(NULL != args->domain);
-    if ((success = (COMMAND_SUCCESS == get_domain_records(args->domain, &d, FALSE, NULL)))) {
-        Iterator it;
-
-        hashtable_to_iterator(&it, d->records);
-        for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-            record_t *r;
-
-            r = iterator_current(&it, NULL);
-            if (0 == strncmp(r->subDomain, current_argument, current_argument_len)) {
-                completer_push(possibilities, r->subDomain, FALSE);
-            }
-        }
-        iterator_close(&it);
-    }
-
-    return success;
-#else
     domain_record_argument_t *args;
 
     args = (domain_record_argument_t *) parsed_arguments;
@@ -940,7 +793,6 @@ static bool complete_records(void *parsed_arguments, const char *current_argumen
     statement_bind(&statements[STMT_RECORD_COMPLETION], NULL, current_account->id, args->domain, current_argument);
 
     return complete_from_modelized(record_model, &statements[STMT_RECORD_COMPLETION], possibilities);
-#endif
 }
 
 static void domain_regcomm(graph_t *g)

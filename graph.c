@@ -76,7 +76,7 @@ static model_t argument_model = { /* dummy model */
 #else
     NULL,
 #endif
-    0
+    0, NULL
 };
 
 /**

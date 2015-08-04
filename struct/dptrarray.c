@@ -134,16 +134,23 @@ void dptrarray_insert(DPtrArray *this, size_t offset, void *data) /* NONNULL(1) 
     ++this->length;
 }
 
-void dptrarray_remove_at(DPtrArray *this, size_t offset) /* NONNULL() */
+void *dptrarray_remove_at(DPtrArray *this, size_t offset, bool call_dtor) /* NONNULL() */
 {
+    void *data;
+
     assert(NULL != this);
     assert(offset < this->length);
 
-    if (NULL != this->dtor_func) {
+    if (call_dtor && NULL != this->dtor_func) {
+        data = NULL;
         this->dtor_func(this->data[offset]);
+    } else {
+        data = this->data[offset];
     }
     memmove(this->data + offset, this->data + offset + 1, (this->length - offset - 1) * sizeof(*this->data));
     --this->length;
+
+    return data;
 }
 
 void dptrarray_remove_range(DPtrArray *this, size_t from, size_t to) /* NONNULL() */
