@@ -272,7 +272,7 @@ static bool parse_record(domain_t *UNUSED(domain), json_document_t *doc, error_t
 {
     record_t record;
 
-    modelized_init(record_model, (record_t *) &record);
+    modelized_init(record_model, (modelized_t *) &record);
     json_object_to_modelized(json_document_get_root(doc), (modelized_t *) &record, FALSE, NULL);
 #if 1
     statement_bind_from_model(&statements[STMT_RECORD_UPSERT], NULL, (modelized_t *) &record);
@@ -551,7 +551,6 @@ static bool handle_conflict_on_record_name(const char *domain_name, const char *
     size_t l;
     Iterator it;
     DPtrArray *ary;
-    record_t record;
 
     assert(NULL != domain_name);
     assert(NULL != record_name);
@@ -559,17 +558,14 @@ static bool handle_conflict_on_record_name(const char *domain_name, const char *
 
     ret = TRUE;
     *recordp = NULL;
-    modelized_init(record_model, (modelized_t *) &record);
     ary = dptrarray_new(NULL, (DtorFunc) modelized_destroy, NULL);
     statement_bind(&statements[STMT_RECORD_FIND_BY_NAME], NULL, current_account->id, domain_name, record_name);
-    // TODO: make iterator_current allocate and return a new "object"?
-    statement_model_to_iterator(&it, &statements[STMT_RECORD_FIND_BY_NAME], record_model, (char *) &record);
+    statement_model_to_iterator(&it, &statements[STMT_RECORD_FIND_BY_NAME], record_model, TRUE/*unused*/);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        modelized_t *copy;
+        modelized_t *record;
 
-        iterator_current(&it, NULL);
-        copy = modelized_copy((modelized_t *) &record); // TODO: leaks for MODEL_TYPE_STRING in record (modules/sqlite.c has already done a strdup)
-        dptrarray_push(ary, copy);
+        record = iterator_current(&it, NULL);
+        dptrarray_push(ary, record);
     }
     iterator_close(&it);
     l = dptrarray_length(ary);

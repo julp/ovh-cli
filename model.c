@@ -120,12 +120,12 @@ void model_destroy(model_t *model)
     free(model);
 }
 
+#if 0
 void modelized_belongs_to(modelized_t *owner, modelized_t *owned)
 {
     //
 }
 
-#if 0
 void modelized_name_to_s(modelized_t *ptr, char *buffer, size_t buffer_size)
 {
     //

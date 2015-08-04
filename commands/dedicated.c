@@ -643,7 +643,7 @@ static command_status_t dedicated_boot_get(COMMAND_ARGS)
     assert(NULL != args->server_name);
     modelized_init(boot_model, (modelized_t *) &boot);
     statement_bind(&statements[STMT_DEDICATED_CURRENT_BOOT], NULL, current_account->id, args->server_name);
-    success = statement_fetch_to_model(&statements[STMT_DEDICATED_CURRENT_BOOT], (modelized_t *) &boot, error);
+    success = statement_fetch_to_model(&statements[STMT_DEDICATED_CURRENT_BOOT], (modelized_t *) &boot, FALSE, error);
     if (success) {
         printf(_("Current boot for %s is:  %s (%s): %s\n"), args->server_name, boot.kernel, boot_types[boot.bootType], boot.description);
     }

@@ -175,10 +175,10 @@ static bool account_set_current(const char *name, error_t **error)
             statement_bind(&statements[stmt], NULL, name);
         }
 //         statement_bind_from_model(&statements[stmt], account_model, NULL, (char *) &acd.current_account);
-        if (statement_fetch_to_model(&statements[stmt], (modelized_t *) &acd.current_account, error)) {
+        if (statement_fetch_to_model(&statements[stmt], (modelized_t *) &acd.current_account, TRUE, error)) {
 //             statement_bind_from_model(&statements[STMT_APPLICATION_LOAD], application_model, NULL, (char *) &acd.current_application);
             statement_bind(&statements[STMT_APPLICATION_LOAD], NULL, acd.current_account.endpoint_id);
-            if (!statement_fetch_to_model(&statements[STMT_APPLICATION_LOAD], (modelized_t *) &acd.current_application, error)) {
+            if (!statement_fetch_to_model(&statements[STMT_APPLICATION_LOAD], (modelized_t *) &acd.current_application, TRUE, error)) {
                 return FALSE;
             }
         } else {
@@ -664,9 +664,9 @@ static command_status_t export(COMMAND_ARGS)
     USED(mainopts);
     buffer = string_new();
     // accounts
-    statement_model_to_iterator(&it, &statements[STMT_ACCOUNT_LIST], account_model, (char *) &account);
+    statement_model_to_iterator(&it, &statements[STMT_ACCOUNT_LIST], account_model, FALSE);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        iterator_current(&it, NULL);
+        iterator_current(&it, (void **) &account);
         string_append_formatted(buffer, "account %s add password \"%s\" endpoint %s", account.name, account.password, endpoint_names[account.endpoint_id]);
         if (!NULL_OR_EMPTY(account.consumer_key)) {
             char datebuf[512];
@@ -679,18 +679,13 @@ static command_status_t export(COMMAND_ARGS)
         if (account.is_default) {
             string_append_formatted(buffer, "account %s default\n", account.name);
         }
-        free(account.name);
-        free(account.password);
-        free((void *) account.consumer_key);
     }
     iterator_close(&it);
     // applications
-    statement_model_to_iterator(&it, &statements[STMT_APPLICATION_LIST], application_model, (char *) &application);
+    statement_model_to_iterator(&it, &statements[STMT_APPLICATION_LIST], application_model, FALSE);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        iterator_current(&it, NULL);
+        iterator_current(&it, (void **) &application);
         string_append_formatted(buffer, "application %s add \"%s\" \"%s\"\n", endpoint_names[application.endpoint_id], application.key, application.secret);
-        free(application.key);
-        free(application.secret);
     }
     iterator_close(&it);
     puts(buffer->ptr);

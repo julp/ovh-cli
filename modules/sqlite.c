@@ -43,7 +43,7 @@ typedef struct {
             sqlite_statement_bind_t *output_binds;
         };
         struct {
-            char *ptr;
+            bool copy;
             const model_t *model;
         };
     };
@@ -238,14 +238,14 @@ void statement_to_iterator(Iterator *it, sqlite_statement_t *stmt, ...)
     );
 }
 
-static void _statement_model_set_output_bind(sqlite_statement_t *stmt, const model_t *model, modelized_t *ptr)
+static void _statement_model_set_output_bind(sqlite_statement_t *stmt, const model_t *model, modelized_t *ptr, bool copy)
 {
     int i, l;
 
     for (i = 0, l = sqlite3_column_count(stmt->prepared); i < l; i++) {
-        const model_field_t *f;
         size_t ovh_name_len;
         const char *ovh_name;
+        const model_field_t *f;
 
         ovh_name = sqlite3_column_name(stmt->prepared, i);
         ovh_name_len = strlen(ovh_name);
@@ -271,7 +271,7 @@ static void _statement_model_set_output_bind(sqlite_statement_t *stmt, const mod
                     if (NULL == sv) {
                         uv = NULL;
                     } else {
-                        uv = strdup((char *) sv);
+                        uv = copy ? strdup((char *) sv) : (char *) sv; // strdup qui foire ?
                     }
                     *((char **) (((char *) ptr) + f->offset)) = uv;
                     break;
@@ -289,25 +289,45 @@ static void _statement_model_set_output_bind(sqlite_statement_t *stmt, const mod
     }
 }
 
-static void statement_model_iterator_current(const void *collection, void **state, void **UNUSED(value), void **UNUSED(key))
+static void statement_model_iterator_current(const void *collection, void **state, void **value, void **key)
 {
+    bool copy;
+    modelized_t *obj;
     sqlite_statement_t *stmt;
     sqlite_statement_state_t *sss;
 
-    assert(NULL != state);
     assert(NULL != collection);
+    assert(NULL != state);
+    assert(NULL != value);
 
     stmt = (sqlite_statement_t *) collection;
     sss = *(sqlite_statement_state_t **) state;
-    _statement_model_set_output_bind(stmt, sss->model, (modelized_t *) sss->ptr);
+    if (NULL == key) {
+        copy = TRUE; // override
+        *value = obj = modelized_new(sss->model);
+    } else {
+        *value = NULL;
+        copy = sss->copy;
+        obj = (modelized_t *) key;
+        modelized_init(sss->model, obj);
+    }
+    _statement_model_set_output_bind(stmt, sss->model, obj, copy);
 }
 
-void statement_model_to_iterator(Iterator *it, sqlite_statement_t *stmt, const model_t *model, char *ptr)
+/**
+ * Initialize an iterator to loop on the result set of a statement
+ *
+ * @param it the iterator to initialize
+ * @param stmt the statement to execute
+ * @param model the associated model that represents the data
+ * @param obj TODO
+ */
+void statement_model_to_iterator(Iterator *it, sqlite_statement_t *stmt, const model_t *model, bool copy)
 {
     sqlite_statement_state_t *sss;
 
     sss = mem_new(*sss);
-    sss->ptr = ptr;
+    sss->copy = copy;
     sss->model = model;
     sss->type = SSST_MODEL_BASED;
     iterator_init(
@@ -351,7 +371,7 @@ bool statement_batched_prepare(sqlite_statement_t *statements, size_t count, err
 }
 
 /**
- * Frees  an array of *count* sqlite_statement_t previouly preprepared
+ * Frees an array of *count* sqlite_statement_t previouly preprepared
  * with statement_batched_prepare.
  *
  * @param statements a group of statements to free
@@ -573,7 +593,7 @@ void statement_bind_from_model(sqlite_statement_t *stmt, const bool *nulls, mode
             if (NULL == nulls || !nulls[paramno]) {
                 switch (f->type) {
 #if 0
-                    case SQLITE_TYPE_DOUBLE:
+                    case MODEL_TYPE_DOUBLE:
                         sqlite3_bind_double(stmt->prepared, paramno, *((double *) (((char *) ptr) + f->offset)));
                         break;
 #endif
@@ -696,12 +716,12 @@ bool statement_fetch(sqlite_statement_t *stmt, error_t **error, ...)
  * TODO
  *
  * @param stmt
- * @param ptr
+ * @param obj
  * @param error
  *
  * @return
  */
-bool statement_fetch_to_model(sqlite_statement_t *stmt, modelized_t *ptr, error_t **error)
+bool statement_fetch_to_model(sqlite_statement_t *stmt, modelized_t *obj, bool copy, error_t **error)
 {
     bool ret;
 
@@ -709,7 +729,7 @@ bool statement_fetch_to_model(sqlite_statement_t *stmt, modelized_t *ptr, error_
     switch (sqlite3_step(stmt->prepared)) {
         case SQLITE_ROW:
         {
-            _statement_model_set_output_bind(stmt, ptr->model, ptr);
+            _statement_model_set_output_bind(stmt, obj->model, obj, copy);
             ret = TRUE;
             break;
         }
@@ -725,30 +745,29 @@ bool statement_fetch_to_model(sqlite_statement_t *stmt, modelized_t *ptr, error_
 }
 
 /**
- * TODO
+ * Helper to display modelized datas from a statement in a table
  *
- * @param model
- * @param stmt
+ * @param model the model that describe datas
+ * @param stmt the statement to execute
  *
- * @return
+ * @return COMMAND_SUCCESS OR-ed with CMD_FLAG_NO_DATA if the result set was empty
  */
 command_status_t statement_to_table(const model_t *model, sqlite_statement_t *stmt)
 {
     table_t *t;
     Iterator it;
-    char buffer[8192];
+    char obj[8192];
     command_status_t ret;
 
-    assert(ARRAY_SIZE(buffer) >= model->size);
     ret = COMMAND_SUCCESS;
-    modelized_init(model, (modelized_t *) buffer);
+    assert(ARRAY_SIZE(obj) >= model->size);
     t = table_new_from_model(model, TABLE_FLAG_DELEGATE);
-    statement_model_to_iterator(&it, stmt, model, buffer);
+    statement_model_to_iterator(&it, stmt, model, TRUE);
     iterator_first(&it);
     if (iterator_is_valid(&it)) {
         do {
-            iterator_current(&it, NULL);
-            table_store_modelized(t, (modelized_t *) buffer);
+            iterator_current(&it, (void **) &obj);
+            table_store_modelized(t, (modelized_t *) &obj);
             iterator_next(&it);
         } while (iterator_is_valid(&it));
     } else {
@@ -761,20 +780,24 @@ command_status_t statement_to_table(const model_t *model, sqlite_statement_t *st
     return ret;
 }
 
+/**
+ * Helper TODO
+ *
+ * @param model
+ * @param stmt
+ * @param possibilities
+ *
+ * @return TRUE (can't fail)
+ */
 bool complete_from_modelized(const model_t *model, sqlite_statement_t *stmt, completer_t *possibilities)
 {
     Iterator it;
-    char buffer[8192];
 
-    modelized_init(model, (modelized_t *) buffer);
-    statement_model_to_iterator(&it, stmt, model, buffer); // TODO: make iterator_current allocate and return a new "object"?
+    statement_model_to_iterator(&it, stmt, model, TRUE/* unused */);
     for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        void *object;
+        modelized_t *object;
 
-        iterator_current(&it, NULL);
-        object = malloc(model->size);
-        modelized_init(model, object);
-        memcpy(object, buffer, model->size);
+        object = iterator_current(&it, NULL);
         completer_push_modelized(possibilities, object);
     }
     iterator_close(&it);
@@ -986,7 +1009,7 @@ bool modelized_save(modelized_t *obj, error_t **error)
         success = SQLITE_OK == sqlite3_prepare_v2(db, stmt.statement, -1, &stmt.prepared, NULL);
         if (success) {
             statement_bind_from_model(&stmt, NULL, obj);
-            success = statement_fetch_to_model(&stmt, obj, error);
+            success = statement_fetch_to_model(&stmt, obj, FALSE, error); // TODO: just do a sqlite3_step instead?
             sqlite3_finalize(stmt.prepared);
         } else {
             error_set(error, WARN, _("%s for %s"), sqlite3_errmsg(db), sqlite3_sql(stmt.prepared));
@@ -1016,7 +1039,7 @@ bool modelized_delete(modelized_t *obj, error_t **error)
         success = SQLITE_OK == sqlite3_prepare_v2(db, stmt.statement, -1, &stmt.prepared, NULL);
         if (success) {
             statement_bind_from_model(&stmt, NULL, obj);
-            success = statement_fetch_to_model(&stmt, obj, error);
+            success = statement_fetch_to_model(&stmt, obj, FALSE, error); // TODO: just do a sqlite3_step instead?
             sqlite3_finalize(stmt.prepared);
         } else {
             error_set(error, WARN, _("%s for %s"), sqlite3_errmsg(db), sqlite3_sql(stmt.prepared));

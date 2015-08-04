@@ -32,11 +32,11 @@ bool create_or_migrate(const char *, const char *, sqlite_migration_t *, size_t,
 void statement_bind(sqlite_statement_t *, const bool *, ...);
 void statement_bind_from_model(sqlite_statement_t *, const bool *, modelized_t *);
 bool statement_fetch(sqlite_statement_t *, error_t **, ...);
-bool statement_fetch_to_model(sqlite_statement_t *, modelized_t *, error_t **);
+bool statement_fetch_to_model(sqlite_statement_t *, modelized_t *, bool, error_t **);
 void statement_batched_finalize(sqlite_statement_t *, size_t);
 bool statement_batched_prepare(sqlite_statement_t *, size_t, error_t **);
 void statement_to_iterator(Iterator *, sqlite_statement_t *, ...);
-void statement_model_to_iterator(Iterator *, sqlite_statement_t *, const model_t *, char *);
+void statement_model_to_iterator(Iterator *, sqlite_statement_t *, const model_t *, bool);
 
 bool modelized_save(modelized_t *, error_t **);
 bool modelized_delete(modelized_t *, error_t **);
