@@ -899,6 +899,7 @@ const char *request_consumer_key(time_t *expires_at, error_t **error)
 
         // GET validationUrl
         {
+            xmlChar *tmp;
             xmlDocPtr doc;
             xmlXPathObjectPtr res;
             xmlXPathContextPtr ctxt;
@@ -923,7 +924,9 @@ const char *request_consumer_key(time_t *expires_at, error_t **error)
                 free(validationUrl);
                 return NULL;
             }
-            token = strdup((char *) xmlXPathCastToString(res));
+            tmp = xmlXPathCastToString(res);
+            token = strdup((char *) tmp);
+            xmlFree(tmp);
             xmlXPathFreeObject(res);
             if (NULL == (res = xmlXPathEvalExpression(BAD_CAST "string(//form//input[@type=\"password\"]/@name)", ctxt))) {
                 xmlXPathFreeObject(res);
@@ -932,7 +935,9 @@ const char *request_consumer_key(time_t *expires_at, error_t **error)
                 free(validationUrl);
                 return NULL;
             }
-            password_field_name = strdup((char *) xmlXPathCastToString(res));
+            tmp = xmlXPathCastToString(res);
+            password_field_name = strdup((char *) tmp);
+            xmlFree(tmp);
             xmlXPathFreeObject(res);
             if (NULL == (res = xmlXPathEvalExpression(BAD_CAST "string(//form//input[@type=\"text\"]/@name)", ctxt))) {
                 xmlXPathFreeObject(res);
@@ -941,7 +946,9 @@ const char *request_consumer_key(time_t *expires_at, error_t **error)
                 free(validationUrl);
                 return NULL;
             }
-            account_field_name = strdup((char *) xmlXPathCastToString(res));
+            tmp = xmlXPathCastToString(res);
+            account_field_name = strdup((char *) tmp);
+            xmlFree(tmp);
             xmlXPathFreeObject(res);
             xmlXPathFreeContext(ctxt);
             xmlFreeDoc(doc);

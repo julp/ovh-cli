@@ -25,7 +25,7 @@
 
 // account 0,N <=> 1,1 domain 0,N <=> 1,1 record
 
-#define TEST_WITHOUT_SENDING_HTTP_REQUEST
+// #define TEST_WITHOUT_SENDING_HTTP_REQUEST
 
 typedef enum {
 #define DECLARE_RECORD_TYPE(name) \
@@ -270,15 +270,15 @@ static void ask_for_refresh(COMMAND_ARGS)
 
 static bool parse_record(domain_t *UNUSED(domain), json_document_t *doc, error_t **error)
 {
-    record_t *record;
+    record_t record;
 
-    record = (record_t *) modelized_new(record_model);
-    json_object_to_modelized(json_document_get_root(doc), (modelized_t *) record, FALSE, NULL);
+    modelized_init(record_model, (record_t *) &record);
+    json_object_to_modelized(json_document_get_root(doc), (modelized_t *) &record, FALSE, NULL);
 #if 1
-    statement_bind_from_model(&statements[STMT_RECORD_UPSERT], NULL, (modelized_t *) record);
+    statement_bind_from_model(&statements[STMT_RECORD_UPSERT], NULL, (modelized_t *) &record);
     statement_fetch(&statements[STMT_RECORD_UPSERT], error);
 #else
-    modelized_save((modelized_t *) record, error);
+    modelized_save((modelized_t *) &record, error);
 #endif
     json_document_destroy(doc);
 
@@ -361,9 +361,9 @@ static bool fetch_domain(const char * const domain_name, bool force, error_t **e
             );
             statement_fetch(&statements[STMT_DOMAIN_UPSERT], error);
         }
-        while (0 != --i) {
-            json_document_destroy(docs[i]);
-        }
+        do {
+            json_document_destroy(docs[--i]);
+        } while (0 != i);
         if (success) {
             success = get_domain_records(&domain, force, error);
         }
