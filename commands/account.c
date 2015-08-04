@@ -341,8 +341,6 @@ static void account_data_dtor(void *data)
         }
         hashtable_destroy(ht);
     }
-    model_destroy(account_model);
-    model_destroy(application_model);
 }
 
 bool account_get_last_fetch_for(const char *module_name, time_t *t, error_t **error)
