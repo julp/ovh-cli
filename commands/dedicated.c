@@ -438,13 +438,13 @@ static bool parse_boot(server_t *s, json_document_t *doc, error_t **error)
     return NULL == *error;
 }
 
-static bool fetch_server_boots(const char *server_name, server_t *s, error_t **error)
+static bool fetch_server_boots(server_t *s, error_t **error)
 {
     bool success;
     request_t *req;
     json_document_t *doc;
 
-    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/dedicated/server/%s/boot", server_name);
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/dedicated/server/%s/boot", s->name);
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
     // result
@@ -459,7 +459,7 @@ static bool fetch_server_boots(const char *server_name, server_t *s, error_t **e
             json_document_t *doc;
 
             v = (json_value_t) iterator_current(&it, NULL);
-            req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/dedicated/server/%s/boot/%u", server_name, json_get_integer(v));
+            req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/dedicated/server/%s/boot/%u", s->name, json_get_integer(v));
             success = request_execute(req, RESPONSE_JSON, (void **) &doc, error); // success is assumed to be TRUE before the first iteration
             request_destroy(req);
             // result
@@ -514,7 +514,7 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
                 }
             }
             json_document_destroy(doc);
-            success = fetch_server_boots(server_name, &s, error);
+            success = fetch_server_boots(&s, error);
         }
     }
 
