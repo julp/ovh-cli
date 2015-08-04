@@ -333,80 +333,6 @@ void print_error(error_t *error)
     }
 }
 
-#if WITHOUT_LIBEDIT_TOKENIZER
-// TODO: remove backslash before " characters
-static int str_split(const char *string, char ***args)
-{
-    char *dup;
-    int count, i;
-    const char *p;
-    bool in_quotes;
-    size_t dup_len;
-
-    p = string;
-    i = count = 0;
-    while (' ' == *string) {
-        ++string;
-    }
-    in_quotes = '"' == *string;
-    if (NULL == (dup = strdup(string + in_quotes))) {
-        return -1;
-    }
-    dup_len = strlen(dup);
-    if ('\n' == dup[dup_len - 1]) {
-        dup[--dup_len] = '\0';
-        if (dup_len > 0 && '\r' == dup[dup_len - 1]) {
-            dup[--dup_len] = '\0';
-        }
-    }
-    for (p = dup; '\0' != *p; p++) {
-        if (in_quotes) {
-            if ('"' == *p && '\\' != *(p - 1)) {
-                in_quotes = FALSE;
-                ++count;
-            }
-        } else {
-            if (' ' == *p) {
-                while (' ' == *(p + 1)) {
-                    ++p;
-                }
-                if ('"' == *(p + 1)) {
-                    in_quotes = TRUE;
-                    ++p;
-                }
-                ++count;
-            }
-        }
-    }
-    in_quotes = '"' == *string; // reinitialize it in case of non-terminated "
-    *args = mem_new_n(**args, count + 2);
-    (*args)[i++] = dup;
-    while ('\0' != *dup) {
-        if (in_quotes) {
-            if ('"' == *dup && '\\' != *(dup - 1)) {
-                in_quotes = FALSE;
-                *dup = '\0';
-            }
-        } else {
-            if (' ' == *dup) {
-                *dup = '\0';
-                while (' ' == *(dup + 1)) {
-                    ++dup;
-                }
-                if ('"' == *(dup + 1)) {
-                    in_quotes = TRUE;
-                    ++dup;
-                }
-                (*args)[i++] = dup + 1;
-            }
-        }
-        ++dup;
-    }
-    (*args)[i] = NULL;
-
-    return i;
-}
-#else
 static int str_split(const char *string, Tokenizer *tokenizer, char ***argv)
 {
     int argc;
@@ -418,7 +344,6 @@ static int str_split(const char *string, Tokenizer *tokenizer, char ***argv)
         return argc;
     }
 }
-#endif /* WITHOUT_LIBEDIT_TOKENIZER */
 
 void cleanup(void)
 {
@@ -529,16 +454,13 @@ int main(int argc, char **argv)
                 args_len = str_split(utf8_line, client_data.tokenizer, &args);
                 ret = graph_dispatch_command(g, args_len, (const char **) args, (const main_options_t *) &mainopts, &error);
                 convert_string_free(line, &utf8_line);
-#if WITHOUT_LIBEDIT_TOKENIZER
-                free(args[0]);
-                free(args);
-#endif /* WITHOUT_LIBEDIT_TOKENIZER */
             }
             print_error(error);
             if (!HAS_FLAG(ret, CMD_FLAG_SKIP_HISTORY)) {
                 history(hist, &ev, H_ENTER, line);
             }
         }
+        /* TODO: all of this is not done on "quit" or Ctrl+D and others */
         history(hist, &ev, H_SAVE, history_path);
         history_end(hist);
         tok_end(client_data.tokenizer);
