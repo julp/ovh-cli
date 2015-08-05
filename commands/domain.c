@@ -170,13 +170,11 @@ static const char *record_to_s(void *ptr)
 {
     record_t *r;
     char buffer[512];
+    size_t target_len;
 
     r = (record_t *) ptr;
-    if ('\0' == *r->subDomain) {
-        snprintf(buffer, ARRAY_SIZE(buffer), "type %s - ID %d", domain_record_types[r->fieldType], r->id);
-    } else {
-        snprintf(buffer, ARRAY_SIZE(buffer), "type %s", domain_record_types[r->fieldType]);
-    }
+    target_len = strlen(r->target);
+    snprintf(buffer, ARRAY_SIZE(buffer), "type %s - %.*s%s", domain_record_types[r->fieldType], 40, r->target, target_len > 40 ? "..." : "");
 
     return strdup(buffer);
 }
