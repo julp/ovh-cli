@@ -51,8 +51,13 @@ extern module_t hosting_module;
 extern module_t dedicated_module;
 #endif /* WITH_DEDICATED_MODULE */
 
+graph_t *g = NULL;
+
 static int verbosity = 0;
-/*static */graph_t *g = NULL;
+static EditLine *el = NULL;
+static History *hist = NULL;
+static editline_data_t client_data;
+static char history_path[MAXPATHLEN];
 
 static char optstr[] = "lqy";
 
@@ -354,6 +359,18 @@ void cleanup(void)
             modules[i]->dtor();
         }
     }
+    if (NULL != el) {
+        HistEvent ev;
+
+        if (NULL != hist) {
+            history(hist, &ev, H_SAVE, history_path);
+            history_end(hist);
+        }
+        if (NULL != client_data.tokenizer) {
+            tok_end(client_data.tokenizer);
+        }
+        el_end(el);
+    }
     graph_destroy(g);
 }
 
@@ -377,7 +394,6 @@ int main(int argc, char **argv)
     error_t *error;
     command_status_t ret;
     main_options_t mainopts;
-    char history_path[MAXPATHLEN];
 
     error = NULL;
     g = graph_new();
@@ -421,11 +437,8 @@ int main(int argc, char **argv)
 
     if (optind == argc) {
         int count;
-        EditLine *el;
         HistEvent ev;
-        History *hist;
         const char *line;
-        editline_data_t client_data;
 
         puts(_("needs help? Type help!"));
         build_path_from_home(OVH_HISTORY_FILENAME, history_path, ARRAY_SIZE(history_path));
@@ -460,11 +473,6 @@ int main(int argc, char **argv)
                 history(hist, &ev, H_ENTER, line);
             }
         }
-        /* TODO: all of this is not done on "quit" or Ctrl+D and others */
-        history(hist, &ev, H_SAVE, history_path);
-        history_end(hist);
-        tok_end(client_data.tokenizer);
-        el_end(el);
         puts("");
     } else {
         char **utf8_argv;
