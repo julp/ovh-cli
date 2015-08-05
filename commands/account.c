@@ -393,8 +393,8 @@ static bool account_early_ctor(error_t **error)
         return FALSE;
     }
 
-    modelized_init(account_model, (modelized_t *) &acd.current_account.data.model);
-    modelized_init(application_model, (modelized_t *) &acd.current_application.data.model);
+    modelized_init(account_model, (modelized_t *) &acd.current_account);
+    modelized_init(application_model, (modelized_t *) &acd.current_application);
     current_account = &acd.current_account;
     current_application = &acd.current_application;
     acd.modules_data = hashtable_new(value_hash, value_equal, NULL, NULL, account_data_dtor);
