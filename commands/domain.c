@@ -666,6 +666,7 @@ static command_status_t record_update(COMMAND_ARGS)
     success = handle_conflict_on_record_name(args->domain, args->record, (modelized_t **) &record);
     if (success && NULL != record) {
         json_document_t *reqdoc;
+#if 1
         // data
         {
             json_value_t root;
@@ -673,17 +674,37 @@ static command_status_t record_update(COMMAND_ARGS)
             reqdoc = json_document_new();
             root = json_object();
             if (NULL != args->value) {
-                MODELIZED_SET_STRING(record->target, args->value);
+                MODELIZED_SET_STRING(record, target, args->value);
                 json_object_set_property(root, "target", json_string(args->value));
             }
             if (NULL != args->subDomain) {
-                MODELIZED_SET_STRING(record->subDomain, args->subDomain);
+                MODELIZED_SET_STRING(record, subDomain, args->subDomain);
                 json_object_set_property(root, "subDomain", json_string(args->subDomain));
             }
             record->ttl = args->ttl;
             json_object_set_property(root, "ttl", json_integer(args->ttl));
             json_document_set_root(reqdoc, root);
         }
+#else
+        // NOTE: for test
+        if (NULL != args->value) {
+            MODELIZED_SET_STRING(record, target, args->value);
+        }
+        if (NULL != args->subDomain) {
+            MODELIZED_SET_STRING(record, subDomain, args->subDomain);
+        }
+        if (NULL == (reqdoc = json_object_from_modelized((modelized_t *) record))) {
+            debug("nothing to update");
+        } else {
+            String *buffer;
+
+            buffer = string_new();
+            json_document_serialize(reqdoc, buffer, JSON_OPT_PRETTY_PRINT);
+            debug("needs updating: %s", buffer->ptr);
+            string_destroy(buffer);
+        }
+        return COMMAND_SUCCESS;
+#endif
 #ifndef TEST_WITHOUT_SENDING_HTTP_REQUEST
         // request
         {

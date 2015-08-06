@@ -44,15 +44,24 @@ typedef enum {
 #define DECL_FIELD_ENUM(i18n_name, ovh_name, flags, enum_values) \
     { i18n_name, #ovh_name, MODEL_TYPE_ENUM, offsetof(DECL_FIELD_STRUCT_NAME, ovh_name), 0, enum_values, flags }
 
-#define MODELIZED_SET_STRING(obj, new_value) \
+#define MODELIZED_SET(obj, member, new_value) \
     do { \
-        if (NULL != obj) { \
-            free((void *) obj); \
-            obj = NULL; \
+        obj->member = new_value; \
+        obj->member##_changed = TRUE; \
+        ((modelized_t *) obj)->changed = TRUE; \
+    } while (0);
+
+#define MODELIZED_SET_STRING(obj, member, new_value) \
+    do { \
+        if (NULL != obj->member) { \
+            free((void *) obj->member); \
+            obj->member = NULL; \
         } \
         if (NULL != new_value) { \
-            obj = strdup(new_value); \
+            obj->member = strdup(new_value); \
         } \
+        obj->member##_changed = TRUE; \
+        ((modelized_t *) obj)->changed = TRUE; \
     } while (0);
 
 #define DECL_MEMBER(name, type) \
