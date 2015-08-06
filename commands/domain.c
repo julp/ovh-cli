@@ -78,30 +78,30 @@ static sqlite_statement_t statements[STMT_COUNT] = {
 // describe a domain
 typedef struct {
     modelized_t data;
-    char *name;
-    bool hasDnsAnycast;
-    bool dnssecSupported;
-    bool owoSupported;
-    int transferLockStatus;
-    int offer;
-    int nameServerType;
-    time_t engagedUpTo;
-    char *contactBilling;
-    time_t expiration;
-    char *contactTech;
-    char *contactAdmin;
-    time_t creation;
+    DECL_MEMBER_STRING(name);
+    DECL_MEMBER_BOOL(hasDnsAnycast);
+    DECL_MEMBER_BOOL(dnssecSupported);
+    DECL_MEMBER_BOOL(owoSupported);
+    DECL_MEMBER_ENUM(transferLockStatus);
+    DECL_MEMBER_ENUM(offer);
+    DECL_MEMBER_ENUM(nameServerType);
+    DECL_MEMBER_DATE(engagedUpTo);
+    DECL_MEMBER_STRING(contactBilling);
+    DECL_MEMBER_DATE(expiration);
+    DECL_MEMBER_STRING(contactTech);
+    DECL_MEMBER_STRING(contactAdmin);
+    DECL_MEMBER_DATE(creation);
 } domain_t;
 
 // describe a DNS record of a given domain
 typedef struct {
     modelized_t data;
-    uint32_t id;
-    uint32_t ttl; // in minutes
-    const char *subDomain;
-    record_type_t fieldType;
-    const char *target;
-    const char *zone;
+    DECL_MEMBER_INT(id);
+    DECL_MEMBER_INT(ttl); // in minutes
+    DECL_MEMBER_STRING(subDomain);
+    DECL_MEMBER_ENUM(fieldType);
+    DECL_MEMBER_STRING(target);
+    DECL_MEMBER_STRING(zone);
 } record_t;
 
 typedef struct {

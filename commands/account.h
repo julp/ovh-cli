@@ -4,20 +4,20 @@
 
 typedef struct {
     modelized_t data;
-    int id;
-    bool is_default;
-    char *name;
-    char *password;
-    time_t expires_at;
-    const char *consumer_key;
-    int endpoint_id;
+    DECL_MEMBER_INT(id);
+    DECL_MEMBER_BOOL(is_default);
+    DECL_MEMBER_STRING(name);
+    DECL_MEMBER_STRING(password);
+    DECL_MEMBER_DATETIME(expires_at);
+    DECL_MEMBER_STRING(consumer_key);
+    DECL_MEMBER_ENUM(endpoint_id);
 } account_t;
 
 typedef struct {
     modelized_t data;
-    char *app_key;
-    char *secret;
-    int endpoint_id;
+    DECL_MEMBER_STRING(app_key);
+    DECL_MEMBER_STRING(secret);
+    DECL_MEMBER_ENUM(endpoint_id);
 } application_t;
 
 #define key app_key

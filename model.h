@@ -2,6 +2,8 @@
 
 # define MODEL_H
 
+# include "common.h"
+
 typedef enum {
     MODEL_TYPE_INT,
     MODEL_TYPE_BOOL,
@@ -53,6 +55,28 @@ typedef enum {
         } \
     } while (0);
 
+#define DECL_MEMBER(name, type) \
+    type name; \
+    bool name##_changed
+
+#define DECL_MEMBER_INT(name) \
+    DECL_MEMBER(name, int)
+
+#define DECL_MEMBER_ENUM(name) \
+    DECL_MEMBER_INT(name)
+
+#define DECL_MEMBER_BOOL(name) \
+    DECL_MEMBER(name, bool)
+
+#define DECL_MEMBER_DATE(name) \
+    DECL_MEMBER(name, time_t)
+
+#define DECL_MEMBER_STRING(name) \
+    DECL_MEMBER(name, char *)
+
+#define DECL_MEMBER_DATETIME(name) \
+    DECL_MEMBER_DATE(name)
+
 typedef struct {
     const char *i18n_key;
     const char *ovh_name;
@@ -77,8 +101,24 @@ typedef struct {
 } model_t;
 
 typedef struct {
+    bool changed;
+    bool persisted;
     const model_t *model;
 } modelized_t;
+
+#if 0
+typedef struct {
+    void *data; // For RAM: the hashtable?
+    bool (*init)(void *, error_t *); // model initialization? For SQLite: precalculate SQL statements?
+    bool (*all)(Iterator *, void *, error_t *); // select for list
+    bool (*save)(modelized_t *, void *, error_t *); // insert/update (upsert?) for add, update and result of listing HTTP query?
+    bool (*delete)(modelized_t *, void *, error_t *); // removal
+    bool (*preload)(void *, error_t *); // run listing HTTP query? (only for RAM, not SQLite backend)
+    bool (*find_by_name)(const char *name, modelized_t **, void *, error_t *); // completion and/or arguments parsing?
+} model_backend_t;
+#endif
+
+extern const size_t model_type_size_map[];
 
 modelized_t *modelized_copy(modelized_t *);
 model_t *model_new(const char *, size_t, model_field_t *, size_t);

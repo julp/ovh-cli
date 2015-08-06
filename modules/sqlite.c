@@ -53,6 +53,72 @@ static sqlite3 *db;
 static int user_version;
 static char db_path[MAXPATHLEN];
 
+static void bool_input_bind(sqlite3_stmt *stmt, int no, void *ptr, const model_field_t *field)
+{
+    sqlite3_bind_int(stmt, no, VOIDP_TO_X(ptr, field->offset, bool));
+}
+
+static void bool_output_bind(sqlite3_stmt *stmt, int no, void *ptr, const model_field_t *field, bool UNUSED(copy))
+{
+    VOIDP_TO_X(ptr, field->offset, bool) = /*!!*/sqlite3_column_int(stmt, no);
+}
+
+static void int_input_bind(sqlite3_stmt *stmt, int no, void *ptr, const model_field_t *field)
+{
+    sqlite3_bind_int(stmt, no, VOIDP_TO_X(ptr, field->offset, int));
+}
+
+static void int_output_bind(sqlite3_stmt *stmt, int no, void *ptr, const model_field_t *field, bool UNUSED(copy))
+{
+    VOIDP_TO_X(ptr, field->offset, int) = sqlite3_column_int(stmt, no);
+}
+
+static void time_t_intput_bind(sqlite3_stmt *stmt, int no, void *ptr, const model_field_t *field)
+{
+    sqlite3_bind_int64(stmt, no, VOIDP_TO_X(ptr, field->offset, time_t));
+}
+
+static void time_t_output_bind(sqlite3_stmt *stmt, int no, void *ptr, const model_field_t *field, bool UNUSED(copy))
+{
+    VOIDP_TO_X(ptr, field->offset, time_t) = sqlite3_column_int64(stmt, no);
+}
+
+static void string_intput_bind(sqlite3_stmt *stmt, int no, void *ptr, const model_field_t *field)
+{
+    sqlite3_bind_text(stmt, no, VOIDP_TO_X(ptr, field->offset, char *), -1, SQLITE_TRANSIENT);
+}
+
+static void string_output_bind(sqlite3_stmt *stmt, int no, void *ptr, const model_field_t *field, bool copy)
+{
+    char *uv;
+    const unsigned char *sv;
+
+    sv = sqlite3_column_text(stmt, no);
+    if (NULL == sv) {
+        uv = NULL;
+    } else {
+        uv = copy ? strdup((char *) sv) : (char *) sv;
+    }
+    VOIDP_TO_X(ptr, field->offset, char *) = uv;
+}
+
+#define STR(s) \
+    s, STR_LEN(s)
+
+static struct {
+    const char *sqlite_type;
+    size_t sqlite_type_len;
+    void (*set_input_bind)(sqlite3_stmt *, int, void *, const model_field_t *);
+    void (*set_output_bind)(sqlite3_stmt *, int, void *, const model_field_t *, bool);
+} model_types_callbacks[] = {
+    [ MODEL_TYPE_INT ]      = { STR("INT"),  int_input_bind,     int_output_bind },
+    [ MODEL_TYPE_BOOL ]     = { STR("INT"),  bool_input_bind,    bool_output_bind, },
+    [ MODEL_TYPE_DATE ]     = { STR("INT"),  time_t_intput_bind, time_t_output_bind },
+    [ MODEL_TYPE_ENUM ]     = { STR("INT"),  int_input_bind,     int_output_bind },
+    [ MODEL_TYPE_STRING ]   = { STR("TEXT"), string_intput_bind, string_output_bind },
+    [ MODEL_TYPE_DATETIME ] = { STR("INT"),  time_t_intput_bind, time_t_output_bind },
+};
+
 /**
  * TODO:
  * - merge sqlite_statement_state_t into sqlite_statement_t ?
@@ -129,7 +195,7 @@ static void statement_iterator_current(const void *collection, void **state, voi
         for (i = 0; i < sss->output_binds_count; i++) {
             switch (sss->output_binds[i].type) {
                 case SQLITE_TYPE_BOOL:
-                    *((bool *) sss->output_binds[i].ptr) = /*!!*/sqlite3_column_int64(stmt->prepared, i);
+                    *((bool *) sss->output_binds[i].ptr) = /*!!*/sqlite3_column_int(stmt->prepared, i);
                     break;
                 case SQLITE_TYPE_INT:
                     *((int *) sss->output_binds[i].ptr) = sqlite3_column_int(stmt->prepared, i);
@@ -250,17 +316,18 @@ static void _statement_model_set_output_bind(sqlite_statement_t *stmt, const mod
         ovh_name = sqlite3_column_name(stmt->prepared, i);
         ovh_name_len = strlen(ovh_name);
         if (NULL != (f = model_find_field_by_name(model, ovh_name, ovh_name_len))) {
+#if 0
             switch (f->type) {
                 case MODEL_TYPE_BOOL:
-                    *((bool *) (((char *) ptr) + f->offset)) = /*!!*/sqlite3_column_int(stmt->prepared, i);
+                    VOIDP_TO_X(ptr, f->offset, bool) = /*!!*/sqlite3_column_int(stmt->prepared, i);
                     break;
                 case MODEL_TYPE_INT:
                 case MODEL_TYPE_ENUM:
-                    *((int *) (((char *) ptr) + f->offset)) = sqlite3_column_int(stmt->prepared, i);
+                    VOIDP_TO_X(ptr, f->offset, int) = sqlite3_column_int(stmt->prepared, i);
                     break;
                 case MODEL_TYPE_DATE:
                 case MODEL_TYPE_DATETIME:
-                    *((time_t *) (((char *) ptr) + f->offset)) = sqlite3_column_int64(stmt->prepared, i);
+                    VOIDP_TO_X(ptr, f->offset, time_t) = sqlite3_column_int64(stmt->prepared, i);
                     break;
                 case MODEL_TYPE_STRING:
                 {
@@ -273,13 +340,19 @@ static void _statement_model_set_output_bind(sqlite_statement_t *stmt, const mod
                     } else {
                         uv = copy ? strdup((char *) sv) : (char *) sv; // strdup qui foire ?
                     }
-                    *((char **) (((char *) ptr) + f->offset)) = uv;
+                    VOIDP_TO_X(ptr, f->offset, char *) = uv;
                     break;
                 }
                 default:
                     assert(FALSE);
                     break;
             }
+#else
+            assert(f->type >= 0 && f->type <= _MODEL_TYPE_LAST);
+            assert(NULL != model_types_callbacks[f->type].set_output_bind);
+
+            model_types_callbacks[f->type].set_output_bind(stmt->prepared, i, ptr, f, copy);
+#endif
         }
 #ifdef DEBUG
         if (NULL == f && 0 != strcmp(ovh_name, "accountId")) {
@@ -591,30 +664,35 @@ void statement_bind_from_model(sqlite_statement_t *stmt, const bool *nulls, mode
         strlcpy(placeholder + 1, f->ovh_name, ARRAY_SIZE(placeholder) - 1);
         if (0 != (paramno = sqlite3_bind_parameter_index(stmt->prepared, placeholder))) {
             if (NULL == nulls || !nulls[paramno]) {
-                switch (f->type) {
 #if 0
-                    case MODEL_TYPE_DOUBLE:
-                        sqlite3_bind_double(stmt->prepared, paramno, *((double *) (((char *) ptr) + f->offset)));
-                        break;
-#endif
+                switch (f->type) {
                     case MODEL_TYPE_BOOL:
-                        sqlite3_bind_int(stmt->prepared, paramno, *((bool *) (((char *) ptr) + f->offset)));
+                        sqlite3_bind_int(stmt->prepared, paramno, VOIDP_TO_X(ptr, f->offset, bool));
                         break;
                     case MODEL_TYPE_INT:
                     case MODEL_TYPE_ENUM:
-                        sqlite3_bind_int(stmt->prepared, paramno, *((int *) (((char *) ptr) + f->offset)));
+                        sqlite3_bind_int(stmt->prepared, paramno, VOIDP_TO_X(ptr, f->offset, int));
                         break;
                     case MODEL_TYPE_DATE:
                     case MODEL_TYPE_DATETIME:
-                        sqlite3_bind_int64(stmt->prepared, paramno, *((time_t *) (((char *) ptr) + f->offset)));
+                        sqlite3_bind_int64(stmt->prepared, paramno, VOIDP_TO_X(ptr, f->offset, time_t));
                         break;
                     case MODEL_TYPE_STRING:
-                        sqlite3_bind_text(stmt->prepared, paramno, *((char **) (((char *) ptr) + f->offset)), -1, SQLITE_TRANSIENT);
+                        sqlite3_bind_text(stmt->prepared, paramno, VOIDP_TO_X(ptr, f->offset, char *), -1, SQLITE_TRANSIENT);
                         break;
                     default:
                         assert(FALSE);
                         break;
                 }
+#else
+                assert(f->type >= 0 && f->type <= _MODEL_TYPE_LAST);
+
+//                 if (VOIDP_TO_X(ptr, f->offset + sizeof(model_type_size_map[f->type]), bool)) { // if <field_name>_changed is TRUE
+                    assert(NULL != model_types_callbacks[f->type].set_input_bind);
+
+                    model_types_callbacks[f->type].set_input_bind(stmt->prepared, paramno, ptr, f);
+//                 }
+#endif
             }
         }
     }
@@ -820,6 +898,7 @@ char *model_to_sql_create_table(const model_t *model)
         if (f != model->fields) {
             STRING_APPEND_STRING(buffer, ",\n");
         }
+#if 0
         switch (f->type) {
             case MODEL_TYPE_INT:
             case MODEL_TYPE_BOOL:
@@ -835,6 +914,14 @@ char *model_to_sql_create_table(const model_t *model)
                 assert(FALSE);
                 break;
         }
+#else
+        assert(f->type >= 0 && f->type <= _MODEL_TYPE_LAST);
+        assert(NULL != model_types_callbacks[f->type].sqlite_type);
+
+        string_append_char(buffer, '\t');
+        string_append_string_len(buffer, model_types_callbacks[f->type].sqlite_type, model_types_callbacks[f->type].sqlite_type_len);
+        string_append_char(buffer, ' ');
+#endif
         if (HAS_FLAG(f->flags, MODEL_FLAG_PRIMARY)) {
             primaries[primaries_length++] = f;
         }
@@ -1011,6 +1098,9 @@ bool modelized_save(modelized_t *obj, error_t **error)
             statement_bind_from_model(&stmt, NULL, obj);
             success = statement_fetch_to_model(&stmt, obj, FALSE, error); // TODO: just do a sqlite3_step instead?
             sqlite3_finalize(stmt.prepared);
+            if (success) {
+                obj->persisted = TRUE;
+            }
         } else {
             error_set(error, WARN, _("%s for %s"), sqlite3_errmsg(db), sqlite3_sql(stmt.prepared));
         }

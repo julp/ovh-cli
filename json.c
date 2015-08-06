@@ -455,6 +455,132 @@ bool json_object_get_property(json_value_t object, const char *key, json_value_t
     return hashtable_get((HashTable *) node->value, key, value);
 }
 
+static void bool_from_json(json_value_t value, bool UNUSED(isnull), void *ptr, const model_field_t *field, bool UNUSED(copy))
+{
+    VOIDP_TO_X(ptr, field->offset, bool) = json_true == value;
+}
+
+static json_value_t bool_to_json(void *ptr, const model_field_t *field)
+{
+    return VOIDP_TO_X(ptr, field->offset, bool) ? json_true : json_false;
+}
+
+static void int_from_json(json_value_t value, bool isnull, void *ptr, const model_field_t *field, bool UNUSED(copy))
+{
+    VOIDP_TO_X(ptr, field->offset, int) = isnull ? 0 : json_get_integer(value);
+}
+
+static json_value_t int_to_json(void *ptr, const model_field_t *field)
+{
+    return json_integer(VOIDP_TO_X(ptr, field->offset, int));
+}
+
+static void enum_from_json(json_value_t value, bool isnull, void *ptr, const model_field_t *field, bool UNUSED(copy))
+{
+    VOIDP_TO_X(ptr, field->offset, int) = isnull ? -1 : json_get_enum(value, field->enum_values, -1);
+}
+
+static json_value_t enum_to_json(void *ptr, const model_field_t *field)
+{
+    return json_string(field->enum_values[VOIDP_TO_X(ptr, field->offset, int)]);
+}
+
+static void _date_from_json(json_value_t value, bool isnull, void *ptr, const model_field_t *field, const char *format)
+{
+    time_t v;
+
+    v = 0;
+    if (!isnull) {
+        date_parse_to_timestamp(json_get_string(value), format, &v);
+    }
+    VOIDP_TO_X(ptr, field->offset, time_t) = v;
+}
+
+static void date_from_json(json_value_t value, bool isnull, void *ptr, const model_field_t *field, bool UNUSED(copy))
+{
+    // %F is equivalent to "%Y-%m-%d"
+    _date_from_json(value, isnull, ptr, field, "%F");
+}
+
+static json_value_t date_to_json(void *ptr, const model_field_t *field)
+{
+    return VOIDP_TO_X(ptr, field->offset, time_t); // TODO
+}
+
+static void datetime_from_json(json_value_t value, bool isnull, void *ptr, const model_field_t *field, bool UNUSED(copy))
+{
+    // %F is equivalent to "%Y-%m-%d"
+    // %T is equivalent to "%H:%M:%S"
+    // %z is replaced by the time zone offset from UTC; a leading plus sign stands for east of UTC,
+    // a minus sign for west of UTC, hours and minutes follow with two digits each and no delimiter
+    // between them (common form for RFC 822 date headers)
+    _date_from_json(value, isnull, ptr, field, "%FT%T%z");
+}
+
+static json_value_t datetime_to_json(void *ptr, const model_field_t *field)
+{
+    return VOIDP_TO_X(ptr, field->offset, time_t); // TODO
+}
+
+static void string_from_json(json_value_t value, bool isnull, void *ptr, const model_field_t *field, bool copy)
+{
+    VOIDP_TO_X(ptr, field->offset, char *) = isnull ? NULL : (copy ? strdup(json_get_string(value)) : (char *) json_get_string(value));
+}
+
+static json_value_t string_to_json(void *ptr, const model_field_t *field)
+{
+    char *v;
+
+    v = VOIDP_TO_X(ptr, field->offset, char *);
+    if (NULL == v) {
+        return json_null;
+    } else {
+        return json_string(v);
+    }
+}
+
+static struct {
+    void (*from_json)(json_value_t, bool, void *, const model_field_t *, bool);
+    json_value_t (*to_json)(void *, const model_field_t *);
+} model_types_callbacks[] = {
+    [ MODEL_TYPE_INT ]      = { int_from_json, int_to_json },
+    [ MODEL_TYPE_BOOL ]     = { bool_from_json, bool_to_json },
+    [ MODEL_TYPE_DATE ]     = { date_from_json, date_to_json },
+    [ MODEL_TYPE_ENUM ]     = { enum_from_json, enum_to_json },
+    [ MODEL_TYPE_STRING ]   = { string_from_json, string_to_json },
+    [ MODEL_TYPE_DATETIME ] = { datetime_from_json, datetime_to_json },
+};
+
+json_document_t *json_object_from_modelized(modelized_t *ptr)
+{
+    json_document_t *doc;
+
+    doc = NULL;
+    if (ptr->changed) {
+        json_value_t root;
+        const model_field_t *f;
+
+        for (f = ptr->model->fields; NULL != f->ovh_name; f++) {
+            if (!HAS_FLAG(f->flags, MODEL_FLAG_RO) && VOIDP_TO_X(ptr, f->offset + sizeof(model_type_size_map[f->type]), bool)) {
+                json_value_t v;
+
+                assert(f->type >= 0 && f->type <= _MODEL_TYPE_LAST);
+                assert(NULL != model_types_callbacks[f->type].to_json);
+
+                v = model_types_callbacks[f->type].to_json(ptr, f);
+                if (NULL == doc) {
+                    root = json_object();
+                    doc = json_document_new();
+                    json_document_set_root(doc, root);
+                }
+                json_object_set_property(root, f->ovh_name, v);
+            }
+        }
+    }
+
+    return doc;
+}
+
 void json_object_to_modelized(json_value_t object, modelized_t *ptr, bool copy, bool *nulls)
 {
     const model_field_t *f;
@@ -469,15 +595,16 @@ void json_object_to_modelized(json_value_t object, modelized_t *ptr, bool copy, 
             if (NULL != nulls) {
                 nulls[f - ptr->model->fields] = isnull;
             }
+#if 0
             switch (f->type) {
                 case MODEL_TYPE_BOOL:
-                    *((bool *) (((char *) ptr) + f->offset)) = json_true == propvalue;
+                    VOIDP_TO_X(ptr, f->offset, bool) = json_true == propvalue;
                     break;
                 case MODEL_TYPE_INT:
-                    *((int64_t *) (((char *) ptr) + f->offset)) = isnull ? 0 : json_get_integer(propvalue);
+                    VOIDP_TO_X(ptr, f->offset, int) = isnull ? 0 : json_get_integer(propvalue);
                     break;
                 case MODEL_TYPE_ENUM:
-                    *((int *) (((char *) ptr) + f->offset)) = isnull ? -1 : json_get_enum(propvalue, f->enum_values, -1);
+                    VOIDP_TO_X(ptr, f->offset, int) = isnull ? -1 : json_get_enum(propvalue, f->enum_values, -1);
                     break;
                 case MODEL_TYPE_DATE:
                 {
@@ -488,7 +615,7 @@ void json_object_to_modelized(json_value_t object, modelized_t *ptr, bool copy, 
                         // %F is equivalent to "%Y-%m-%d"
                         date_parse_to_timestamp(json_get_string(propvalue), "%F", &v);
                     }
-                    *((time_t *) (((char *) ptr) + f->offset)) = v;
+                    VOIDP_TO_X(ptr, f->offset, time_t) = v;
                     break;
                 }
                 case MODEL_TYPE_DATETIME:
@@ -504,35 +631,30 @@ void json_object_to_modelized(json_value_t object, modelized_t *ptr, bool copy, 
                         // between them (common form for RFC 822 date headers)
                         date_parse_to_timestamp(json_get_string(propvalue), "%FT%T%z", &v);
                     }
-                    *((time_t *) (((char *) ptr) + f->offset)) = v;
+                    VOIDP_TO_X(ptr, f->offset, time_t) = v;
                     break;
                 }
                 case MODEL_TYPE_STRING:
-                    *((char **) (((char *) ptr) + f->offset)) = isnull ? NULL : (copy ? strdup(json_get_string(propvalue)) : (char *) json_get_string(propvalue));
+                    VOIDP_TO_X(ptr, f->offset, char *) = isnull ? NULL : (copy ? strdup(json_get_string(propvalue)) : (char *) json_get_string(propvalue));
                     break;
                 default:
                     assert(FALSE);
                     break;
             }
+#else
+            assert(f->type >= 0 && f->type <= _MODEL_TYPE_LAST);
+            assert(NULL != model_types_callbacks[f->type].from_json);
+
+            model_types_callbacks[f->type].from_json(propvalue, isnull, ptr, f, copy);
+#endif
+#if 0
+            if (mark_changed) {
+                VOIDP_TO_X(ptr, f->offset + sizeof(model_type_size_map[f->type]), bool) = TRUE;
+            }
+#endif
         }
     }
 }
-
-#if 0
-size_t json_array_objects_to_modelized(json_value_t array, model_t model, char **ptr)
-{
-    Iterator it;
-    size_t count;
-
-    assert(JSON_TYPE_ARRAY == json_get_type(array));
-    count = 0;
-    // alloc array length * model->size or just call a callback?
-    *ptr = malloc(model->size);
-    // iterate and call json_object_to_modelized ?
-
-    return count;
-}
-#endif
 
 bool json_object_remove_property(json_value_t object, const char *key)
 {

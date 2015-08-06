@@ -158,6 +158,9 @@ typedef void *(*DupFunc)(const void *);
 #  define GRAY(str)   str
 # endif /* DEBUG */
 
+# define VOIDP_TO_X(/*void **/ ptr, /*size_t*/ offset, output_type) \
+    *((output_type *) (((char *) ptr) + offset))
+
 # define STRINGIFY(x) #x
 # define STRINGIFY_EXPANDED(x) STRINGIFY(x)
 

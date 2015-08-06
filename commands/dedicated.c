@@ -53,7 +53,7 @@ enum {
 
 static sqlite_statement_t statements[STMT_COUNT] = {
     [ STMT_DEDICATED_LIST ]            = DECL_STMT("SELECT * FROM dedicated WHERE accountId = ?", "i", ""),
-    [ STMT_DEDICATED_UPSERT ]          = DECL_STMT("INSERT OR REPLACE INTO dedicated(serverId, name, datacenter, professionalUse, supportLevel, commercialRange, ip, os, state, reverse, monitoring, rack, rootDevice, linkSpeed, bootId, engagedUpTo, contactBilling, expiration, contactTech, contactAdmin, creation, accountId) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", "isibisssisbssii" "isissi" "i", ""),
+    [ STMT_DEDICATED_UPSERT ]          = DECL_STMT("INSERT OR REPLACE INTO dedicated(serverId, name, datacenter, professionalUse, supportLevel, commercialRange, ip, os, state, reverse, monitoring, rack, rootDevice, linkSpeed, bootId, engagedUpTo, contactBilling, expiration, contactTech, contactAdmin, creation, accountId) VALUES(:serverId, :name, :datacenter, :professionalUse, :supportLevel, :commercialRange, :ip, :os, :state, :reverse, :monitoring, :rack, :rootDevice, :linkSpeed, :bootId, :engagedUpTo, :contactBilling, :expiration, :contactTech, :contactAdmin, :creation, :accountId)", "isibisssisbssii" "isissi" "i", ""),
     [ STMT_DEDICATED_GET_IP ]          = DECL_STMT("SELECT ip FROM dedicated WHERE accountId = ? AND name = ?", "is", "s"),
     [ STMT_DEDICATED_NEAR_EXPIRATION ] = DECL_STMT("SELECT julianday(datetime(expiration, 'unixepoch', 'localtime')) - julianday('now') AS days, name FROM dedicated WHERE accountId = ? AND days < 120", "i", "is"),
     [ STMT_DEDICATED_SET_REVERSE ]     = DECL_STMT("UPDATE dedicated SET reverse = ? WHERE accountId = ? AND name = ?", "sis", ""),
@@ -78,37 +78,37 @@ static sqlite_statement_t statements[STMT_COUNT] = {
 // describe a dedicated server
 typedef struct {
     modelized_t data;
-    int accountId;
-    int datacenter;
-    bool professionalUse;
-    int supportLevel;
-    char *ip;
-    char *name;
-    char *commercialRange;
-    char *os;
-    int state;
-    char *reverse;
-    int serverId;
-    bool monitoring;
-    char *rack;
-    char *rootDevice;
-    int linkSpeed;
-    int bootId;
-    time_t engagedUpTo;
-    char *contactBilling;
-    time_t expiration;
-    char *contactTech;
-    char *contactAdmin;
-    time_t creation;
+    DECL_MEMBER_INT(accountId);
+    DECL_MEMBER_INT(datacenter);
+    DECL_MEMBER_BOOL(professionalUse);
+    DECL_MEMBER_INT(supportLevel);
+    DECL_MEMBER_STRING(ip);
+    DECL_MEMBER_STRING(name);
+    DECL_MEMBER_STRING(commercialRange);
+    DECL_MEMBER_STRING(os);
+    DECL_MEMBER_INT(state);
+    DECL_MEMBER_STRING(reverse);
+    DECL_MEMBER_INT(serverId);
+    DECL_MEMBER_BOOL(monitoring);
+    DECL_MEMBER_STRING(rack);
+    DECL_MEMBER_STRING(rootDevice);
+    DECL_MEMBER_INT(linkSpeed);
+    DECL_MEMBER_INT(bootId);
+    DECL_MEMBER_DATE(engagedUpTo);
+    DECL_MEMBER_STRING(contactBilling);
+    DECL_MEMBER_DATE(expiration);
+    DECL_MEMBER_STRING(contactTech);
+    DECL_MEMBER_STRING(contactAdmin);
+    DECL_MEMBER_DATE(creation);
 } server_t;
 
 // describe a boot
 typedef struct {
     modelized_t data;
-    int bootType;
-    int bootId;
-    const char *kernel;
-    const char *description;
+    DECL_MEMBER_INT(bootType);
+    DECL_MEMBER_INT(bootId);
+    DECL_MEMBER_STRING(kernel);
+    DECL_MEMBER_STRING(description);
 } boot_t;
 
 // arguments
@@ -194,7 +194,7 @@ static model_t *server_model, *boot_model, *task_model;
 #undef DECL_FIELD_STRUCT_NAME
 #define DECL_FIELD_STRUCT_NAME server_t
 static model_field_t server_fields[] = {
-    DECL_FIELD_INT(N_("accountId"), accountId, MODEL_FLAG_INTERNAL),
+//     DECL_FIELD_INT(N_("accountId"), accountId, MODEL_FLAG_INTERNAL),
     DECL_FIELD_INT(N_("serverId"), serverId, MODEL_FLAG_PRIMARY | MODEL_FLAG_INTERNAL),
     DECL_FIELD_STRING(N_("name"), name, MODEL_FLAG_UNIQUE),
     DECL_FIELD_ENUM(N_("datacenter"), datacenter, 0, datacenters),
@@ -510,11 +510,12 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
                         current_account->id
                     );
                     statement_fetch(&statements[STMT_DEDICATED_UPSERT], error);
+                    success = NULL == *error;
                     json_document_destroy(doc);
                 }
             }
-            json_document_destroy(doc);
             success = fetch_server_boots(&s, error);
+            json_document_destroy(doc);
         }
     }
 

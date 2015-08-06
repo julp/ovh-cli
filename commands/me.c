@@ -46,11 +46,11 @@ static model_t *contract_model, *application_model;
 
 typedef struct {
     modelized_t data;
-    int status;
-    char *name;
-    int applicationId;
-    char *description;
-    char *applicationKey;
+    DECL_MEMBER_ENUM(status);
+    DECL_MEMBER_STRING(name);
+    DECL_MEMBER_INT(applicationId);
+    DECL_MEMBER_STRING(description);
+    DECL_MEMBER_STRING(applicationKey);
 } me_application_t;
 
 #undef DECL_FIELD_STRUCT_NAME
@@ -66,15 +66,15 @@ static model_field_t application_fields[] = {
 
 typedef struct {
     modelized_t data;
-    int agreed;
-    time_t date2;
-    int id;
-    int contractId;
-    time_t date;
-    char *text;
-    char *pdf;
-    char *name;
-    bool active;
+    DECL_MEMBER_ENUM(agreed);
+    DECL_MEMBER_DATETIME(date2);
+    DECL_MEMBER_INT(id);
+    DECL_MEMBER_INT(contractId);
+    DECL_MEMBER_DATE(date);
+    DECL_MEMBER_STRING(text);
+    DECL_MEMBER_STRING(pdf);
+    DECL_MEMBER_STRING(name);
+    DECL_MEMBER_BOOL(active);
 } contract_t;
 
 /**
