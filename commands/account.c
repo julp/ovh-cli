@@ -645,9 +645,13 @@ static command_status_t application_delete(COMMAND_ARGS)
     USED(error);
     USED(mainopts);
     application = (application_t *) arg;
-
+#if 0
     statement_bind(&statements[STMT_APPLICATION_DELETE], NULL, application->endpoint_id);
     statement_fetch(&statements[STMT_APPLICATION_DELETE], error);
+#else
+    application->data.model = application_model; // graph_command_dispatch doesn't set model
+    modelized_delete((modelized_t *) application, error);
+#endif
     success = 0 != sqlite_affected_rows();
     if (!success) {
         error_set(error, NOTICE, _("no application associated to endpoint %s"), endpoint_names[application->endpoint_id]);

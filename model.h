@@ -127,8 +127,8 @@ struct model_backend_t {
     void *(*init)(const model_t *, error_t **);
     void (*free)(void *);
 //     bool (*all)(Iterator *, void *, error_t **); // select for list
-    bool (*save)(modelized_t *, void *, error_t **); // insert/update (upsert?) for add, update and result of listing HTTP query?
-//     bool (*delete)(modelized_t *, void *, error_t **); // removal
+    bool (*save)(modelized_t *, void *, error_t **);
+    bool (*delete)(modelized_t *, void *, error_t **);
 //     bool (*preload)(void *, error_t **); // run listing HTTP query? (only for RAM, not SQLite backend)
 //     bool (*find_by_name)(const char *name, modelized_t **, void *, error_t **); // completion and/or arguments parsing?
 };
@@ -136,6 +136,7 @@ struct model_backend_t {
 extern const size_t model_type_size_map[];
 
 bool modelized_save(modelized_t *, error_t **);
+bool modelized_delete(modelized_t *, error_t **);
 modelized_t *modelized_copy(modelized_t *);
 model_t *model_new(const char *, size_t, model_field_t *, size_t, model_backend_t *, error_t **);
 void model_destroy(model_t *);

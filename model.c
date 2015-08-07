@@ -84,10 +84,10 @@ modelized_t *modelized_new(const model_t *model)
 }
 
 /**
- * TODO
+ * Persists a data (a new one or save changes)
  *
- * @param ptr
- * @param error
+ * @param ptr the data to delete
+ * @param error the error to populate on failure
  *
  * @return FALSE on failure
  */
@@ -95,6 +95,23 @@ bool modelized_save(modelized_t *ptr, error_t **error)
 {
     if (NULL != ptr->model->backend && NULL != ptr->model->backend->save) {
         return ptr->model->backend->save(ptr, ptr->model->backend_data, error);
+    }
+
+    return FALSE;
+}
+
+/**
+ * Delete a data from its backend
+ *
+ * @param ptr the data to delete
+ * @param error the error to populate on failure
+ *
+ * @return FALSE on failure
+ */
+bool modelized_delete(modelized_t *ptr, error_t **error)
+{
+    if (NULL != ptr->model->backend && NULL != ptr->model->backend->delete) {
+        return ptr->model->backend->delete(ptr, ptr->model->backend_data, error);
     }
 
     return FALSE;

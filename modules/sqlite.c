@@ -1013,33 +1013,6 @@ static char *model_to_sql_delete(const model_t *model)
     return string_orphan(buffer);
 }
 
-bool modelized_delete(modelized_t *obj, error_t **error)
-{
-    char *sql;
-    bool success;
-//     sqlite3_stmt *stmt;
-
-    assert(NULL != obj);
-    assert(NULL != obj->model);
-
-    sql = model_to_sql_delete(obj->model); // TODO: do it once at model creation (model_new)
-    {
-        sqlite_statement_t stmt = DECL_STMT(sql, "", "");
-
-        success = SQLITE_OK == sqlite3_prepare_v2(db, stmt.statement, -1, &stmt.prepared, NULL);
-        if (success) {
-            statement_bind_from_model(&stmt, NULL, obj);
-            success = statement_fetch_to_model(&stmt, obj, FALSE, error); // TODO: just do a sqlite3_step instead?
-            sqlite3_finalize(stmt.prepared);
-        } else {
-            error_set(error, WARN, _("%s for %s"), sqlite3_errmsg(db), sqlite3_sql(stmt.prepared));
-        }
-    }
-    free(sql);
-
-    return success;
-}
-
 enum {
     STMT_BACKEND_INSERT,
     STMT_BACKEND_UPSERT,
@@ -1120,10 +1093,27 @@ static bool sqlite_backend_save(modelized_t *obj, void *data, error_t **error)
     return success;
 }
 
+static bool sqlite_backend_delete(modelized_t *obj, void *data, error_t **error)
+{
+    bool success;
+    sqlite_statement_t *stmts;
+
+    assert(NULL != obj);
+    assert(NULL != obj->model);
+    assert(NULL != data);
+
+    stmts = (sqlite_statement_t *) data;
+    statement_bind_from_model(&stmts[STMT_BACKEND_DELETE], NULL, obj);
+    success = statement_fetch_to_model(&stmts[STMT_BACKEND_DELETE], obj, FALSE, error); // TODO: just do a sqlite3_step instead?
+
+    return success;
+}
+
 model_backend_t sqlite_backend = {
     sqlite_backend_init,
     sqlite_backend_free,
     sqlite_backend_save,
+    sqlite_backend_delete,
 };
 
 static void sqlite_startswith(sqlite3_context *context, int argc, sqlite3_value **argv)
