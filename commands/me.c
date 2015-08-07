@@ -136,11 +136,11 @@ static void me_on_set_account(void **data)
     }
 }
 
-static bool me_ctor(error_t **UNUSED(error))
+static bool me_ctor(error_t **error)
 {
     account_register_module_callbacks(MODULE_NAME, account_me_data_dtor, me_on_set_account);
-    contract_model = model_new("contracts", sizeof(contract_t), contract_fields, ARRAY_SIZE(contract_fields) - 1);
-    application_model = model_new("applications", sizeof(me_application_t), application_fields, ARRAY_SIZE(application_fields) - 1);
+    contract_model = model_new("contracts", sizeof(contract_t), contract_fields, ARRAY_SIZE(contract_fields) - 1, NULL, error);
+    application_model = model_new("applications", sizeof(me_application_t), application_fields, ARRAY_SIZE(application_fields) - 1, NULL, error);
 
     return TRUE;
 }

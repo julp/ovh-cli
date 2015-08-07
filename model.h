@@ -99,7 +99,11 @@ typedef struct {
 #define MODEL_FIELD_SENTINEL \
     { NULL, NULL, 0, 0, 0, NULL, 0 }
 
-typedef struct {
+typedef struct model_t model_t;
+typedef struct modelized_t modelized_t;
+typedef struct model_backend_t model_backend_t;
+
+struct model_t {
     size_t size;
     const char *name;
     const char *(*to_name)(void *); // ou simplement size_t vers offsetof du model_field_t utiliser ?
@@ -107,30 +111,33 @@ typedef struct {
     const model_field_t *fields;
     size_t fields_count;
     const model_field_t *pk;
-} model_t;
+    void *backend_data;
+    model_backend_t *backend;
+};
 
-typedef struct {
+struct modelized_t {
     bool changed;
     bool persisted;
     const model_t *model;
-} modelized_t;
+};
 
-#if 0
-typedef struct {
-    void *data; // For RAM: the hashtable?
-    bool (*init)(void *, error_t *); // model initialization? For SQLite: precalculate SQL statements?
-    bool (*all)(Iterator *, void *, error_t *); // select for list
-    bool (*save)(modelized_t *, void *, error_t *); // insert/update (upsert?) for add, update and result of listing HTTP query?
-    bool (*delete)(modelized_t *, void *, error_t *); // removal
-    bool (*preload)(void *, error_t *); // run listing HTTP query? (only for RAM, not SQLite backend)
-    bool (*find_by_name)(const char *name, modelized_t **, void *, error_t *); // completion and/or arguments parsing?
-} model_backend_t;
-#endif
+// # include "struct/iterator.h"
+
+struct model_backend_t {
+    void *(*init)(const model_t *, error_t **);
+    void (*free)(void *);
+//     bool (*all)(Iterator *, void *, error_t **); // select for list
+    bool (*save)(modelized_t *, void *, error_t **); // insert/update (upsert?) for add, update and result of listing HTTP query?
+//     bool (*delete)(modelized_t *, void *, error_t **); // removal
+//     bool (*preload)(void *, error_t **); // run listing HTTP query? (only for RAM, not SQLite backend)
+//     bool (*find_by_name)(const char *name, modelized_t **, void *, error_t **); // completion and/or arguments parsing?
+};
 
 extern const size_t model_type_size_map[];
 
+bool modelized_save(modelized_t *, error_t **);
 modelized_t *modelized_copy(modelized_t *);
-model_t *model_new(const char *, size_t, model_field_t *, size_t);
+model_t *model_new(const char *, size_t, model_field_t *, size_t, model_backend_t *, error_t **);
 void model_destroy(model_t *);
 
 const model_field_t *model_find_field_by_name(const model_t *, const char *, size_t);

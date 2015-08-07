@@ -3,7 +3,6 @@
 #include <string.h>
 #include <strings.h>
 #include "model.h"
-#include "common.h"
 
 const size_t model_type_size_map[] = {
     [ MODEL_TYPE_INT ]      = sizeof(int),
@@ -85,6 +84,23 @@ modelized_t *modelized_new(const model_t *model)
 }
 
 /**
+ * TODO
+ *
+ * @param ptr
+ * @param error
+ *
+ * @return FALSE on failure
+ */
+bool modelized_save(modelized_t *ptr, error_t **error)
+{
+    if (NULL != ptr->model->backend && NULL != ptr->model->backend->save) {
+        return ptr->model->backend->save(ptr, ptr->model->backend_data, error);
+    }
+
+    return FALSE;
+}
+
+/**
  * Copy a data which is described by a model
  *
  * @param src the data to copy
@@ -152,7 +168,7 @@ const model_field_t *model_find_field_by_name(const model_t *model, const char *
  *
  * @return the allocated model
  */
-model_t *model_new(const char *name, size_t size, model_field_t *fields, size_t fields_count)
+model_t *model_new(const char *name, size_t size, model_field_t *fields, size_t fields_count, model_backend_t *backend, error_t **error)
 {
     model_t *model;
 
@@ -173,6 +189,11 @@ model_t *model_new(const char *name, size_t size, model_field_t *fields, size_t 
             }
         }
     }
+    model->backend = backend;
+    model->backend_data = NULL;
+    if (NULL != model->backend && NULL != model->backend->init) {
+        model->backend_data = model->backend->init(model, error);
+    }
 
     return model;
 }
@@ -184,6 +205,9 @@ model_t *model_new(const char *name, size_t size, model_field_t *fields, size_t 
  */
 void model_destroy(model_t *model)
 {
+    if (NULL != model->backend && NULL != model->backend->free) {
+        model->backend->free(model->backend_data);
+    }
     free(model);
 }
 
@@ -191,6 +215,22 @@ void model_destroy(model_t *model)
 void modelized_belongs_to(modelized_t *owner, modelized_t *owned)
 {
     //
+}
+
+void modelized_has_one(modelized_t *owner, modelized_t *owned, bool reverse)
+{
+    //
+    if (reverse) {
+        modelized_belongs_to(owner, owned);
+    }
+}
+
+void modelized_has_many(modelized_t *owner, modelized_t *owned, bool reverse)
+{
+    //
+    if (reverse) {
+        modelized_belongs_to(owner, owned);
+    }
 }
 
 void modelized_name_to_s(modelized_t *ptr, char *buffer, size_t buffer_size)

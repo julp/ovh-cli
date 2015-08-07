@@ -193,8 +193,8 @@ static model_field_t record_fields[] = {
 
 static bool domain_ctor(error_t **error)
 {
-    domain_model = model_new("domains", sizeof(domain_t), domain_fields, ARRAY_SIZE(domain_fields) - 1);
-    record_model = model_new("records", sizeof(record_t), record_fields, ARRAY_SIZE(record_fields) - 1);
+    domain_model = model_new("domains", sizeof(domain_t), domain_fields, ARRAY_SIZE(domain_fields) - 1, NULL, error);
+    record_model = model_new("records", sizeof(record_t), record_fields, ARRAY_SIZE(record_fields) - 1, NULL, error);
     record_model->to_s = record_to_s;
     record_model->to_name = record_to_name;
 
@@ -240,7 +240,7 @@ static bool domain_ctor(error_t **error)
         return FALSE;
     }
 
-    if (!statement_batched_prepare(statements, STMT_COUNT, error)) {
+    if (!statement_batched_prepare(statements, STMT_COUNT, FALSE, error)) {
         return FALSE;
     }
 
@@ -249,7 +249,7 @@ static bool domain_ctor(error_t **error)
 
 static void domain_dtor(void)
 {
-    statement_batched_finalize(statements, STMT_COUNT);
+    statement_batched_finalize(statements, STMT_COUNT, FALSE);
     model_destroy(domain_model);
     model_destroy(record_model);
 }

@@ -21,6 +21,8 @@ typedef struct {
     sqlite3_stmt *prepared;
 } sqlite_statement_t;
 
+model_backend_t sqlite_backend;
+
 #define DECL_STMT(sql, inbinds, outbinds) \
     { sql, inbinds, outbinds, NULL }
 
@@ -33,12 +35,11 @@ void statement_bind(sqlite_statement_t *, const bool *, ...);
 void statement_bind_from_model(sqlite_statement_t *, const bool *, modelized_t *);
 bool statement_fetch(sqlite_statement_t *, error_t **, ...);
 bool statement_fetch_to_model(sqlite_statement_t *, modelized_t *, bool, error_t **);
-void statement_batched_finalize(sqlite_statement_t *, size_t);
-bool statement_batched_prepare(sqlite_statement_t *, size_t, error_t **);
+void statement_batched_finalize(sqlite_statement_t *, size_t, bool);
+bool statement_batched_prepare(sqlite_statement_t *, size_t, bool, error_t **);
 void statement_to_iterator(Iterator *, sqlite_statement_t *, ...);
 void statement_model_to_iterator(Iterator *, sqlite_statement_t *, const model_t *, bool);
 
-bool modelized_save(modelized_t *, error_t **);
 bool modelized_delete(modelized_t *, error_t **);
 command_status_t statement_to_table(const model_t *, sqlite_statement_t *);
 bool complete_from_modelized(const model_t *, sqlite_statement_t *, completer_t *);

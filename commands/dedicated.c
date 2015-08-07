@@ -194,7 +194,6 @@ static model_t *server_model, *boot_model, *task_model;
 #undef DECL_FIELD_STRUCT_NAME
 #define DECL_FIELD_STRUCT_NAME server_t
 static model_field_t server_fields[] = {
-//     DECL_FIELD_INT(N_("accountId"), accountId, MODEL_FLAG_INTERNAL),
     DECL_FIELD_INT(N_("serverId"), serverId, MODEL_FLAG_PRIMARY | MODEL_FLAG_INTERNAL),
     DECL_FIELD_STRING(N_("name"), name, MODEL_FLAG_UNIQUE),
     DECL_FIELD_ENUM(N_("datacenter"), datacenter, 0, datacenters),
@@ -216,6 +215,7 @@ static model_field_t server_fields[] = {
     DECL_FIELD_STRING(N_("contactTech"), contactTech, 0),
     DECL_FIELD_STRING(N_("contactAdmin"), contactAdmin, 0),
     DECL_FIELD_DATE(N_("creation"), creation, 0),
+    DECL_FIELD_INT(N_("accountId"), accountId, MODEL_FLAG_INTERNAL),
     MODEL_FIELD_SENTINEL
 };
 
@@ -284,13 +284,13 @@ static const char * const task_status[] = {
 
 typedef struct {
     modelized_t data;
-    int taskId;
-    int function;
-    time_t lastUpdate;
-    char *comment;
-    int status;
-    time_t startDate;
-    time_t doneDate;
+    DECL_MEMBER_INT(taskId);
+    DECL_MEMBER_INT(function);
+    DECL_MEMBER_DATETIME(lastUpdate);
+    DECL_MEMBER_STRING(comment);
+    DECL_MEMBER_ENUM(status);
+    DECL_MEMBER_DATETIME(startDate);
+    DECL_MEMBER_DATETIME(doneDate);
 } task_t;
 
 #undef DECL_FIELD_STRUCT_NAME
@@ -352,11 +352,11 @@ sqlite_migration_t dedicated_migrations[] = {
 
 static bool dedicated_ctor(error_t **error)
 {
-    boot_model = model_new("boots", sizeof(boot_t), boot_fields, ARRAY_SIZE(boot_fields) - 1);
-    boot_model->to_s = boot_to_s;
-    boot_model->to_name = boot_to_name;
-    task_model = model_new("tasks", sizeof(task_t), task_fields, ARRAY_SIZE(task_fields) - 1);
-    server_model = model_new("servers", sizeof(server_t), server_fields, ARRAY_SIZE(server_fields) - 1);
+    boot_model = model_new("boots", sizeof(boot_t), boot_fields, ARRAY_SIZE(boot_fields) - 1, NULL, error);
+    boot_model->to_s = boot_to_s; // TODO: temporary
+    boot_model->to_name = boot_to_name; // TODO: temporary
+    task_model = model_new("tasks", sizeof(task_t), task_fields, ARRAY_SIZE(task_fields) - 1, NULL, error);
+    server_model = model_new("servers", sizeof(server_t), server_fields, ARRAY_SIZE(server_fields) - 1, NULL, error);
 
     if (!create_or_migrate("boots", "CREATE TABLE boots(\n\
         bootId INTEGER NOT NULL PRIMARY KEY, -- OVH ID (bootId)\n\
@@ -406,7 +406,7 @@ static bool dedicated_ctor(error_t **error)
         return FALSE;
     }
 
-    if (!statement_batched_prepare(statements, STMT_COUNT, error)) {
+    if (!statement_batched_prepare(statements, STMT_COUNT, FALSE, error)) {
         return FALSE;
     }
 
@@ -415,7 +415,7 @@ static bool dedicated_ctor(error_t **error)
 
 static void dedicated_dtor(void)
 {
-    statement_batched_finalize(statements, STMT_COUNT);
+    statement_batched_finalize(statements, STMT_COUNT, FALSE);
     model_destroy(boot_model);
     model_destroy(task_model);
     model_destroy(server_model);

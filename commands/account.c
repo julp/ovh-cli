@@ -125,7 +125,7 @@ static model_field_t account_fields[] = {
 static model_field_t application_fields[] = {
     DECL_FIELD_STRING(N_("key"), app_key, 0),
     DECL_FIELD_STRING(N_("secret"), secret, 0),
-    DECL_FIELD_ENUM(N_("endpoint"), endpoint_id, MODEL_FLAG_UNIQUE, endpoint_names),
+    DECL_FIELD_ENUM(N_("endpoint"), endpoint_id, MODEL_FLAG_PRIMARY, endpoint_names),
     MODEL_FIELD_SENTINEL
 };
 
@@ -359,8 +359,8 @@ static bool account_early_ctor(error_t **error)
 {
     account_flush();
 
-    account_model = model_new("accounts", sizeof(account_t), account_fields, ARRAY_SIZE(account_fields) - 1);
-    application_model = model_new("applications", sizeof(application_t), application_fields, ARRAY_SIZE(application_fields) - 1);
+    account_model = model_new("accounts", sizeof(account_t), account_fields, ARRAY_SIZE(account_fields) - 1, NULL, error);
+    application_model = model_new("applications", sizeof(application_t), application_fields, ARRAY_SIZE(application_fields) - 1, &sqlite_backend, error);
 
     if (!create_or_migrate("accounts", "CREATE TABLE accounts(\n\
         id INTEGER NOT NULL PRIMARY KEY,\n\
@@ -389,7 +389,7 @@ static bool account_early_ctor(error_t **error)
         return FALSE;
     }
 
-    if (!statement_batched_prepare(statements, STMT_COUNT, error)) {
+    if (!statement_batched_prepare(statements, STMT_COUNT, FALSE, error)) {
         return FALSE;
     }
 
@@ -419,7 +419,7 @@ static void account_dtor(void)
     account_flush();
     model_destroy(account_model);
     model_destroy(application_model);
-    statement_batched_finalize(statements, STMT_COUNT);
+    statement_batched_finalize(statements, STMT_COUNT, FALSE);
 }
 
 static command_status_t account_list(COMMAND_ARGS)
@@ -626,9 +626,13 @@ static command_status_t application_add(COMMAND_ARGS)
     assert(NULL != application->key);
     assert(NULL != application->secret);
     application->data.model = application_model; // graph_command_dispatch doesn't set model
+#if 0
     statement_bind_from_model(&statements[STMT_APPLICATION_INSERT], NULL, (modelized_t *) application);
     statement_fetch(&statements[STMT_APPLICATION_INSERT], error);
     // TODO: if !update (0 == sqlite_affected_rows), duplicate?
+#else
+    modelized_save((modelized_t *) application, error);
+#endif
 
     return CMD_FLAG_SKIP_HISTORY | (NULL == *error ? COMMAND_SUCCESS : COMMAND_FAILURE);
 }
