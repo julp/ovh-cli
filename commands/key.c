@@ -25,8 +25,9 @@ typedef struct {
 } key_set_t;
 
 typedef struct {
-    bool default_key;
-    const char *key;
+    DECL_MEMBER_BOOL(isDefault);
+    DECL_MEMBER_STRING(keyName);
+    DECL_MEMBER_STRING(key);
 } ssh_key_t; /* key_t is already used by ftok */
 
 typedef struct {
@@ -35,6 +36,105 @@ typedef struct {
     const char *name;
     const char *value;
 } key_argument_t;
+
+#undef DECL_FIELD_STRUCT_NAME
+#define DECL_FIELD_STRUCT_NAME ssh_key_t
+static model_field_t key_fields[] = {
+//     DECL_FIELD_BOOL(N_("default"), default, 0),
+    DECL_FIELD_SIMPLE(N_("default"), "default", isDefault, MODEL_TYPE_BOOL, 0),
+    DECL_FIELD_STRING(N_("keyName"), keyName, MODEL_FLAG_PRIMARY),
+    DECL_FIELD_STRING(N_("key"), key, 0),
+    MODEL_FIELD_SENTINEL
+};
+
+static model_t *key_model;
+
+typedef struct {
+    const char *module_name;
+    size_t hashtable_offset;
+//     size_t uptodate_offset;
+} hashtable_backend_data_t;
+
+static void *hashtable_backend_init(const model_t *UNUSED(model), error_t **UNUSED(error))
+{
+    hashtable_backend_data_t *hbd;
+
+    hbd = mem_new(*hbd);
+    hbd->module_name = MODULE_NAME;
+    hbd->hashtable_offset = offsetof(key_set_t, keys);
+//     hbd->uptodate_offset = offsetof(key_set_t, uptodate);
+
+    return hbd;
+}
+
+static void hashtable_backend_free(void *data)
+{
+    free(data);
+}
+
+static bool hashtable_backend_save(modelized_t *obj, void *data, error_t **UNUSED(error))
+{
+    void *p;
+    bool put;
+    hashtable_backend_data_t *hbd;
+
+    p = NULL;
+    put = FALSE;
+    hbd = (hashtable_backend_data_t *) data;
+    account_current_get_data(hbd->module_name, (void **) &p);
+    if (NULL != p) {
+        char name[MAX_MODELIZED_NAME_LENGTH];
+
+        modelized_name_to_s(obj, name, ARRAY_SIZE(name));
+        put = hashtable_put(VOIDP_TO_X(p, hbd->hashtable_offset, HashTable *), 0, name, obj, NULL);
+//         if (!put) {
+//             error_set(); // ?
+//         }
+    }
+
+    return put;
+}
+
+static bool hashtable_backend_delete(modelized_t *obj, void *data, error_t **UNUSED(error))
+{
+    void *p;
+    hashtable_backend_data_t *hbd;
+
+    p = NULL;
+    hbd = (hashtable_backend_data_t *) data;
+    account_current_get_data(hbd->module_name, (void **) &p);
+    if (NULL != p) {
+        char name[MAX_MODELIZED_NAME_LENGTH];
+
+        modelized_name_to_s(obj, name, ARRAY_SIZE(name));
+        return hashtable_delete(VOIDP_TO_X(p, hbd->hashtable_offset, HashTable *), name, TRUE);
+    }
+
+    return FALSE;
+}
+
+static bool hashtable_backend_all(Iterator *it, const model_t *UNUSED(model), void *data, error_t **UNUSED(error))
+{
+    void *p;
+    hashtable_backend_data_t *hbd;
+
+    p = NULL;
+    hbd = (hashtable_backend_data_t *) data;
+    account_current_get_data(hbd->module_name, (void **) &p);
+    if (NULL != p) {
+        hashtable_to_iterator(it, VOIDP_TO_X(p, hbd->hashtable_offset, HashTable *));
+    }
+
+    return NULL != p;
+}
+
+model_backend_t hashtable_backend = {
+    hashtable_backend_init,
+    hashtable_backend_free,
+    hashtable_backend_all,
+    hashtable_backend_save,
+    hashtable_backend_delete,
+};
 
 static void key_set_destroy(void *data)
 {
@@ -48,28 +148,6 @@ static void key_set_destroy(void *data)
     free(ks);
 }
 
-static void key_destroy(void *data)
-{
-    ssh_key_t *k;
-
-    assert(NULL != data);
-
-    k = (ssh_key_t *) data;
-    FREE(k, key);
-    free(k);
-}
-
-static ssh_key_t *key_new(void)
-{
-    ssh_key_t *k;
-
-    k = mem_new(*k);
-    INIT(k, key);
-    k->default_key = FALSE;
-
-    return k;
-}
-
 static void key_on_set_account(void **data)
 {
     if (NULL == *data) {
@@ -77,135 +155,113 @@ static void key_on_set_account(void **data)
 
         ks = mem_new(*ks);
         ks->uptodate = FALSE;
-        ks->keys = hashtable_ascii_cs_new((DupFunc) strdup, free, key_destroy);
+        ks->keys = hashtable_ascii_cs_new(NULL, NULL, (DtorFunc) modelized_destroy);
         *data = ks;
     }
 }
 
-static bool key_ctor(error_t **UNUSED(error))
+static bool key_ctor(error_t **error)
 {
+    key_model = model_new("keys", sizeof(ssh_key_t), key_fields, ARRAY_SIZE(key_fields) - 1, "keyName", &hashtable_backend, error);
+
     account_register_module_callbacks(MODULE_NAME, key_set_destroy, key_on_set_account);
 
     return TRUE;
 }
 
-static command_status_t fetch_keys(key_set_t *ks, bool force, error_t **error)
+static void key_dtor(void)
 {
+    model_destroy(key_model);
+}
+
+static bool fetch_keys(key_set_t *ks, bool force, error_t **error)
+{
+    bool success;
+
+    success = TRUE;
     if (!ks->uptodate || force) {
         request_t *req;
-        bool request_success;
         json_document_t *doc;
 
         req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me/sshKey");
-        request_success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+        success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
-        if (request_success) {
+        if (success) {
             Iterator it;
             json_value_t root;
 
             root = json_document_get_root(doc);
             hashtable_clear(ks->keys);
             json_array_to_iterator(&it, root);
-            for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
+            for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
                 ssh_key_t *k;
                 request_t *req;
                 json_value_t v;
-                json_value_t root;
                 json_document_t *doc;
 
-                k = key_new();
+                k = (ssh_key_t *) modelized_new(key_model);
+                MODELIZED_SET_STRING(k, keyName, json_get_string(v));
                 v = (json_value_t) iterator_current(&it, NULL);
-                hashtable_put(ks->keys, 0, json_get_string(v), k, NULL); // ks->keys has strdup as key_duper, don't need to strdup it ourself
-                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me/sshKey/%s", json_get_string(v));
-                request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+                hashtable_put(ks->keys, 0, k->keyName, k, NULL);
+                req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me/sshKey/%s", k->keyName);
+                success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
                 request_destroy(req);
-                root = json_document_get_root(doc);
-                JSON_GET_PROP_BOOL(root, "default", k->default_key);
-                JSON_GET_PROP_STRING(root, "key", k->key);
+                json_object_to_modelized(json_document_get_root(doc), (modelized_t *) k, FALSE);
                 json_document_destroy(doc);
             }
             iterator_close(&it);
             ks->uptodate = TRUE;
             json_document_destroy(doc);
-        } else {
-            return COMMAND_FAILURE;
         }
     }
 
-    return COMMAND_SUCCESS;
+    return success;
 }
 
 // key list
 static command_status_t key_list(COMMAND_ARGS)
 {
-    table_t *t;
-    Iterator it;
     key_set_t *ks;
-    command_status_t ret;
     key_argument_t *args;
 
     USED(mainopts);
     args = (key_argument_t *) arg;
     FETCH_ACCOUNT_KEYS(ks);
     // populate
-    if (COMMAND_SUCCESS != (ret = fetch_keys(ks, args->nocache, error))) {
-        return ret;
+    if (!fetch_keys(ks, args->nocache, error)) {
+        return COMMAND_FAILURE;
     }
     // display
-    t = table_new(
-        3,
-        _("name"), TABLE_TYPE_STRING,
-        _("default"), TABLE_TYPE_BOOLEAN,
-        _("key"), TABLE_TYPE_STRING
-    );
-    hashtable_to_iterator(&it, ks->keys);
-    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        ssh_key_t *k;
-        const char *name;
-
-        k = iterator_current(&it, (void **) &name);
-        table_store(t, name, k->default_key, k->key);
-    }
-    iterator_close(&it);
-    table_display(t, TABLE_FLAG_NONE);
-    table_destroy(t);
-
-    return COMMAND_SUCCESS;
+    return model_to_table(key_model, error);
 }
 
 // key <name> add <value>
 static command_status_t key_add(COMMAND_ARGS)
 {
     bool success;
+    ssh_key_t *k;
     key_set_t *ks;
     request_t *req;
     key_argument_t *args;
     json_document_t *reqdoc;
 
     USED(mainopts);
+    success = TRUE;
     FETCH_ACCOUNT_KEYS(ks);
     args = (key_argument_t *) arg;
     assert(NULL != args->name);
     assert(NULL != args->value);
-    reqdoc = json_document_new();
-    {
-        json_value_t root;
-
-        root = json_object();
-        json_object_set_property(root, "key", json_string(args->value));
-        json_object_set_property(root, "keyName", json_string(args->name));
-        json_document_set_root(reqdoc, root);
-    }
-    req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, error, API_BASE_URL "/me/sshKey");
-    success = request_execute(req, RESPONSE_IGNORE, NULL, error);
-    request_destroy(req);
-    json_document_destroy(reqdoc);
-    if (success) {
-        ssh_key_t *k;
-
-        k = key_new();
-        k->key = strdup(args->value);
-        hashtable_put(ks->keys, 0, args->name, k, NULL);
+    k = (ssh_key_t *) modelized_new(key_model);
+    MODELIZED_SET_STRING(k, key, args->value);
+    MODELIZED_SET_STRING(k, keyName, args->name);
+    if (NULL != (reqdoc = json_object_from_modelized((modelized_t *) k))) {
+        req = request_new(REQUEST_FLAG_SIGN | REQUEST_FLAG_JSON, HTTP_POST, reqdoc, error, API_BASE_URL "/me/sshKey");
+        success = request_execute(req, RESPONSE_IGNORE, NULL, error);
+        request_destroy(req);
+        json_document_destroy(reqdoc);
+        if (success) {
+            success = modelized_save((modelized_t *) k, error);
+        }
     }
 
     return success ? COMMAND_SUCCESS : COMMAND_FAILURE;
@@ -228,7 +284,7 @@ static command_status_t key_delete(COMMAND_ARGS)
         success = request_execute(req, RESPONSE_IGNORE, NULL, error);
         request_destroy(req);
         if (success) {
-            hashtable_delete(ks->keys, args->name, TRUE);
+            hashtable_delete(ks->keys, args->name, TRUE); // TODO: modelized_delete();
         }
     }
 
@@ -270,12 +326,12 @@ static command_status_t key_default(COMMAND_ARGS)
             hashtable_to_iterator(&it, ks->keys);
             for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
                 k = iterator_current(&it, NULL);
-                k->default_key = FALSE;
+                MODELIZED_SET(k, isDefault, FALSE);
             }
             iterator_close(&it);
         }
-        if (hashtable_get(ks->keys, args->name, &k)) {
-            k->default_key = args->on_off;
+        if (hashtable_get(ks->keys, args->name, &k)) { // TODO: find_by_name
+            MODELIZED_SET(k, isDefault, args->on_off);
         }
     }
 
@@ -332,5 +388,5 @@ DECLARE_MODULE(key) = {
     key_register_rules,
     key_ctor,
     NULL,
-    NULL
+    key_dtor
 };

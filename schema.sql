@@ -4,12 +4,12 @@ CREATE TABLE accounts(
     password TEXT, -- nullable
     consumer_key TEXT, -- nullable
     endpoint_id INTEGER NOT NULL,
-    is_default INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL
+    is_default INTEGER NOT NULL DEFAULT 0,
+    expires_at INTEGER
 );
 
 CREATE TABLE applications(
-    app_key TEXT NOT NULL,
+    "key" TEXT NOT NULL,
     secret TEXT NOT NULL,
     endpoint_id INTEGER NOT NULL UNIQUE
 );

@@ -158,14 +158,6 @@ static model_field_t domain_fields[] = {
     MODEL_FIELD_SENTINEL
 };
 
-static const char *record_to_name(void *ptr)
-{
-    record_t *r;
-
-    r = (record_t *) ptr;
-    return strdup('\0' == *r->subDomain ? "\"\"" : r->subDomain);
-}
-
 static const char *record_to_s(void *ptr)
 {
     record_t *r;
@@ -193,11 +185,6 @@ static model_field_t record_fields[] = {
 
 static bool domain_ctor(error_t **error)
 {
-    domain_model = model_new("domains", sizeof(domain_t), domain_fields, ARRAY_SIZE(domain_fields) - 1, NULL, error);
-    record_model = model_new("records", sizeof(record_t), record_fields, ARRAY_SIZE(record_fields) - 1, NULL, error);
-    record_model->to_s = record_to_s;
-    record_model->to_name = record_to_name;
-
     if (!create_or_migrate("domains", "CREATE TABLE domains(\n\
         accountId INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,\n\
         name TEXT NOT NULL,\n\
@@ -244,6 +231,10 @@ static bool domain_ctor(error_t **error)
         return FALSE;
     }
 
+    domain_model = model_new("domains", sizeof(domain_t), domain_fields, ARRAY_SIZE(domain_fields) - 1, "name", NULL, error);
+    record_model = model_new("records", sizeof(record_t), record_fields, ARRAY_SIZE(record_fields) - 1, "subDomain", NULL, error);
+    record_model->to_s = record_to_s;
+
     return TRUE;
 }
 
@@ -271,9 +262,9 @@ static bool parse_record(domain_t *UNUSED(domain), json_document_t *doc, error_t
     record_t record;
 
     modelized_init(record_model, (modelized_t *) &record);
-    json_object_to_modelized(json_document_get_root(doc), (modelized_t *) &record, FALSE, NULL);
+    json_object_to_modelized(json_document_get_root(doc), (modelized_t *) &record, FALSE);
 #if 1
-    statement_bind_from_model(&statements[STMT_RECORD_UPSERT], NULL, (modelized_t *) &record);
+    statement_bind_from_model(&statements[STMT_RECORD_UPSERT], (modelized_t *) &record);
     statement_fetch(&statements[STMT_RECORD_UPSERT], error);
 #else
     modelized_save((modelized_t *) &record, error);
@@ -342,7 +333,7 @@ static bool fetch_domain(const char * const domain_name, bool force, error_t **e
             success = request_execute(req, RESPONSE_JSON, (void **) &docs[i], error);
             request_destroy(req);
             if (success) {
-                json_object_to_modelized(json_document_get_root(docs[i]), (modelized_t *) &domain, FALSE, NULL);
+                json_object_to_modelized(json_document_get_root(docs[i]), (modelized_t *) &domain, FALSE);
             }
         }
         if (success) {
@@ -416,7 +407,7 @@ static command_status_t domain_list(COMMAND_ARGS)
     // display
     statement_bind(&statements[STMT_DOMAIN_LIST], NULL, current_account->id);
 
-    return statement_to_table(domain_model, &statements[STMT_DOMAIN_LIST]);
+    return model_to_table(domain_model, error);
 }
 
 static command_status_t domain_check(COMMAND_ARGS)
@@ -492,7 +483,7 @@ static command_status_t record_list(COMMAND_ARGS)
     // display
     statement_bind(&statements[STMT_RECORD_LIST], NULL, current_account->id, args->domain);
 
-    return statement_to_table(record_model, &statements[STMT_RECORD_LIST]);
+    return model_to_table(record_model, error);
 }
 
 // ./ovh domain domain.ext record toto add www type CNAME
@@ -584,13 +575,13 @@ static bool handle_conflict_on_record_name(const char *domain_name, const char *
                     fputs(_("Targetted record is ambiguous.\n"), stdout);
                     for (i = 0; i < l; i++) {
                         modelized_t *match;
-                        const char *name, *desc;
+                        const char *desc;
+                        char name[MAX_MODELIZED_NAME_LENGTH];
 
                         match = dptrarray_at_unsafe(ary, i, modelized_t);
-                        name = match->model->to_name(match);
+                        modelized_name_to_s(match, name, ARRAY_SIZE(name));
                         desc = match->model->to_s(match);
                         printf("    %2zu. %s - %s\n", i + 1, name, desc);
-                        free((void *) name);
                         free((void *) desc);
                     }
                     printf("    %2d. %s\n", 0, "Cancel");

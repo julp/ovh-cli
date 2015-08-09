@@ -15,12 +15,10 @@ typedef struct {
 
 typedef struct {
     modelized_t data;
-    DECL_MEMBER_STRING(app_key);
+    DECL_MEMBER_STRING(key);
     DECL_MEMBER_STRING(secret);
     DECL_MEMBER_ENUM(endpoint_id);
 } application_t;
-
-#define key app_key
 
 model_t *account_model;
 const account_t *current_account;

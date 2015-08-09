@@ -7,6 +7,7 @@
 #include "modules/home.h"
 #include "modules/table.h"
 #include "modules/sqlite.h"
+#include "commands/account.h"
 
 #ifdef HAVE_LIBBSD_STRLCPY
 # include <bsd/string.h>
@@ -614,7 +615,7 @@ void statement_bind(sqlite_statement_t *stmt, const bool *nulls, ...)
  * @param nulls
  * @param ptr
  */
-void statement_bind_from_model(sqlite_statement_t *stmt, const bool *nulls, modelized_t *ptr)
+void statement_bind_from_model(sqlite_statement_t *stmt, modelized_t *ptr)
 {
     char placeholder[512];
     const model_field_t *f;
@@ -636,15 +637,24 @@ void statement_bind_from_model(sqlite_statement_t *stmt, const bool *nulls, mode
 
         strlcpy(placeholder + 1, f->ovh_name, ARRAY_SIZE(placeholder) - 1);
         if (0 != (paramno = sqlite3_bind_parameter_index(stmt->prepared, placeholder))) {
-            if (NULL == nulls || !nulls[paramno]) {
+            if (FIELD_NOT_NULL(ptr, f)) { // if <field_name>_not_null is TRUE
                 assert(f->type >= 0 && f->type <= _MODEL_TYPE_LAST);
 
-//                 if (VOIDP_TO_X(ptr, f->offset + sizeof(model_type_size_map[f->type]), bool)) { // if <field_name>_changed is TRUE
+//                 if (FIELD_CHANGED(ptr, f)) { // if <field_name>_changed is TRUE
                     assert(NULL != model_types_callbacks[f->type].set_input_bind);
 
                     model_types_callbacks[f->type].set_input_bind(stmt->prepared, paramno, ptr, f);
+#if 0
+                    debug("[BfM] %s is bound (changed = %s)", f->ovh_name, FIELD_CHANGED(ptr, f) ? "TRUE" : "FALSE");
 //                 }
+            } else {
+                debug("[BfM] %s is bound with null (%s_not_null is FALSE)", f->ovh_name, f->ovh_name);
+#endif
             }
+#if 0
+        } else {
+            debug("[BfM] %s not bound", f->ovh_name);
+#endif
         }
     }
 }
@@ -774,47 +784,13 @@ bool statement_fetch_to_model(sqlite_statement_t *stmt, modelized_t *obj, bool c
 }
 
 /**
- * Helper to display modelized datas from a statement in a table
+ * Helper for completion
  *
- * @param model the model that describe datas
- * @param stmt the statement to execute
+ * TODO: move it to model.c after removing sqlite specifics?
  *
- * @return COMMAND_SUCCESS OR-ed with CMD_FLAG_NO_DATA if the result set was empty
- */
-command_status_t statement_to_table(const model_t *model, sqlite_statement_t *stmt)
-{
-    table_t *t;
-    Iterator it;
-    char obj[8192];
-    command_status_t ret;
-
-    ret = COMMAND_SUCCESS;
-    assert(ARRAY_SIZE(obj) >= model->size);
-    t = table_new_from_model(model, TABLE_FLAG_DELEGATE);
-    statement_model_to_iterator(&it, stmt, model, TRUE);
-    iterator_first(&it);
-    if (iterator_is_valid(&it)) {
-        do {
-            iterator_current(&it, (void **) &obj);
-            table_store_modelized(t, (modelized_t *) &obj);
-            iterator_next(&it);
-        } while (iterator_is_valid(&it));
-    } else {
-        ret |= CMD_FLAG_NO_DATA;
-    }
-    iterator_close(&it);
-    table_display(t, TABLE_FLAG_NONE);
-    table_destroy(t);
-
-    return ret;
-}
-
-/**
- * Helper TODO
- *
- * @param model
- * @param stmt
- * @param possibilities
+ * @param model the description of data
+ * @param stmt the statement to execute from which to retrieve the data
+ * @param possibilities a recipient which contains all possible values
  *
  * @return TRUE (can't fail)
  */
@@ -842,9 +818,9 @@ bool complete_from_modelized(const model_t *model, sqlite_statement_t *stmt, com
 
     primaries_length = 0;
     buffer = string_new();
-    STRING_APPEND_STRING(buffer, "CREATE TABLE ");
+    STRING_APPEND_STRING(buffer, "CREATE TABLE \"");
     string_append_string(buffer, model->name);
-    STRING_APPEND_STRING(buffer, "(\n");
+    STRING_APPEND_STRING(buffer, "\"(\n");
     for (f = model->fields; NULL != f->ovh_name; f++) {
         if (f != model->fields) {
             STRING_APPEND_STRING(buffer, ",\n");
@@ -852,13 +828,13 @@ bool complete_from_modelized(const model_t *model, sqlite_statement_t *stmt, com
         assert(f->type >= 0 && f->type <= _MODEL_TYPE_LAST);
         assert(NULL != model_types_callbacks[f->type].sqlite_type);
 
-        string_append_char(buffer, '\t');
-        string_append_string_len(buffer, model_types_callbacks[f->type].sqlite_type, model_types_callbacks[f->type].sqlite_type_len);
-        string_append_char(buffer, ' ');
+        STRING_APPEND_STRING(buffer, "\t\"");
         if (HAS_FLAG(f->flags, MODEL_FLAG_PRIMARY)) {
             primaries[primaries_length++] = f;
         }
         string_append_string(buffer, f->ovh_name);
+        STRING_APPEND_STRING(buffer, "\" ");
+        string_append_string_len(buffer, model_types_callbacks[f->type].sqlite_type, model_types_callbacks[f->type].sqlite_type_len);
         if (!HAS_FLAG(f->flags, MODEL_FLAG_NULLABLE)) {
             STRING_APPEND_STRING(buffer, " NOT NULL");
         }
@@ -883,6 +859,22 @@ bool complete_from_modelized(const model_t *model, sqlite_statement_t *stmt, com
     return string_orphan(buffer);
 }
 
+static char *model_to_sql_select(const model_t *model)
+{
+    String *buffer;
+
+    buffer = string_new();
+    STRING_APPEND_STRING(buffer, "SELECT * FROM \"");
+    string_append_string(buffer, model->name);
+#if 1
+    string_append_char(buffer, '"');
+#else
+    STRING_APPEND_STRING(buffer, "\" WHERE accountId = ?");
+#endif
+
+    return string_orphan(buffer);
+}
+
 enum {
     INSERT,
     INSERT_OR_IGNORE,
@@ -890,7 +882,7 @@ enum {
     UPSERT = INSERT_OR_REPLACE,
 };
 
-static static char *model_to_sql_xsert(const model_t *model, int type)
+static char *model_to_sql_xsert(const model_t *model, int type)
 {
     String *buffer;
     const model_field_t *f;
@@ -910,16 +902,18 @@ static static char *model_to_sql_xsert(const model_t *model, int type)
             assert(FALSE);
             break;
     }
-    STRING_APPEND_STRING(buffer, "INTO ");
+    STRING_APPEND_STRING(buffer, "INTO \"");
     string_append_string(buffer, model->name);
-    string_append_char(buffer, '(');
+    STRING_APPEND_STRING(buffer, "\"(");
     for (f = model->fields; NULL != f->ovh_name; f++) {
         if (f != model->fields) {
-            STRING_APPEND_STRING(buffer, ", ");
+            STRING_APPEND_STRING(buffer, "\", \"");
+        } else {
+            string_append_char(buffer, '"');
         }
         string_append_string(buffer, f->ovh_name);
     }
-    STRING_APPEND_STRING(buffer, " ) VALUES(");
+    STRING_APPEND_STRING(buffer, "\") VALUES(");
     for (f = model->fields; NULL != f->ovh_name; f++) {
         if (f != model->fields) {
             STRING_APPEND_STRING(buffer, ", ");
@@ -946,8 +940,9 @@ static void sql_append_pk_where_clause(String *buffer, const model_t *model)
 {
     assert(NULL != model->pk);
 
+    string_append_char(buffer, '"');
     string_append_string(buffer, model->pk->ovh_name);
-    STRING_APPEND_STRING(buffer, " = :");
+    STRING_APPEND_STRING(buffer, "\" = :");
     string_append_string(buffer, model->pk->ovh_name);
 }
 
@@ -957,19 +952,20 @@ static char *model_to_sql_update(const model_t *model)
     const model_field_t *f;
 
     buffer = string_new();
-    STRING_APPEND_STRING(buffer, "UPDATE ");
+    STRING_APPEND_STRING(buffer, "UPDATE \"");
     string_append_string(buffer, model->name);
-    STRING_APPEND_STRING(buffer, " SET ");
+    STRING_APPEND_STRING(buffer, "\" SET ");
     for (f = model->fields; NULL != f->ovh_name; f++) {
         if (f != model->fields) {
             STRING_APPEND_STRING(buffer, ", ");
         }
+        string_append_char(buffer, '"');
         string_append_string(buffer, f->ovh_name);
-        STRING_APPEND_STRING(buffer, " = IFNULL(:");
+        STRING_APPEND_STRING(buffer, "\" = IFNULL(:");
         string_append_string(buffer, f->ovh_name);
-        STRING_APPEND_STRING(buffer, ", ");
+        STRING_APPEND_STRING(buffer, ", \"");
         string_append_string(buffer, f->ovh_name);
-        string_append_char(buffer, ')');
+        STRING_APPEND_STRING(buffer, "\")");
     }
     STRING_APPEND_STRING(buffer, " WHERE ");
     if (NULL == model->pk) {
@@ -977,8 +973,9 @@ static char *model_to_sql_update(const model_t *model)
             if (f != model->fields) {
                 STRING_APPEND_STRING(buffer, " AND ");
             }
+            string_append_char(buffer, '"');
             string_append_string(buffer, f->ovh_name);
-            STRING_APPEND_STRING(buffer, " = :");
+            STRING_APPEND_STRING(buffer, "\" = :");
             string_append_string(buffer, f->ovh_name);
         }
     } else {
@@ -994,16 +991,17 @@ static char *model_to_sql_delete(const model_t *model)
     const model_field_t *f;
 
     buffer = string_new();
-    STRING_APPEND_STRING(buffer, "DELETE FROM ");
+    STRING_APPEND_STRING(buffer, "DELETE FROM \"");
     string_append_string(buffer, model->name);
-    STRING_APPEND_STRING(buffer, " WHERE ");
+    STRING_APPEND_STRING(buffer, "\" WHERE ");
     if (NULL == model->pk) {
         for (f = model->fields; NULL != f->ovh_name; f++) {
             if (f != model->fields) {
                 STRING_APPEND_STRING(buffer, " AND ");
             }
+            string_append_char(buffer, '"');
             string_append_string(buffer, f->ovh_name);
-            STRING_APPEND_STRING(buffer, " = :");
+            STRING_APPEND_STRING(buffer, "\" = :");
             string_append_string(buffer, f->ovh_name);
         }
     } else {
@@ -1014,6 +1012,7 @@ static char *model_to_sql_delete(const model_t *model)
 }
 
 enum {
+    STMT_BACKEND_SELECT,
     STMT_BACKEND_INSERT,
     STMT_BACKEND_UPSERT,
     STMT_BACKEND_UPDATE,
@@ -1022,6 +1021,7 @@ enum {
 };
 
 static char *(*to_sql[STMT_BACKEND_COUNT])(const model_t *) = {
+    [ STMT_BACKEND_SELECT ] = model_to_sql_select,
     [ STMT_BACKEND_INSERT ] = model_to_sql_insert,
     [ STMT_BACKEND_UPSERT ] = model_to_sql_upsert,
     [ STMT_BACKEND_UPDATE ] = model_to_sql_update,
@@ -1069,10 +1069,13 @@ static bool sqlite_backend_save(modelized_t *obj, void *data, error_t **error)
     setAI = FALSE;
     stmts = (sqlite_statement_t *) data;
     if (NULL != obj->model->pk && MODEL_TYPE_INT == obj->model->pk->type) {
-        if (0 == VOIDP_TO_X(obj, obj->model->pk->offset, int)) {
+//         if (!FIELD_NOT_NULL(obj, obj->model->pk)) {
+//         if (0 == VOIDP_TO_X(obj, obj->model->pk->offset, int)) {
+        if (!obj->persisted) {
             // insert + set id with auto-increment value
-            setAI = TRUE;
-            stmt = STMT_BACKEND_INSERT;
+//             setAI = TRUE;
+            setAI = !FIELD_NOT_NULL(obj, obj->model->pk);
+            stmt = STMT_BACKEND_UPSERT;
         } else {
             // update (ou pas si on utilise l'ID OVH)
             stmt = STMT_BACKEND_UPDATE;
@@ -1081,10 +1084,13 @@ static bool sqlite_backend_save(modelized_t *obj, void *data, error_t **error)
         // upsert
         stmt = STMT_BACKEND_UPSERT;
     }
-    statement_bind_from_model(&stmts[stmt], NULL, obj);
-    success = statement_fetch_to_model(&stmts[stmt], obj, FALSE, error); // TODO: just do a sqlite3_step instead?
+    statement_bind_from_model(&stmts[stmt], obj);
+    success = SQLITE_DONE == sqlite3_step(stmts[stmt].prepared);
+debug("QUERY %s", stmts[stmt].statement);
     if (success) {
         obj->persisted = TRUE;
+    } else {
+        error_set(error, WARN, _("%s for %s"), sqlite3_errmsg(db), sqlite3_sql(stmts[stmt].prepared));
     }
     if (setAI) {
         VOIDP_TO_X(obj, obj->model->pk->offset, int) = sqlite_last_insert_id();
@@ -1103,15 +1109,36 @@ static bool sqlite_backend_delete(modelized_t *obj, void *data, error_t **error)
     assert(NULL != data);
 
     stmts = (sqlite_statement_t *) data;
-    statement_bind_from_model(&stmts[STMT_BACKEND_DELETE], NULL, obj);
-    success = statement_fetch_to_model(&stmts[STMT_BACKEND_DELETE], obj, FALSE, error); // TODO: just do a sqlite3_step instead?
+    statement_bind_from_model(&stmts[STMT_BACKEND_DELETE], obj);
+    success = SQLITE_DONE == sqlite3_step(stmts[STMT_BACKEND_DELETE].prepared);
+    if (success) {
+        obj->persisted = FALSE;
+    } else {
+        error_set(error, WARN, _("%s for %s"), sqlite3_errmsg(db), sqlite3_sql(stmts[STMT_BACKEND_DELETE].prepared));
+    }
 
     return success;
+}
+
+static bool sqlite_backend_all(Iterator *it, const model_t *model, void *data, error_t **UNUSED(error))
+{
+    sqlite_statement_t *stmts;
+
+    assert(NULL != it);
+    assert(NULL != model);
+    assert(NULL != data);
+
+    stmts = (sqlite_statement_t *) data;
+    statement_bind(&stmts[STMT_BACKEND_SELECT], NULL, current_account->id);
+    statement_model_to_iterator(it, &stmts[STMT_BACKEND_SELECT], model, TRUE); // TODO: leaks
+
+    return TRUE;
 }
 
 model_backend_t sqlite_backend = {
     sqlite_backend_init,
     sqlite_backend_free,
+    sqlite_backend_all,
     sqlite_backend_save,
     sqlite_backend_delete,
 };

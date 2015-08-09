@@ -139,8 +139,8 @@ static void me_on_set_account(void **data)
 static bool me_ctor(error_t **error)
 {
     account_register_module_callbacks(MODULE_NAME, account_me_data_dtor, me_on_set_account);
-    contract_model = model_new("contracts", sizeof(contract_t), contract_fields, ARRAY_SIZE(contract_fields) - 1, NULL, error);
-    application_model = model_new("applications", sizeof(me_application_t), application_fields, ARRAY_SIZE(application_fields) - 1, NULL, error);
+    contract_model = model_new("contracts", sizeof(contract_t), contract_fields, ARRAY_SIZE(contract_fields) - 1, "name", NULL, error);
+    application_model = model_new("applications", sizeof(me_application_t), application_fields, ARRAY_SIZE(application_fields) - 1, "name", NULL, error);
 
     return TRUE;
 }
@@ -495,7 +495,7 @@ static bool fetch_applications(HashTable *applications, bool force, error_t **er
                     me_application_t *application;
 
                     application = (me_application_t *) modelized_new(application_model);
-                    json_object_to_modelized(json_document_get_root(doc), (modelized_t *) application, TRUE, NULL);
+                    json_object_to_modelized(json_document_get_root(doc), (modelized_t *) application, TRUE);
                     hashtable_put(applications, 0, application->name, application, NULL);
                     json_document_destroy(doc);
                 }
@@ -595,14 +595,14 @@ static bool fetch_contracts(HashTable *contracts, bool force, error_t **error)
                     contract_t *contract;
 
                     contract = (contract_t *) modelized_new(contract_model);
-                    json_object_to_modelized(json_document_get_root(doc), (modelized_t *) contract, TRUE, NULL);
+                    json_object_to_modelized(json_document_get_root(doc), (modelized_t *) contract, TRUE);
                     json_document_destroy(doc);
                     req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/me/agreements/%" PRIu32 "/contract", id);
                     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
                     request_destroy(req);
                     if (success) {
                         contract->date2 = contract->date; // workaround: copy current value of date to date2
-                        json_object_to_modelized(json_document_get_root(doc), (modelized_t *) contract, TRUE, NULL);
+                        json_object_to_modelized(json_document_get_root(doc), (modelized_t *) contract, TRUE);
                         json_document_destroy(doc);
                         hashtable_put(contracts, 0, contract->name, contract, NULL);
                     } else {

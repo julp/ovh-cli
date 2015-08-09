@@ -30,7 +30,7 @@
 enum {
     // dedicated
     STMT_DEDICATED_LIST,
-    STMT_DEDICATED_UPSERT,
+//     STMT_DEDICATED_UPSERT,
     // specialized read (select)
     STMT_DEDICATED_GET_IP,
     STMT_DEDICATED_NEAR_EXPIRATION,
@@ -40,7 +40,7 @@ enum {
     STMT_DEDICATED_SET_REVERSE,
     // boot
     STMT_BOOT_LIST,
-    STMT_BOOT_UPSERT,
+//     STMT_BOOT_UPSERT,
     STMT_BOOT_COMPLETION,
     // dedicated <=> boot
     STMT_B_D_LINK,
@@ -53,14 +53,14 @@ enum {
 
 static sqlite_statement_t statements[STMT_COUNT] = {
     [ STMT_DEDICATED_LIST ]            = DECL_STMT("SELECT * FROM dedicated WHERE accountId = ?", "i", ""),
-    [ STMT_DEDICATED_UPSERT ]          = DECL_STMT("INSERT OR REPLACE INTO dedicated(serverId, name, datacenter, professionalUse, supportLevel, commercialRange, ip, os, state, reverse, monitoring, rack, rootDevice, linkSpeed, bootId, engagedUpTo, contactBilling, expiration, contactTech, contactAdmin, creation, accountId) VALUES(:serverId, :name, :datacenter, :professionalUse, :supportLevel, :commercialRange, :ip, :os, :state, :reverse, :monitoring, :rack, :rootDevice, :linkSpeed, :bootId, :engagedUpTo, :contactBilling, :expiration, :contactTech, :contactAdmin, :creation, :accountId)", "isibisssisbssii" "isissi" "i", ""),
+//     [ STMT_DEDICATED_UPSERT ]          = DECL_STMT("INSERT OR REPLACE INTO dedicated(serverId, name, datacenter, professionalUse, supportLevel, commercialRange, ip, os, state, reverse, monitoring, rack, rootDevice, linkSpeed, bootId, engagedUpTo, contactBilling, expiration, contactTech, contactAdmin, creation, accountId) VALUES(:serverId, :name, :datacenter, :professionalUse, :supportLevel, :commercialRange, :ip, :os, :state, :reverse, :monitoring, :rack, :rootDevice, :linkSpeed, :bootId, :engagedUpTo, :contactBilling, :expiration, :contactTech, :contactAdmin, :creation, :accountId)", "isibisssisbssii" "isissi" "i", ""),
     [ STMT_DEDICATED_GET_IP ]          = DECL_STMT("SELECT ip FROM dedicated WHERE accountId = ? AND name = ?", "is", "s"),
     [ STMT_DEDICATED_NEAR_EXPIRATION ] = DECL_STMT("SELECT julianday(datetime(expiration, 'unixepoch', 'localtime')) - julianday('now') AS days, name FROM dedicated WHERE accountId = ? AND days < 120", "i", "is"),
     [ STMT_DEDICATED_SET_REVERSE ]     = DECL_STMT("UPDATE dedicated SET reverse = ? WHERE accountId = ? AND name = ?", "sis", ""),
     [ STMT_DEDICATED_COMPLETION ]      = DECL_STMT("SELECT name FROM dedicated WHERE accountId = ? AND name LIKE ? || '%'", "is", "s"),
     [ STMT_DEDICATED_CURRENT_BOOT ]    = DECL_STMT("SELECT boots.* FROM boots JOIN dedicated ON boots.bootId = dedicated.bootId WHERE accountId = ? AND name = ?", "is", BOOT_OUTPUT_BINDS),
     [ STMT_BOOT_LIST ]                 = DECL_STMT("SELECT boots.* FROM boots JOIN boots_dedicated ON boots_dedicated.bootId = boots.bootId JOIN dedicated ON boots_dedicated.serverId = dedicated.serverId WHERE accountId = ? AND name = ?", "is", BOOT_OUTPUT_BINDS),
-    [ STMT_BOOT_UPSERT ]               = DECL_STMT("INSERT OR REPLACE INTO boots(bootId, bootType, kernel, description) VALUES(:bootId, :bootType, :kernel, :description)", "iiss", ""),
+//     [ STMT_BOOT_UPSERT ]               = DECL_STMT("INSERT OR REPLACE INTO boots(bootId, bootType, kernel, description) VALUES(:bootId, :bootType, :kernel, :description)", "iiss", ""),
     [ STMT_BOOT_COMPLETION ]           = DECL_STMT("SELECT boots.*/*kernel*/ FROM boots JOIN boots_dedicated ON boots_dedicated.bootId = boots.bootId JOIN dedicated ON boots_dedicated.serverId = dedicated.serverId WHERE accountId = ? AND name = ? AND kernel LIKE ? || '%'", "iss", "s"),
     [ STMT_B_D_LINK ]                  = DECL_STMT("INSERT OR IGNORE INTO boots_dedicated(bootId, serverId) VALUES(?, ?)", "ii", ""),
     [ STMT_B_D_FIND_BY_NAME ]          = DECL_STMT("SELECT boots.bootId FROM boots JOIN boots_dedicated ON boots_dedicated.bootId = boots.bootId JOIN dedicated ON boots_dedicated.serverId = dedicated.serverId WHERE accountId = ? AND name = ? AND kernel = ?", "iss", "i"),
@@ -352,12 +352,6 @@ sqlite_migration_t dedicated_migrations[] = {
 
 static bool dedicated_ctor(error_t **error)
 {
-    boot_model = model_new("boots", sizeof(boot_t), boot_fields, ARRAY_SIZE(boot_fields) - 1, NULL, error);
-    boot_model->to_s = boot_to_s; // TODO: temporary
-    boot_model->to_name = boot_to_name; // TODO: temporary
-    task_model = model_new("tasks", sizeof(task_t), task_fields, ARRAY_SIZE(task_fields) - 1, NULL, error);
-    server_model = model_new("servers", sizeof(server_t), server_fields, ARRAY_SIZE(server_fields) - 1, NULL, error);
-
     if (!create_or_migrate("boots", "CREATE TABLE boots(\n\
         bootId INTEGER NOT NULL PRIMARY KEY, -- OVH ID (bootId)\n\
         bootType INT NOT NULL, -- enum\n\
@@ -389,7 +383,7 @@ static bool dedicated_ctor(error_t **error)
         engagedUpTo INT, -- data, nullable\n\
         -- possibleRenewPeriod: array of int (JSON response)\n\
         contactBilling TEXT NOT NULL,\n\
-        -- renew: subobkect (JSON response)\n\
+        -- renew: subobject (JSON response)\n\
         -- domain TEXT NOT NULL, -- same as name?\n\
         expiration INT NOT NULL, -- date\n\
         contactTech TEXT NOT NULL,\n\
@@ -410,6 +404,11 @@ static bool dedicated_ctor(error_t **error)
         return FALSE;
     }
 
+    boot_model = model_new("boots", sizeof(boot_t), boot_fields, ARRAY_SIZE(boot_fields) - 1, "kernel", &sqlite_backend, error);
+    boot_model->to_s = boot_to_s; // TODO: temporary
+    task_model = model_new("tasks", sizeof(task_t), task_fields, ARRAY_SIZE(task_fields) - 1, "taskId", NULL, error);
+    server_model = model_new("dedicated", sizeof(server_t), server_fields, ARRAY_SIZE(server_fields) - 1, "name", &sqlite_backend, error);
+
     return TRUE;
 }
 
@@ -424,18 +423,43 @@ static void dedicated_dtor(void)
 static bool parse_boot(server_t *s, json_document_t *doc, error_t **error)
 {
     boot_t boot;
+    bool success;
 
+debug("parse boot");
     modelized_init(boot_model, (modelized_t *) &boot);
-    json_object_to_modelized(json_document_get_root(doc), (modelized_t *) &boot, FALSE, NULL);
-    statement_bind_from_model(&statements[STMT_BOOT_UPSERT], NULL, (modelized_t *) &boot);
-    statement_fetch(&statements[STMT_BOOT_UPSERT], error);
+    json_object_to_modelized(json_document_get_root(doc), (modelized_t *) &boot, FALSE);
+#if 0
+    statement_bind_from_model(&statements[STMT_BOOT_UPSERT], (modelized_t *) &boot);
     if (statement_fetch(&statements[STMT_BOOT_UPSERT], error) || NULL == *error) {
-        statement_bind(&statements[STMT_B_D_LINK], NULL, boot.bootId, s->serverId);
-        statement_fetch(&statements[STMT_B_D_LINK], error);
-    }
+#else
+    success = modelized_save((modelized_t *) &boot, error);
+    debug("save boot %d %s", boot.bootId, success ? "OK" : "KO");
+#endif
+//     if (success && ((modelized_t *) s)->persisted) {
+// debug("link boot/server %d/%d", boot.bootId, s->serverId);
+//         statement_bind(&statements[STMT_B_D_LINK], NULL, boot.bootId, s->serverId);
+//         statement_fetch(&statements[STMT_B_D_LINK], error);
+//     }
     json_document_destroy(doc);
 
     return NULL == *error;
+}
+
+static bool fetch_server_boot(server_t *s, int bootId, error_t **error)
+{
+    bool success;
+    request_t *req;
+    json_document_t *doc;
+
+debug("get boot %d", bootId);
+    req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/dedicated/server/%s/boot/%d", s->name, bootId);
+    success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
+    request_destroy(req);
+    if (success) {
+        success = parse_boot(s, doc, error);
+    }
+
+    return success;
 }
 
 static bool fetch_server_boots(server_t *s, error_t **error)
@@ -456,14 +480,9 @@ static bool fetch_server_boots(server_t *s, error_t **error)
         json_array_to_iterator(&it, root);
         for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
             json_value_t v;
-            json_document_t *doc;
 
             v = (json_value_t) iterator_current(&it, NULL);
-            req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/dedicated/server/%s/boot/%u", s->name, json_get_integer(v));
-            success = request_execute(req, RESPONSE_JSON, (void **) &doc, error); // success is assumed to be TRUE before the first iteration
-            request_destroy(req);
-            // result
-            success = parse_boot(s, doc, error);
+            success = fetch_server_boot(s, json_get_integer(v), error);
         }
         iterator_close(&it);
         json_document_destroy(doc);
@@ -487,10 +506,7 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
         success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         request_destroy(req);
         if (success) {
-            bool nulls[22] = { FALSE };
-
-            CHECK_NULLS_LENGTH(nulls, statements[STMT_DEDICATED_UPSERT]);
-            json_object_to_modelized(json_document_get_root(doc), (modelized_t *) &s, FALSE, nulls);
+            json_object_to_modelized(json_document_get_root(doc), (modelized_t *) &s, FALSE);
             {
                 request_t *req;
                 json_document_t *doc;
@@ -499,7 +515,23 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
                 success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
                 request_destroy(req);
                 if (success) {
-                    json_object_to_modelized(json_document_get_root(doc), (modelized_t *) &s, FALSE, nulls);
+//                     bool nulls[22] = { FALSE }; // COMPAT
+
+                    json_object_to_modelized(json_document_get_root(doc), (modelized_t *) &s, FALSE);
+#if 0
+                    /* <COMPAT> */
+                    {
+                        modelized_t *ptr;
+                        const model_field_t *f;
+
+                        ptr = (modelized_t *) &s;
+                        s.accountId_not_null = TRUE; // force it as FK are not (yet) handled
+                        CHECK_NULLS_LENGTH(nulls, statements[STMT_DEDICATED_UPSERT]);
+                        for (f = ptr->model->fields; NULL != f->ovh_name; f++) {
+                            nulls[f - ptr->model->fields] = !VOIDP_TO_X(ptr, f->offset + model_type_size_map[f->type] + sizeof(bool), bool);
+                        }
+                    }
+                    /* </COMPAT> */
                     statement_bind( /* e = enum (int), d = date (int), |n = or NULL */
                         &statements[STMT_DEDICATED_UPSERT], nulls /* "isibisssisbssii" "isissi" "i" */,
                         // id (i), name (s), datacenter (e), professionalUse (b), supportLevel (e), commercialRange (s|n), ip (s), os (s), state (e), reverse (s|n), monitoring (b), rack (s), rootDevice (s|n), linkSpeed (i|n), bootId (i|n)
@@ -510,7 +542,18 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
                         current_account->id
                     );
                     statement_fetch(&statements[STMT_DEDICATED_UPSERT], error);
-                    success = NULL == *error;
+#else
+                    MODELIZED_SET(&s, accountId, current_account->id);
+                    if (s.bootId_not_null) {
+                        // we need to fetch current boot first, if not null, to respect FK
+                        success = fetch_server_boot(&s, s.bootId, error);
+                    }
+                    if (success) {
+                        // TODO: nothing in db, no error!?!
+                        success = modelized_save((modelized_t *) &s, error);
+debug("persisted = %d %d", ((modelized_t *) &s)->persisted, sqlite_last_insert_id()); // persisted = 1 366989 WTF?!?
+                    }
+#endif
                     json_document_destroy(doc);
                 }
             }
@@ -569,7 +612,7 @@ static command_status_t dedicated_list(COMMAND_ARGS)
     // display
     statement_bind(&statements[STMT_DEDICATED_LIST], NULL, current_account->id);
 
-    return statement_to_table(server_model, &statements[STMT_DEDICATED_LIST]);
+    return model_to_table(server_model, error);
 }
 
 static command_status_t dedicated_check(COMMAND_ARGS)
@@ -630,7 +673,7 @@ static command_status_t dedicated_boot_list(COMMAND_ARGS)
     printf(_("Available boots for '%s':\n"), args->server_name);
     statement_bind(&statements[STMT_BOOT_LIST], NULL, current_account->id, args->server_name);
 
-    return statement_to_table(boot_model, &statements[STMT_BOOT_LIST]);
+    return model_to_table(boot_model, error);
 }
 
 static command_status_t dedicated_boot_get(COMMAND_ARGS)
@@ -828,7 +871,7 @@ static bool fetch_task(const char *server_name, task_t *task, error_t **error)
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
     if (success) {
-        json_object_to_modelized(json_document_get_root(doc), (modelized_t *) task, TRUE, NULL);
+        json_object_to_modelized(json_document_get_root(doc), (modelized_t *) task, TRUE);
         json_document_destroy(doc);
     }
 

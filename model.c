@@ -4,6 +4,10 @@
 #include <strings.h>
 #include "model.h"
 
+#ifdef HAVE_LIBBSD_STRLCPY
+# include <bsd/string.h>
+#endif /* HAVE_LIBBSD_STRLCPY */
+
 const size_t model_type_size_map[] = {
     [ MODEL_TYPE_INT ]      = sizeof(int),
     [ MODEL_TYPE_BOOL ]     = sizeof(bool),
@@ -118,6 +122,24 @@ bool modelized_delete(modelized_t *ptr, error_t **error)
 }
 
 /**
+ * Initialize an iterator to loop on all specified data
+ *
+ * @param it the iterator to initialize
+ * @param model the model which describe the data
+ * @param error the error to populate on failure
+ *
+ * @return FALSE on failure
+ */
+bool modelized_all(Iterator *it, const model_t *model, error_t **error)
+{
+    if (NULL != model->backend && NULL != model->backend->all) {
+        return model->backend->all(it, model, model->backend_data, error);
+    }
+
+    return FALSE;
+}
+
+/**
  * Copy a data which is described by a model
  *
  * @param src the data to copy
@@ -182,16 +204,22 @@ const model_field_t *model_find_field_by_name(const model_t *model, const char *
  * @param size the size of a data
  * @param fields its fields which describe it
  * @param fields_count the number of fields
+ * @param name_field_name the name of the field which refers to the name of the data
+ * @param backend the callbacks for reading or writing data
+ * @param error the error to populate on failure
  *
  * @return the allocated model
  */
-model_t *model_new(const char *name, size_t size, model_field_t *fields, size_t fields_count, model_backend_t *backend, error_t **error)
+model_t *model_new(const char *name, size_t size, model_field_t *fields, size_t fields_count, const char *name_field_name, model_backend_t *backend, error_t **error)
 {
     model_t *model;
 
+    assert(NULL != name_field_name && '\0' != *name_field_name);
+
     model = mem_new(*model);
-    model->pk = NULL;
     model->name = name;
+    model->pk = NULL;
+    model->name_field_name = NULL;
     model->size = size;
     model->fields = fields;
     model->fields_count = fields_count;
@@ -203,6 +231,9 @@ model_t *model_new(const char *name, size_t size, model_field_t *fields, size_t 
                 if (HAS_FLAG(f->flags, MODEL_FLAG_PRIMARY)) {
                     model->pk = f;
                 }
+                if (0 == strcmp(name_field_name, f->ovh_name)) {
+                    model->name_field_name = f;
+                }
             }
         }
     }
@@ -211,6 +242,8 @@ model_t *model_new(const char *name, size_t size, model_field_t *fields, size_t 
     if (NULL != model->backend && NULL != model->backend->init) {
         model->backend_data = model->backend->init(model, error);
     }
+
+    assert(NULL != model->name_field_name);
 
     return model;
 }
@@ -226,6 +259,96 @@ void model_destroy(model_t *model)
         model->backend->free(model->backend_data);
     }
     free(model);
+}
+
+/**
+ * Get a the name (used in completion) of a data
+ *
+ * @param ptr the data
+ * @param buffer the output buffer to fill in
+ * @param buffer_size the capacity of *buffer*
+ *
+ * @return the number of bytes copied to *buffer*
+ */
+size_t modelized_name_to_s(modelized_t *ptr, char *buffer, size_t buffer_size)
+{
+    size_t buffer_length;
+
+    assert(NULL != ptr);
+    assert(NULL != buffer);
+    assert(NULL != ptr->model);
+    assert(NULL != ptr->model->name_field_name);
+
+    buffer_length = 0;
+    switch (ptr->model->name_field_name->type) {
+        case MODEL_TYPE_INT:
+        {
+            int ret;
+
+            ret = snprintf(buffer, buffer_size, "%d", VOIDP_TO_X(ptr, ptr->model->name_field_name->offset, int));
+            assert(ret > 0 && ((size_t) ret) <= buffer_size);
+            buffer_length = (size_t) ret;
+            break;
+        }
+        case MODEL_TYPE_ENUM:
+        {
+            buffer_length = strlcpy(buffer, ptr->model->name_field_name->enum_values[VOIDP_TO_X(ptr, ptr->model->name_field_name->offset, int)], buffer_size);
+            assert(buffer_length < buffer_size);
+            break;
+        }
+        case MODEL_TYPE_STRING:
+        {
+            char *v;
+
+            v = VOIDP_TO_X(ptr, ptr->model->name_field_name->offset, char *);
+            assert(NULL != v);
+            if ('\0' == *v) {
+//                 assert(buffer_length >= STR_SIZE("\"\""));
+                buffer_length = strlcpy(buffer, "\"\"", buffer_size);
+            } else {
+                buffer_length = strlcpy(buffer, v, buffer_size);
+            }
+            assert(buffer_length < buffer_size);
+            break;
+        }
+        default:
+            assert(FALSE);
+            break;
+    }
+
+    return buffer_length;
+}
+
+#include "modules/table.h"
+command_status_t model_to_table(const model_t *model, error_t **error)
+{
+    table_t *t;
+    Iterator it;
+    char obj[8192];
+    command_status_t ret;
+
+    assert(NULL != model->backend);
+    assert(NULL != model->backend->all);
+
+    ret = COMMAND_SUCCESS;
+    assert(ARRAY_SIZE(obj) >= model->size);
+    t = table_new_from_model(model, TABLE_FLAG_DELEGATE);
+    model->backend->all(&it, model, model->backend_data, error);
+    iterator_first(&it);
+    if (iterator_is_valid(&it)) {
+        do {
+            iterator_current(&it, (void **) &obj);
+            table_store_modelized(t, (modelized_t *) &obj);
+            iterator_next(&it);
+        } while (iterator_is_valid(&it));
+    } else {
+        ret |= CMD_FLAG_NO_DATA;
+    }
+    iterator_close(&it);
+    table_display(t, TABLE_FLAG_NONE);
+    table_destroy(t);
+
+    return ret;
 }
 
 #if 0
@@ -248,11 +371,6 @@ void modelized_has_many(modelized_t *owner, modelized_t *owned, bool reverse)
     if (reverse) {
         modelized_belongs_to(owner, owned);
     }
-}
-
-void modelized_name_to_s(modelized_t *ptr, char *buffer, size_t buffer_size)
-{
-    //
 }
 
 void modelized_id_to_s(modelized_t *ptr, char *buffer, size_t buffer_size)

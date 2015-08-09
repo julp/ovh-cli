@@ -68,7 +68,7 @@ static const char *argument_to_name(void *ptr)
 }
 
 static model_t argument_model = { /* dummy model */
-    0, "arguments", argument_to_name, argument_to_s,
+    0, "arguments", argument_to_s,
 #if 0
     (const model_field_t []) {
         MODEL_FIELD_SENTINEL
@@ -76,7 +76,7 @@ static model_t argument_model = { /* dummy model */
 #else
     NULL,
 #endif
-    0, NULL
+    0, NULL, NULL, NULL, NULL
 };
 
 /**
@@ -139,11 +139,13 @@ void completer_push(completer_t *c, const char *string, bool delegate)
 void completer_push_modelized(completer_t *c, modelized_t *ptr)
 {
     possibility_t *p;
+    char name[MAX_MODELIZED_NAME_LENGTH];
 
     p = mem_new(*p);
     p->ptr = ptr;
     p->delegated = TRUE;
-    p->name = ptr->model->to_name(ptr);
+    modelized_name_to_s(p->ptr, name, ARRAY_SIZE(name));
+    p->name = strdup(name);
     dptrarray_push(c->ary, (void *) p);
 }
 
@@ -230,7 +232,7 @@ static bool complete_literal(void *UNUSED(parsed_arguments), const char *current
 
     arg = (argument_t *) data;
     if (0 == strncmp(current_argument, arg->string, current_argument_len)) {
-        completer_push_modelized(possibilities, (modelized_t *) arg);
+        completer_push(possibilities, arg->string, FALSE);
     }
 
     return TRUE;

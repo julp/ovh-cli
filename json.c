@@ -561,13 +561,17 @@ json_document_t *json_object_from_modelized(modelized_t *ptr)
         const model_field_t *f;
 
         for (f = ptr->model->fields; NULL != f->ovh_name; f++) {
-            if (!HAS_FLAG(f->flags, MODEL_FLAG_RO) && VOIDP_TO_X(ptr, f->offset + sizeof(model_type_size_map[f->type]), bool)) {
+            if (!HAS_FLAG(f->flags, MODEL_FLAG_RO) && FIELD_CHANGED(ptr, f)) { // if <field_name>_changed is TRUE
                 json_value_t v;
 
-                assert(f->type >= 0 && f->type <= _MODEL_TYPE_LAST);
-                assert(NULL != model_types_callbacks[f->type].to_json);
+                if (FIELD_NOT_NULL(ptr, f)) { // if <field_name>_not_null is TRUE
+                    assert(f->type >= 0 && f->type <= _MODEL_TYPE_LAST);
+                    assert(NULL != model_types_callbacks[f->type].to_json);
 
-                v = model_types_callbacks[f->type].to_json(ptr, f);
+                    v = model_types_callbacks[f->type].to_json(ptr, f);
+                } else {
+                    v = json_null;
+                }
                 if (NULL == doc) {
                     root = json_object();
                     doc = json_document_new();
@@ -581,7 +585,7 @@ json_document_t *json_object_from_modelized(modelized_t *ptr)
     return doc;
 }
 
-void json_object_to_modelized(json_value_t object, modelized_t *ptr, bool copy, bool *nulls)
+void json_object_to_modelized(json_value_t object, modelized_t *ptr, bool copy)
 {
     const model_field_t *f;
 
@@ -592,64 +596,16 @@ void json_object_to_modelized(json_value_t object, modelized_t *ptr, bool copy, 
             bool isnull;
 
             isnull = json_null == propvalue;
-            if (NULL != nulls) {
-                nulls[f - ptr->model->fields] = isnull;
+            if (!isnull) {
+                FIELD_NOT_NULL(ptr, f) = TRUE;
             }
-#if 0
-            switch (f->type) {
-                case MODEL_TYPE_BOOL:
-                    VOIDP_TO_X(ptr, f->offset, bool) = json_true == propvalue;
-                    break;
-                case MODEL_TYPE_INT:
-                    VOIDP_TO_X(ptr, f->offset, int) = isnull ? 0 : json_get_integer(propvalue);
-                    break;
-                case MODEL_TYPE_ENUM:
-                    VOIDP_TO_X(ptr, f->offset, int) = isnull ? -1 : json_get_enum(propvalue, f->enum_values, -1);
-                    break;
-                case MODEL_TYPE_DATE:
-                {
-                    time_t v;
-
-                    v = 0;
-                    if (!isnull) {
-                        // %F is equivalent to "%Y-%m-%d"
-                        date_parse_to_timestamp(json_get_string(propvalue), "%F", &v);
-                    }
-                    VOIDP_TO_X(ptr, f->offset, time_t) = v;
-                    break;
-                }
-                case MODEL_TYPE_DATETIME:
-                {
-                    time_t v;
-
-                    v = 0;
-                    if (!isnull) {
-                        // %F is equivalent to "%Y-%m-%d"
-                        // %T is equivalent to "%H:%M:%S"
-                        // %z is replaced by the time zone offset from UTC; a leading plus sign stands for east of UTC,
-                        // a minus sign for west of UTC, hours and minutes follow with two digits each and no delimiter
-                        // between them (common form for RFC 822 date headers)
-                        date_parse_to_timestamp(json_get_string(propvalue), "%FT%T%z", &v);
-                    }
-                    VOIDP_TO_X(ptr, f->offset, time_t) = v;
-                    break;
-                }
-                case MODEL_TYPE_STRING:
-                    VOIDP_TO_X(ptr, f->offset, char *) = isnull ? NULL : (copy ? strdup(json_get_string(propvalue)) : (char *) json_get_string(propvalue));
-                    break;
-                default:
-                    assert(FALSE);
-                    break;
-            }
-#else
             assert(f->type >= 0 && f->type <= _MODEL_TYPE_LAST);
             assert(NULL != model_types_callbacks[f->type].from_json);
 
             model_types_callbacks[f->type].from_json(propvalue, isnull, ptr, f, copy);
-#endif
 #if 0
             if (mark_changed) {
-                VOIDP_TO_X(ptr, f->offset + sizeof(model_type_size_map[f->type]), bool) = TRUE;
+                FIELD_CHANGED(ptr, f) = TRUE;
             }
 #endif
         }
