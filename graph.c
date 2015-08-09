@@ -23,10 +23,7 @@ typedef enum {
     ARG_TYPE_STRING // free string (eventually with help of completion)
 } argument_type_t;
 
-// méthode toString pour intégrer un élément quelconque (record_t *, server_t *, ...) à la ligne de commande (ie le résultat de la complétion) ?
-// méthode toString pour représenter un élément quelconque (record_t *, server_t *, ...) parmi les propositions à faire à l'utilisateur ?
 struct argument_t {
-    modelized_t data;
     size_t offset;           // result of offsetof, address to copy value of argument
     argument_type_t type;    // one of the ARG_TYPE_* constant
     complete_t complete;     // ARG_TYPE_STRING and ARG_TYPE_CHOICES specific
@@ -66,18 +63,6 @@ static const char *argument_to_name(void *ptr)
 
     return strdup(arg->string);
 }
-
-static model_t argument_model = { /* dummy model */
-    0, "arguments", argument_to_s,
-#if 0
-    (const model_field_t []) {
-        MODEL_FIELD_SENTINEL
-    },
-#else
-    NULL,
-#endif
-    0, NULL, NULL, NULL, NULL
-};
 
 /**
  * Abstraction layer to store possibilities for current completion
@@ -197,7 +182,6 @@ static const possibility_t *completer_at(completer_t *c, size_t offset)
         node->string = string_or_hint; \
         node->children = NULL; \
         node->description = NULL; \
-        modelized_init(&argument_model, (modelized_t *) node); \
     } while (0);
 
 static void graph_node_destroy(void *data)
