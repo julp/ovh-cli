@@ -358,7 +358,7 @@ static bool dedicated_ctor(error_t **error)
     if (!create_or_migrate("dedicated", "CREATE TABLE dedicated(\n\
         accountId INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,\n\
         -- From GET /dedicated/server/{serviceName}\n\
-        serverId INTEGER NOT NULL PRIMARY KEY, -- OVH ID\n\
+        serverId INTEGER NOT NULL, -- OVH ID\n\
         name TEXT NOT NULL UNIQUE,\n\
         datacenter INT NOT NULL, -- enum\n\
         professionalUse INT NOT NULL, -- bool\n\
@@ -383,7 +383,8 @@ static bool dedicated_ctor(error_t **error)
         expiration INT NOT NULL, -- date\n\
         contactTech TEXT NOT NULL,\n\
         contactAdmin TEXT NOT NULL,\n\
-        creation INT NOT NULL -- date\n\
+        creation INT NOT NULL, -- date\n\
+        PRIMARY KEY(serverId)\n\
     )", dedicated_migrations, ARRAY_SIZE(dedicated_migrations), error)) {
         return FALSE;
     }
@@ -420,7 +421,6 @@ static bool parse_boot(server_t *s, json_document_t *doc, error_t **error)
     boot_t boot;
     bool success;
 
-debug("parse boot");
     modelized_init(boot_model, (modelized_t *) &boot);
     json_object_to_modelized(json_document_get_root(doc), (modelized_t *) &boot, FALSE);
 #if 0
@@ -428,13 +428,11 @@ debug("parse boot");
     if (statement_fetch(&statements[STMT_BOOT_UPSERT], error) || NULL == *error) {
 #else
     success = modelized_save((modelized_t *) &boot, error);
-    debug("save boot %d %s", boot.bootId, success ? "OK" : "KO");
 #endif
-//     if (success && ((modelized_t *) s)->persisted) {
-// debug("link boot/server %d/%d", boot.bootId, s->serverId);
-//         statement_bind(&statements[STMT_B_D_LINK], NULL, boot.bootId, s->serverId);
-//         statement_fetch(&statements[STMT_B_D_LINK], error);
-//     }
+    if (success && ((modelized_t *) s)->persisted) {
+        statement_bind(&statements[STMT_B_D_LINK], NULL, boot.bootId, s->serverId);
+        statement_fetch(&statements[STMT_B_D_LINK], error);
+    }
     json_document_destroy(doc);
 
     return NULL == *error;
@@ -446,7 +444,6 @@ static bool fetch_server_boot(server_t *s, int bootId, error_t **error)
     request_t *req;
     json_document_t *doc;
 
-debug("get boot %d", bootId);
     req = request_new(REQUEST_FLAG_SIGN, HTTP_GET, NULL, error, API_BASE_URL "/dedicated/server/%s/boot/%d", s->name, bootId);
     success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
     request_destroy(req);
@@ -544,9 +541,7 @@ static bool fetch_server(const char * const server_name, bool force, error_t **e
                         success = fetch_server_boot(&s, s.bootId, error);
                     }
                     if (success) {
-                        // TODO: nothing in db, no error!?!
                         success = modelized_save((modelized_t *) &s, error);
-debug("persisted = %d %d", ((modelized_t *) &s)->persisted, sqlite_last_insert_id()); // persisted = 1 366989 WTF?!?
                     }
 #endif
                     json_document_destroy(doc);

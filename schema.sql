@@ -74,7 +74,7 @@ CREATE TABLE boots(
 CREATE TABLE dedicated(
     accountId INT NOT NULL REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,
     -- From GET /dedicated/server/{serviceName}
-    serverId INTEGER NOT NULL PRIMARY KEY, -- OVH ID
+    serverId INTEGER NOT NULL, -- OVH ID
     name TEXT NOT NULL UNIQUE,
     datacenter INT NOT NULL, -- enum
     professionalUse INT NOT NULL, -- bool
@@ -99,7 +99,8 @@ CREATE TABLE dedicated(
     expiration INT NOT NULL, -- date
     contactTech TEXT NOT NULL,
     contactAdmin TEXT NOT NULL,
-    creation INT NOT NULL -- date
+    creation INT NOT NULL, -- date
+    PRIMARY KEY(serverId)
 );
 
 CREATE TABLE boots_dedicated(

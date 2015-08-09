@@ -1080,7 +1080,7 @@ static bool sqlite_backend_save(modelized_t *obj, void *data, error_t **error)
     }
     statement_bind_from_model(&stmts[stmt], obj);
     success = SQLITE_DONE == sqlite3_step(stmts[stmt].prepared);
-debug("QUERY %s", stmts[stmt].statement);
+// debug("QUERY %s", stmts[stmt].statement);
     if (success) {
         obj->persisted = TRUE;
     } else {
@@ -1154,6 +1154,13 @@ static void sqlite_startswith(sqlite3_context *context, int argc, sqlite3_value 
     }
 }
 
+#ifdef SQLITE_DEBUG
+static void sqlite_trace_callback(void *UNUSED(data), const char *stmt)
+{
+    debug("[TRACE] %s", stmt);
+}
+#endif /* SQLITE_DEBUG */
+
 static bool sqlite_early_ctor(error_t **error)
 {
     int ret;
@@ -1184,10 +1191,13 @@ static bool sqlite_early_ctor(error_t **error)
         error_set(error, FATAL, _("can't retrieve database version: %s"), sqlite3_errmsg(db));
         return FALSE;
     }
-    sqlite3_reset(statements[STMT_GET_USER_VERSION].prepared);
     user_version = sqlite3_column_int(statements[STMT_GET_USER_VERSION].prepared, 0);
+    sqlite3_reset(statements[STMT_GET_USER_VERSION].prepared);
 
     sqlite3_create_function_v2(db, "startswith", 2, SQLITE_UTF8/* | SQLITE_DETERMINISTIC*/, NULL, sqlite_startswith, NULL, NULL, NULL);
+#ifdef SQLITE_DEBUG
+    sqlite3_trace(db, sqlite_trace_callback, NULL);
+#endif /* SQLITE_DEBUG */
 
     return TRUE;
 }
