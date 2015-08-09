@@ -3,7 +3,6 @@
 # define GRAPH_H
 
 # include <stddef.h>
-# include "model.h"
 
 typedef struct completer_t completer_t;
 
@@ -13,6 +12,8 @@ typedef struct graph_t graph_t;
 
 typedef command_status_t (*handle_t)(COMMAND_ARGS);
 typedef bool (*complete_t)(void *, const char *, size_t, completer_t *, void *);
+
+# include "model.h"
 
 argument_t *argument_create_uint(size_t, const char *);
 argument_t *argument_create_literal(const char *, handle_t, const char *);

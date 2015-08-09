@@ -794,18 +794,12 @@ bool statement_fetch_to_model(sqlite_statement_t *stmt, modelized_t *obj, bool c
  *
  * @return TRUE (can't fail)
  */
-bool complete_from_modelized(const model_t *model, sqlite_statement_t *stmt, completer_t *possibilities)
+bool complete_from_modelized_statement(const model_t *model, sqlite_statement_t *stmt, completer_t *possibilities)
 {
     Iterator it;
 
     statement_model_to_iterator(&it, stmt, model, TRUE/* unused */);
-    for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
-        modelized_t *object;
-
-        object = iterator_current(&it, NULL);
-        completer_push_modelized(possibilities, object);
-    }
-    iterator_close(&it);
+    complete_from_modelized(&it, possibilities);
 
     return TRUE;
 }

@@ -44,26 +44,6 @@ struct graph_t {
     completer_t *possibilities;
 };
 
-static const char *argument_to_s(void *ptr)
-{
-    argument_t *arg;
-
-    assert(NULL != ptr);
-    arg = (argument_t *) ptr;
-
-    return NULL == arg->description ? NULL : strdup(arg->description);
-}
-
-static const char *argument_to_name(void *ptr)
-{
-    argument_t *arg;
-
-    assert(NULL != ptr);
-    arg = (argument_t *) ptr;
-
-    return strdup(arg->string);
-}
-
 /**
  * Abstraction layer to store possibilities for current completion
  */

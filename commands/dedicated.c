@@ -219,11 +219,6 @@ static model_field_t server_fields[] = {
     MODEL_FIELD_SENTINEL
 };
 
-static const char *boot_to_name(void *ptr)
-{
-    return strdup(((boot_t *) ptr)->kernel);
-}
-
 static const char *boot_to_s(void *ptr)
 {
     return strdup(((boot_t *) ptr)->description); // TODO: we create a second copy of the string (the first was in sqlite module)
@@ -987,7 +982,7 @@ static bool complete_boots(void *parsed_arguments, const char *current_argument,
     assert(NULL != args->server_name);
     statement_bind(&statements[STMT_BOOT_COMPLETION], NULL, current_account->id, args->server_name, current_argument);
 
-    return complete_from_modelized(boot_model, &statements[STMT_BOOT_COMPLETION], possibilities);
+    return complete_from_modelized_statement(boot_model, &statements[STMT_BOOT_COMPLETION], possibilities);
 }
 
 static void dedicated_regcomm(graph_t *g)

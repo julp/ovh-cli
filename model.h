@@ -166,5 +166,6 @@ size_t modelized_name_to_s(modelized_t *, char *, size_t);
 
 # include "command.h"
 command_status_t model_to_table(const model_t *, error_t **);
+bool complete_from_modelized(Iterator *, completer_t *);
 
 #endif /* !MODEL_H */

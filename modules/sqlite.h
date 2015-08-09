@@ -41,6 +41,6 @@ void statement_to_iterator(Iterator *, sqlite_statement_t *, ...);
 void statement_model_to_iterator(Iterator *, sqlite_statement_t *, const model_t *, bool);
 
 bool modelized_delete(modelized_t *, error_t **);
-bool complete_from_modelized(const model_t *, sqlite_statement_t *, completer_t *);
+bool complete_from_modelized_statement(const model_t *, sqlite_statement_t *, completer_t *);
 
 #endif /* SQLITE_H */

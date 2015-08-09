@@ -798,7 +798,7 @@ static bool complete_records(void *parsed_arguments, const char *current_argumen
     assert(NULL != args->domain);
     statement_bind(&statements[STMT_RECORD_COMPLETION], NULL, current_account->id, args->domain, current_argument);
 
-    return complete_from_modelized(record_model, &statements[STMT_RECORD_COMPLETION], possibilities);
+    return complete_from_modelized_statement(record_model, &statements[STMT_RECORD_COMPLETION], possibilities);
 }
 
 static void domain_regcomm(graph_t *g)

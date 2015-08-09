@@ -351,6 +351,27 @@ command_status_t model_to_table(const model_t *model, error_t **error)
     return ret;
 }
 
+/**
+ * Helper for completion
+ *
+ * @param it the iterator from which to extract data
+ * @param possibilities a recipient which contains all possible values
+ *
+ * @return TRUE (can't fail)
+ */
+bool complete_from_modelized(Iterator *it, completer_t *possibilities)
+{
+    for (iterator_first(it); iterator_is_valid(it); iterator_next(it)) {
+        modelized_t *object;
+
+        object = iterator_current(it, NULL);
+        completer_push_modelized(possibilities, object);
+    }
+    iterator_close(it);
+
+    return TRUE;
+}
+
 #if 0
 void modelized_belongs_to(modelized_t *owner, modelized_t *owned)
 {
