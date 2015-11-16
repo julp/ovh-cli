@@ -231,8 +231,8 @@ static bool domain_ctor(error_t **error)
         return FALSE;
     }
 
-    domain_model = model_new("domains", sizeof(domain_t), domain_fields, ARRAY_SIZE(domain_fields) - 1, "name", NULL, error);
-    record_model = model_new("records", sizeof(record_t), record_fields, ARRAY_SIZE(record_fields) - 1, "subDomain", NULL, error);
+    domain_model = model_new("domains", sizeof(domain_t), domain_fields, ARRAY_SIZE(domain_fields) - 1, "name", &sqlite_backend, error);
+    record_model = model_new("records", sizeof(record_t), record_fields, ARRAY_SIZE(record_fields) - 1, "subDomain", &sqlite_backend, error);
     record_model->to_s = record_to_s;
 
     return TRUE;

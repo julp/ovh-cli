@@ -225,7 +225,9 @@ static command_status_t me(COMMAND_ARGS)
             json_value_t v;
 
             v = (json_value_t) iterator_current(&it, (void **) &key);
-            table_store(t, gettext(key), v == json_null ? NULL : json_get_string(v));
+            if (JSON_TYPE_NULL == json_get_type(v) || JSON_TYPE_STRING == json_get_type(v)) {
+                table_store(t, gettext(key), v == json_null ? NULL : json_get_string(v));
+            }
         }
         iterator_close(&it);
         table_sort(t, 0, TABLE_SORT_ASC);
