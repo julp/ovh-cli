@@ -1,3 +1,4 @@
+#include <time.h> /* time_t */
 #include <stdlib.h>
 #include <inttypes.h>
 #include <string.h>

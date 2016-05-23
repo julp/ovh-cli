@@ -1,12 +1,17 @@
+#include <sys/param.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#ifdef BSD
+# include <libgen.h>
+#endif /* BSD */
 #include "util.h"
 
 #include <limits.h>
