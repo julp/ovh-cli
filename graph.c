@@ -114,7 +114,7 @@ void completer_push_modelized(completer_t *c, modelized_t *ptr)
     dptrarray_push(c->ary, (void *) p);
 }
 
-static int possibility_cmpp(const void *a, const void *b, void *UNUSED(arg))
+static int possibility_cmpp(QSORT_CB_ARGS(const void *a, const void *b, void *UNUSED(arg)))
 {
     const possibility_t *p1, *p2;
 

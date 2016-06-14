@@ -228,13 +228,7 @@ void dptrarray_sort(DPtrArray *this, CmpFuncArg cmpfn, void *arg)
     assert(NULL != this);
     assert(NULL != cmpfn);
 
-    qsort_r(this->data, this->length, sizeof(*this->data),
-#ifdef BSD
-        arg, cmpfn
-#else
-        cmpfn, arg
-#endif
-    );
+    QSORT_R(this->data, this->length, sizeof(*this->data), cmpfn, arg);
 }
 
 void *dptrarray_to_array(DPtrArray *this, bool copy, bool null_terminated) /* NONNULL() */

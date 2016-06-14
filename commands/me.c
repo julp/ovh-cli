@@ -180,6 +180,9 @@ _("spareEmail")
 _("ovhCompany")
 _("state")
 _("email")
+_("currency")
+    _("symbol")
+    _("code")
 _("city")
 _("fax")
 _("nichandle")
@@ -192,11 +195,11 @@ _("organisation")
 _("name")
 _("phone")
 _("sex")
+    _("male")
+    _("female")
 _("zip")
 _("corporationType")
 _("legalform")
-_("male")
-_("female")
 #endif
 static command_status_t me(COMMAND_ARGS)
 {
@@ -220,7 +223,7 @@ static command_status_t me(COMMAND_ARGS)
         );
         root = json_document_get_root(doc);
         json_object_to_iterator(&it, root);
-        for (iterator_first(&it); success && iterator_is_valid(&it); iterator_next(&it)) {
+        for (iterator_first(&it); iterator_is_valid(&it); iterator_next(&it)) {
             const char *key;
             json_value_t v;
 

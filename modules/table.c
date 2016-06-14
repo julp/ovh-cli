@@ -451,23 +451,29 @@ static void datetime_store_modelized(table_t *UNUSED(t), column_t *UNUSED(c), va
     _date_store_real(val, *((time_t *) ptr), TRUE);
 }
 
-static int strcmpp_asc(const void *p1, const void *p2, void *arg)
+static int strcmpp_asc(QSORT_CB_ARGS(const void *p1, const void *p2, void *arg))
 {
+    assert(NULL != p1);
+    assert(NULL != p2);
+
 //     return strcmp(*(char * const *) p2, *(char * const *) p1);
     return strcoll((const char *) (*((row_t **) p1))->values[*(size_t *) arg].v, (const char *) (*((row_t **) p2))->values[*(size_t *) arg].v);
 }
 
-static int strcmpp_desc(const void *p1, const void *p2, void *arg)
+static int strcmpp_desc(QSORT_CB_ARGS(const void *p1, const void *p2, void *arg))
 {
+    assert(NULL != p1);
+    assert(NULL != p2);
+
     return strcoll((const char *) (*((row_t **) p2))->values[*(size_t *) arg].v, (const char *) (*((row_t **) p1))->values[*(size_t *) arg].v);
 }
 
-static int intcmpp_asc(const void *p1, const void *p2, void *arg)
+static int intcmpp_asc(QSORT_CB_ARGS(const void *p1, const void *p2, void *arg))
 {
     return (*((row_t **) p1))->values[*(size_t *) arg].v - (*((row_t **) p2))->values[*(size_t *) arg].v;
 }
 
-static int intcmpp_desc(const void *p1, const void *p2, void *arg)
+static int intcmpp_desc(QSORT_CB_ARGS(const void *p1, const void *p2, void *arg))
 {
     return (*((row_t **) p2))->values[*(size_t *) arg].v - (*((row_t **) p1))->values[*(size_t *) arg].v;
 }

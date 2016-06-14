@@ -139,12 +139,23 @@ typedef enum {
 # endif /* WITH_NLS */
 
 typedef int (*CmpFunc)(const void *, const void *);
-typedef int (*CmpFuncArg)(const void *, const void *, void *);
+
+# include <sys/param.h>
+# ifdef BSD
+#  define QSORT_R(base, nmemb, size, compar, thunk) \
+    qsort_r(base, nmemb, size, thunk, compar)
+#  define QSORT_CB_ARGS(a, b, data) data, a, b
+# else
+#  define QSORT_R(base, nmemb, size, compar, thunk) \
+    qsort_r(base, nmemb, size, compar, thunk)
+#  define QSORT_CB_ARGS(a, b, data) a, b, data
+# endif /* BSD */
+typedef int (*CmpFuncArg)(QSORT_CB_ARGS(const void *, const void *, void *));
 // typedef bool (*EqualFunc)(const void *, const void *);
 typedef void (*DtorFunc)(void *);
 typedef void *(*DupFunc)(const void *);
 
-#define USED(x) (void) x
+# define USED(x) (void) x
 
 # ifdef DEBUG
 #  define RED(str)    "\33[1;31m" str "\33[0m"
@@ -164,26 +175,26 @@ typedef void *(*DupFunc)(const void *);
 # define STRINGIFY(x) #x
 # define STRINGIFY_EXPANDED(x) STRINGIFY(x)
 
-#ifdef DEBUG
-# ifdef _MSC_VER
-#  define CCALL __cdecl
-#  pragma section(".CRT$XCU",read)
-#  define INITIALIZER_DECL(f) \
+# ifdef DEBUG
+#  ifdef _MSC_VER
+#   define CCALL __cdecl
+#   pragma section(".CRT$XCU",read)
+#   define INITIALIZER_DECL(f) \
     void __cdecl f(void); \
     __declspec(allocate(".CRT$XCU")) void (__cdecl*f##_)(void) = f
-# elif defined(__GNUC__)
-#  define CCALL
-#  define INITIALIZER_DECL(f) \
+#  elif defined(__GNUC__)
+#   define CCALL
+#   define INITIALIZER_DECL(f) \
     void f(void) __attribute__((constructor))
-# endif /* INITIALIZER_DECL */
-# define INITIALIZER_P(f) \
+#  endif /* INITIALIZER_DECL */
+#  define INITIALIZER_P(f) \
     void CCALL f(void)
-#else
-# define INITIALIZER_DECL(f) \
+# else
+#  define INITIALIZER_DECL(f) \
     /* NOP */
-# define INITIALIZER_P(f) \
+#  define INITIALIZER_P(f) \
     void f(void)
-#endif /* DEBUG */
+# endif /* DEBUG */
 
 # define error_t xerror_t /* error_t is alredy used by glibc (?) when _GNU_SOURCE (?) is defined */
 # include "error.h"
