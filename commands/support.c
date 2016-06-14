@@ -30,7 +30,7 @@ typedef struct {
 // TODO: filtering
 static command_status_t support_tickets_list(COMMAND_ARGS)
 {
-    table_t *t;
+//     table_t *t;
     bool success;
     request_t *req;
     json_document_t *doc;
