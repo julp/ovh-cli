@@ -508,7 +508,7 @@ static request_t *request_new_real(uint32_t flags, http_method_t method, const v
 }
 
 /**
- * Prepare a HTTP request from an autodecribed data
+ * Prepare a HTTP request from an autodescribed data
  *
  * @param flags a ORed mask of REQUEST_FLAG_* constants
  * @param method the HTTP method, one of the HTTP_* constants
@@ -837,9 +837,7 @@ const char *request_consumer_key(time_t *expires_at, error_t **error)
     }
     // POST /auth/credential
     {
-        xmlDocPtr doc;
-        xmlNodePtr root;
-        json_document_t *reqdoc;
+        json_document_t *doc, *reqdoc;
 
         {
             json_value_t root, rules;
@@ -860,25 +858,21 @@ const char *request_consumer_key(time_t *expires_at, error_t **error)
         REQUEST_XML_RESPONSE_WANTED(req);
 //         request_add_header1(req, "Content-type: application/json");
         request_add_header2(req, "X-Ovh-Application: ", current_application->key, error);
-        success = request_execute(req, RESPONSE_XML, (void **) &doc, error);
+        success = request_execute(req, RESPONSE_JSON, (void **) &doc, error);
         json_document_destroy(reqdoc);
         if (!success) {
             request_destroy(req);
             return NULL;
+        } else {
+            json_value_t root, v;
+
+            root = json_document_get_root(doc);
+            json_object_get_property(root, "consumerKey", &v);
+            consumerKey = strdup(json_get_string(v));
+            json_object_get_property(root, "validationUrl", &v);
+            validationUrl = strdup(json_get_string(v));
+            json_document_destroy(doc);
         }
-#if 0
-        puts("====================");
-        xmlDocFormatDump(stdout, doc, 1);
-        puts("====================");
-#endif
-        if (NULL == (root = xmlDocGetRootElement(doc))) {
-            xmlFreeDoc(doc);
-            request_destroy(req);
-            return NULL;
-        }
-        consumerKey = xmlGetPropAsString(root, "consumerKey");
-        validationUrl = xmlGetPropAsString(root, "validationUrl");
-        xmlFreeDoc(doc);
         request_destroy(req);
     }
     if (NULL == current_account->password || '\0' == *current_account->password) {
