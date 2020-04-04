@@ -127,6 +127,11 @@ bool request_add_header2(request_t *req, const char *header, const char *value, 
     return NULL != p;
 }
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000
+# define EVP_MD_CTX_new EVP_MD_CTX_create
+# define EVP_MD_CTX_free EVP_MD_CTX_destroy
+#endif
+
 /**
  * Signs in the OVH API way the HTTP request
  *
@@ -140,7 +145,7 @@ bool request_add_header2(request_t *req, const char *header, const char *value, 
  */
 bool request_sign(request_t *req, error_t **error)
 {
-    EVP_MD_CTX ctx;
+    EVP_MD_CTX *ctx;
     unsigned int i, hash_len;
     char header[1024], buffer[1024], *p;
     unsigned char hash[EVP_MAX_MD_SIZE];
@@ -149,31 +154,34 @@ bool request_sign(request_t *req, error_t **error)
     if (!check_current_application_and_account(FALSE, error)) {
         return FALSE;
     }
-    EVP_MD_CTX_init(&ctx);
-    EVP_DigestInit_ex(&ctx, md, NULL);
-    EVP_DigestUpdate(&ctx, current_application->secret, strlen(current_application->secret));
-    EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
-    EVP_DigestUpdate(&ctx, current_account->consumer_key, strlen(current_account->consumer_key));
-    EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
-    EVP_DigestUpdate(&ctx, methods[req->method].name, methods[req->method].name_len);
-    EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
-    EVP_DigestUpdate(&ctx, req->url, strlen(req->url));
-    EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
+    if (NULL == (ctx = EVP_MD_CTX_new())) {
+        error_set(error, FATAL, _("failed to allocate EVP_MD_CTX (openssl)"));
+        return FALSE;
+    }
+    EVP_DigestInit_ex(ctx, md, NULL);
+    EVP_DigestUpdate(ctx, current_application->secret, strlen(current_application->secret));
+    EVP_DigestUpdate(ctx, "+", STR_LEN("+"));
+    EVP_DigestUpdate(ctx, current_account->consumer_key, strlen(current_account->consumer_key));
+    EVP_DigestUpdate(ctx, "+", STR_LEN("+"));
+    EVP_DigestUpdate(ctx, methods[req->method].name, methods[req->method].name_len);
+    EVP_DigestUpdate(ctx, "+", STR_LEN("+"));
+    EVP_DigestUpdate(ctx, req->url, strlen(req->url));
+    EVP_DigestUpdate(ctx, "+", STR_LEN("+"));
     // <data>
     if (NULL != req->pdata) {
-        EVP_DigestUpdate(&ctx, req->pdata, strlen(req->pdata));
+        EVP_DigestUpdate(ctx, req->pdata, strlen(req->pdata));
     }
     // </data>
-    EVP_DigestUpdate(&ctx, "+", STR_LEN("+"));
+    EVP_DigestUpdate(ctx, "+", STR_LEN("+"));
     // <timestamp>
     if (snprintf(buffer, ARRAY_SIZE(buffer), "%u", req->timestamp) >= (int) ARRAY_SIZE(buffer)) {
         error_set(error, FATAL, _("buffer overflow")); // should not happen
         return FALSE;
     }
-    EVP_DigestUpdate(&ctx, buffer, strlen(buffer));
+    EVP_DigestUpdate(ctx, buffer, strlen(buffer));
     // </timestamp>
-    EVP_DigestFinal_ex(&ctx, hash, &hash_len);
-    EVP_MD_CTX_cleanup(&ctx);
+    EVP_DigestFinal_ex(ctx, hash, &hash_len);
+    EVP_MD_CTX_free(ctx);
     // X-Ovh-Application
     request_add_header2(req, "X-Ovh-Application: ", current_application->key, error);
     // X-Ovh-Signature header
